@@ -75,12 +75,14 @@ func (r *MemberRepository) ListWithSelfie(ctx context.Context) ([]domain.Member,
 // FindByCPF finds a member by their federal_document (CPF digits).
 // Returns (nil, nil) if not found.
 func (r *MemberRepository) FindByCPF(ctx context.Context, cpfDigits string) (*domain.Member, error) {
+	// federal_document é armazenado formatado (ex. "005.149.047-12"), mas o
+	// boundary do webhook passa apenas dígitos. Normaliza ambos os lados.
 	query := `
 		SELECT id, gob_id, federal_document, name, status,
 		       mobile_number, url_selfie, gob_created_at, gob_updated_at,
 		       created_at, updated_at
 		FROM members
-		WHERE federal_document = $1
+		WHERE regexp_replace(federal_document, '[^0-9]', '', 'g') = regexp_replace($1, '[^0-9]', '', 'g')
 		LIMIT 1
 	`
 	rows, err := r.pool.Query(ctx, query, cpfDigits)

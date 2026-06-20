@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -7,8 +5,10 @@ services:
       POSTGRES_DB: presenca_facial
       POSTGRES_USER: presenca
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-presenca_dev}"
-    ports:
-      - "5432:5432"
+    # Sem porta publicada no host: o app acessa pela rede interna do compose
+    # (evita conflito com Postgres já existente no Pi e reduz exposição).
+    expose:
+      - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -16,20 +16,60 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
 
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
     environment:
       RABBITMQ_DEFAULT_USER: "${RABBITMQ_USER:-guest}"
       RABBITMQ_DEFAULT_PASS: "${RABBITMQ_PASS:-guest}"
-    ports:
-      - "5672:5672"
-      - "15672:15672"
+    # Sem porta publicada no host (acesso interno via rede do compose).
+    expose:
+      - "5672"
+      - "15672"
     healthcheck:
       test: rabbitmq-diagnostics -q ping
       interval: 10s
       timeout: 10s
       retries: 10
+    restart: unless-stopped
+
+  # Aplica as migrations e encerra (one-shot) antes do app subir.
+  migrate:
+    image: migrate/migrate:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./migrations:/migrations:ro
+    command:
+      - "-path=/migrations"
+      - "-database=postgres://presenca:${POSTGRES_PASSWORD:-presenca_dev}@postgres:5432/presenca_facial?sslmode=disable"
+      - "up"
+    restart: on-failure
+
+  app:
+    image: presenca-facial:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    # Segredos e credenciais de dispositivo vêm do .env (ver .env.example).
+    env_file:
+      - .env
+    environment:
+      # DSNs apontam para os service names da rede do compose (não localhost).
+      DATABASE_URL: "postgres://presenca:${POSTGRES_PASSWORD:-presenca_dev}@postgres:5432/presenca_facial?sslmode=disable"
+      RABBITMQ_URL: "amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASS:-guest}@rabbitmq:5672/"
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
 
 volumes:
   postgres_data:

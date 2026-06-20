@@ -45,9 +45,10 @@ func (r *DeviceRepository) Upsert(ctx context.Context, d domain.Device) error {
 
 // ListActive returns all devices with is_active = true.
 func (r *DeviceRepository) ListActive(ctx context.Context) ([]domain.Device, error) {
-	// Cast inet to text to avoid pgx binary format issues with *string destination.
+	// host() retorna o IP sem a máscara CIDR (inet '1.2.3.4' renderiza como
+	// "1.2.3.4/32" via ::text, o que quebraria a comparação do IP allowlist).
 	query := `
-		SELECT id, device_identifier, ip_address::text, mac_address,
+		SELECT id, device_identifier, host(ip_address), mac_address,
 		       last_heartbeat_at, is_active, webhook_configured,
 		       created_at, updated_at
 		FROM devices
@@ -65,7 +66,7 @@ func (r *DeviceRepository) ListActive(ctx context.Context) ([]domain.Device, err
 // Returns (nil, nil) if not found.
 func (r *DeviceRepository) FindByIdentifier(ctx context.Context, identifier string) (*domain.Device, error) {
 	query := `
-		SELECT id, device_identifier, ip_address::text, mac_address,
+		SELECT id, device_identifier, host(ip_address), mac_address,
 		       last_heartbeat_at, is_active, webhook_configured,
 		       created_at, updated_at
 		FROM devices

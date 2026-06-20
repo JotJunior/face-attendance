@@ -2,6 +2,8 @@
 .DS_Store
 legacy/
 tmp/
+.env
+bin/
 
 t.txt
 t.json

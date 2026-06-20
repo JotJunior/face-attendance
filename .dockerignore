@@ -1,0 +1,13 @@
+.git
+.idea
+.claude
+bin/
+tmp/
+legacy/
+docs/
+tests/
+*.md
+t.txt
+t.json
+.env
+.DS_Store
