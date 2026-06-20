@@ -1,6 +1,6 @@
 # Relatorio do Agente-00C — exec-2026-06-20T04-23-30Z-agente-00c-presenca-facial
 
-**Gerado em**: 2026-06-20T05:06:00Z
+**Gerado em**: 2026-06-20T05:29:38Z
 **Status no momento**: em_andamento
 **Versao do schema**: 1.0.0
 
@@ -18,15 +18,15 @@
 | Motivo termino | (em andamento) |
 | Iniciada em | 2026-06-20T04:23:30Z |
 | Terminada em | ainda em andamento |
-| Ondas executadas | 4 |
+| Ondas executadas | 5 |
 | Tool calls totais | 1 |
-| Decisoes registradas | 24 |
+| Decisoes registradas | 31 |
 | Bloqueios humanos | 0 |
 | Sugestoes para skills globais | 0 |
 | Issues abertas no toolkit | 0 |
 | Profundidade max de subagentes | 2 |
 
-Onda-004 concluiu etapa clarify: 3 ambiguidades resolvidas (score=2). employeeNoString corrigido em FR-014/FR-017/US1, FR-021/FR-023 definidos. plan e a proxima etapa.
+Onda-005 executou a etapa plan da pipeline SDD para o MVP de presenca facial. Materializados plan.md, research.md, data-model.md, quickstart.md e contracts/ (gob-api, hikvision-isapi, inbound-http). Todos os contratos externos foram extraidos de fontes reais (t.txt para GOB; legacy/hik-api PHP para as 3 operacoes ISAPI HikVision + campo employeeNoString), auditados por data-veracity-verifier (verdict clean, 0 UNSOURCED). Gates doc-quality (PASS) e owasp-security (2 HIGH design-hardening incorporados como Security Considerations S1-S6, sem bloqueio). Etapa concluida, avancando para checklist.
 
 ## 2. Linha do Tempo
 
@@ -36,20 +36,21 @@ Onda-004 concluiu etapa clarify: 3 ambiguidades resolvidas (score=2). employeeNo
 | onda-002 | 2026-06-20T04:31:03Z | 2026-06-20T04:35:00Z | briefing | 0 | 237s | etapa_concluida_avancando |
 | onda-003 | 2026-06-20T04:40:04Z | 2026-06-20T04:49:41Z | constitution, specify | 0 | 577s | etapa_concluida_avancando |
 | onda-004 | 2026-06-20T04:56:53Z | 2026-06-20T05:04:34Z | clarify | 0 | 461s | etapa_concluida_avancando |
+| onda-005 | 2026-06-20T05:11:48Z | 2026-06-20T05:27:54Z | plan | 0 | 966s | etapa_concluida_avancando |
 
 ## 3. Decisoes
 
-Total: 24 decisoes registradas.
+Total: 31 decisoes registradas.
 
 ### 3.1 Por agente
 
 | Agente | Quantidade |
 |--------|------------|
-| agente-00c-feature-orchestrator | 4 |
-| agente-00c-orchestrator | 1 |
+| agente-00c-feature-orchestrator | 5 |
+| agente-00c-orchestrator | 4 |
 | clarify-answerer | 3 |
 | data-veracity-verifier | 1 |
-| orquestrador-00c | 15 |
+| orquestrador-00c | 18 |
 
 ### 3.2 Lista detalhada
 
@@ -434,6 +435,118 @@ Total: 24 decisoes registradas.
 **Score**: 2
 
 **Referencias**: docs/constitution.md — Principio III (Resiliencia por Filas retry + DLQ MUST), docs/constitution.md — Principio V (Segredos como Configuracao de Runtime), docs/01-briefing-discovery/briefing.md — secao 9: Estrategia de retry — No plan tecnico
+
+**Artefato originador**: (nenhum)
+
+#### dec-025 — model-routing — agente-00c-feature-orchestrator — 2026-06-20T05:11:10Z
+
+**Contexto**: Selecao de modelo para onda 4 (fase plan)
+
+**Opcoes consideradas**: haiku / sonnet / opus / manter-atual
+
+**Escolha**: model:opus
+
+**Justificativa**: sugerido=opus aplicado=opus origem=mapa | faixa=profunda fase=plan (mapa primario)
+
+**Score**: 0
+
+**Referencias**: (nenhuma)
+
+**Artefato originador**: (nenhum)
+
+#### dec-026 — plan — agente-00c-orchestrator — 2026-06-20T05:13:43Z
+
+**Contexto**: read-back PRE-DECISAO: K=14 achados injetados (anti-eco feature=face-attendance)
+
+**Opcoes consideradas**: injetar-achados / no-op
+
+**Escolha**: injetar-achados
+
+**Justificativa**: termos derivados do projeto: presenca facial gob hikvision membros filas webhook cpf; achados sao memoria GOB generica (CPF wizard), tratados como REFERENCIA nao-autoritativa
+
+**Score**: 2
+
+**Referencias**: (nenhuma)
+
+**Artefato originador**: (nenhum)
+
+#### dec-027 — plan — agente-00c-orchestrator — 2026-06-20T05:13:43Z
+
+**Contexto**: Veracidade (Principio VI): contratos ISAPI HikVision extraidos do codigo real legacy/hik-api antes do plan
+
+**Opcoes consideradas**: extrair-do-codigo-legacy / reusar-spec-sem-verificar / inventar-plausivel
+
+**Escolha**: extrair-do-codigo-legacy
+
+**Justificativa**: Tres operacoes verificadas: UserInfo/Modify (POST create 200/201, PUT update 200/204) com XML UserInfo employeeNo+name; faceDataRecord multipart com query format=json, parte FaceDataRecord JSON {type:concurrent,faceLibType:blackFD,FDID:1,FPID:cpf} + FaceImage cpf.jpg; httpHosts POST XML HttpHostNotification. Auth=HTTP Digest (AuthType::DIGEST). employeeNoString confirmado WebhookController:212 + WebhookEventProcessor:154,232. attendanceStatus==authorized = reconhecimento positivo.
+
+**Score**: 3
+
+**Referencias**: (nenhuma)
+
+**Artefato originador**: (nenhum)
+
+#### dec-028 — plan — agente-00c-orchestrator — 2026-06-20T05:25:32Z
+
+**Contexto**: Double-check de veracidade (Principio VI): auditoria dos 6 artefatos de plano via data-veracity-verifier
+
+**Opcoes consideradas**: publicar-artefatos / bloqueio-humano-fonte-ausente / corrigir-citacoes
+
+**Escolha**: corrigir-citacoes
+
+**Justificativa**: Verdict=clean/proceed, 0 UNSOURCED. Todos endpoints/campos GOB+HikVision ancorados em t.txt e legacy/hik-api; itens nao-verificaveis (filas RabbitMQ, retry defaults, codigos de evento, event_key) marcados [PROPOSTA]. Corrigida discrepancia de citacao de linha em inbound-http.md (employeeNoString WebhookController.php:212, nao :215).
+
+**Score**: 3
+
+**Referencias**: (nenhuma)
+
+**Artefato originador**: (nenhum)
+
+#### dec-029 — plan — orquestrador-00c — 2026-06-20T05:26:07Z
+
+**Contexto**: Gate doc-quality (validate-documentation) sobre plan.md: estrutura completa, 0 placeholders nao-marcados, links resolvem, 7 artefatos presentes, mermaid valido
+
+**Opcoes consideradas**: aceitar / corrigir-agora / escalar-para-humano
+
+**Escolha**: aceitar
+
+**Justificativa**: Sem findings critical/high; itens [PROPOSTA] sao deliberados (config runtime/nao-verificavel), nao TBD esquecido
+
+**Score**: 2
+
+**Referencias**: (nenhuma)
+
+**Artefato originador**: (nenhum)
+
+#### dec-030 — plan — orquestrador-00c — 2026-06-20T05:27:13Z
+
+**Contexto**: Gate owasp-security sobre o desenho: 2 HIGH (S1 webhook sem auth do dispositivo httpAuthenticationMethod=none; S2 input externo->injection), 2 MEDIUM (S3 CPF PII em log; S4 sem rate-limit), 1 LOW (S5 admin auth), 1 INFO (S6 Digest sobre HTTP LAN). Nenhum critical.
+
+**Opcoes consideradas**: escalar-para-humano / incorporar-requisitos-no-plan / ignorar-risco
+
+**Escolha**: incorporar-requisitos-no-plan
+
+**Justificativa**: Regra de autonomia: HIGH findings sao design-hardening resolviveis (allowlist IP+path-secret no webhook, prepared statements+regex CPF, mascarar CPF em log, rate-limit, admin token deny-by-default) — todos [PROPOSTA] a validar na implementacao, nenhum exige dado que so o humano possui. Incorporados como secao Security Considerations no plan.md (S1-S6) e viram tasks de seguranca no create-tasks. Constitution faz seguranca MUST, atendido pela mitigacao firme.
+
+**Score**: 2
+
+**Referencias**: (nenhuma)
+
+**Artefato originador**: (nenhum)
+
+#### dec-031 — plan — orquestrador-00c — 2026-06-20T05:29:02Z
+
+**Contexto**: Commit atomico por etapa (plan): artefatos do plano staged explicitamente (sem git add -A, respeitando CLAUDE.md)
+
+**Opcoes consideradas**: commit / skip
+
+**Escolha**: commit
+
+**Justificativa**: atomic_commit_enabled=true; guard-branch exit 0 (branch agente-00c/presenca-facial); 7 artefatos do plan commitados
+
+**Score**: 2
+
+**Referencias**: (nenhuma)
 
 **Artefato originador**: (nenhum)
 
