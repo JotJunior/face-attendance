@@ -1,6 +1,6 @@
 # Relatorio do Agente-00C — exec-2026-06-20T04-23-30Z-agente-00c-presenca-facial
 
-**Gerado em**: 2026-06-20T04:51:17Z
+**Gerado em**: 2026-06-20T05:06:00Z
 **Status no momento**: em_andamento
 **Versao do schema**: 1.0.0
 
@@ -18,15 +18,15 @@
 | Motivo termino | (em andamento) |
 | Iniciada em | 2026-06-20T04:23:30Z |
 | Terminada em | ainda em andamento |
-| Ondas executadas | 3 |
+| Ondas executadas | 4 |
 | Tool calls totais | 1 |
-| Decisoes registradas | 17 |
+| Decisoes registradas | 24 |
 | Bloqueios humanos | 0 |
 | Sugestoes para skills globais | 0 |
 | Issues abertas no toolkit | 0 |
-| Profundidade max de subagentes | 1 |
+| Profundidade max de subagentes | 2 |
 
-Onda 003 (resume): completou etapa constitution (v1.0.0, 7 principios) e etapa specify (spec.md do MVP presenca-facial-mvp com 4 user stories, 23 FRs, 6 SCs). Gates: doc-quality (validate-documentation) e veracidade (data-veracity-verifier=clean, 0 fabricacoes). Avancou current_stage para clarify. Commit atomico 01be4e5. Zero bloqueios; execucao 100% autonoma com 7 Decisoes auditadas nesta onda.
+Onda-004 concluiu etapa clarify: 3 ambiguidades resolvidas (score=2). employeeNoString corrigido em FR-014/FR-017/US1, FR-021/FR-023 definidos. plan e a proxima etapa.
 
 ## 2. Linha do Tempo
 
@@ -35,19 +35,21 @@ Onda 003 (resume): completou etapa constitution (v1.0.0, 7 principios) e etapa s
 | onda-001 | 2026-06-20T04:25:58Z | 2026-06-20T04:28:22Z |  | 1 | 144s | etapa_concluida_avancando |
 | onda-002 | 2026-06-20T04:31:03Z | 2026-06-20T04:35:00Z | briefing | 0 | 237s | etapa_concluida_avancando |
 | onda-003 | 2026-06-20T04:40:04Z | 2026-06-20T04:49:41Z | constitution, specify | 0 | 577s | etapa_concluida_avancando |
+| onda-004 | 2026-06-20T04:56:53Z | 2026-06-20T05:04:34Z | clarify | 0 | 461s | etapa_concluida_avancando |
 
 ## 3. Decisoes
 
-Total: 17 decisoes registradas.
+Total: 24 decisoes registradas.
 
 ### 3.1 Por agente
 
 | Agente | Quantidade |
 |--------|------------|
-| agente-00c-feature-orchestrator | 3 |
+| agente-00c-feature-orchestrator | 4 |
 | agente-00c-orchestrator | 1 |
+| clarify-answerer | 3 |
 | data-veracity-verifier | 1 |
-| orquestrador-00c | 12 |
+| orquestrador-00c | 15 |
 
 ### 3.2 Lista detalhada
 
@@ -320,6 +322,118 @@ Total: 17 decisoes registradas.
 **Score**: 2
 
 **Referencias**: (nenhuma)
+
+**Artefato originador**: (nenhum)
+
+#### dec-018 — model-routing — agente-00c-feature-orchestrator — 2026-06-20T04:56:18Z
+
+**Contexto**: Selecao de modelo para onda 3 (fase clarify)
+
+**Opcoes consideradas**: haiku / sonnet / opus / manter-atual
+
+**Escolha**: model:sonnet
+
+**Justificativa**: sugerido=sonnet aplicado=sonnet origem=mapa | faixa=media fase=clarify (mapa primario)
+
+**Score**: 0
+
+**Referencias**: (nenhuma)
+
+**Artefato originador**: (nenhum)
+
+#### dec-019 — clarify — orquestrador-00c — 2026-06-20T04:58:22Z
+
+**Contexto**: Pre-flight skill-conflict para clarify: skill apenas em global (/Users/jot/.claude/skills/clarify), sem versao local no projeto-alvo. skill global vence.
+
+**Opcoes consideradas**: usar-skill-global / usar-skill-local
+
+**Escolha**: usar-skill-global
+
+**Justificativa**: pipeline.sh skill-conflict exit=1 indica apenas versao global disponivel; sem conflito real — skill global e a correta a usar
+
+**Score**: 2
+
+**Referencias**: (nenhuma)
+
+**Artefato originador**: (nenhum)
+
+#### dec-020 — clarify — orquestrador-00c — 2026-06-20T04:58:41Z
+
+**Contexto**: Selecao de modelo para subagente agente-00c-clarify-asker
+
+**Opcoes consideradas**: haiku / sonnet / opus / manter-atual / fallback-default
+
+**Escolha**: manter-atual
+
+**Justificativa**: nenhum sinal do catalogo detectado nos 44 tokens validos do input; sem evidencia para sugerir troca de modelo (rasa=0 media=0 profunda=0).
+
+**Score**: 0
+
+**Referencias**: (nenhuma)
+
+**Artefato originador**: (nenhum)
+
+#### dec-021 — clarify — orquestrador-00c — 2026-06-20T05:00:00Z
+
+**Contexto**: Selecao de modelo para subagente agente-00c-clarify-answerer
+
+**Opcoes consideradas**: haiku / sonnet / opus / manter-atual / fallback-default
+
+**Escolha**: manter-atual
+
+**Justificativa**: nenhum sinal do catalogo detectado nos 40 tokens validos do input; sem evidencia para sugerir troca de modelo (rasa=0 media=0 profunda=0).
+
+**Score**: 0
+
+**Referencias**: (nenhuma)
+
+**Artefato originador**: (nenhum)
+
+#### dec-022 — clarify — clarify-answerer — 2026-06-20T05:02:13Z
+
+**Contexto**: Q1: campo bruto do payload HikVision AccessControllerEvent que identifica o usuario reconhecido: employeeNoString vs employeeNo
+
+**Opcoes consideradas**: A — Corrigir spec: campo bruto é employeeNoString / B — Manter spec como está tratar como detalhe do plan
+
+**Escolha**: A — Corrigir spec: campo bruto é employeeNoString; substituir nos acceptance scenarios e FR-014
+
+**Justificativa**: Duas evidências empiricas no código legado: WebhookController.php:212 le accessEvent[employeeNoString]; WebhookEventProcessor.php:154,232 le alert[employeeNoString] para AccessControl e FaceDetection. Constitution Principio I (NON-NEGOTIABLE) exige nomes de campos de fonte rastreavel — o codigo legacy é fonte verificada. Manter employeeNoString na spec garante veracidade; usar nome inventado violaria Principio I.
+
+**Score**: 2
+
+**Referencias**: legacy/hik-api/app/Controller/WebhookController.php:212, legacy/hik-api/app/Service/HikVision/Notification/WebhookEventProcessor.php:154, legacy/hik-api/app/Service/HikVision/Notification/WebhookEventProcessor.php:232, docs/constitution.md — Principio I (Veracidade de Dados)
+
+**Artefato originador**: (nenhum)
+
+#### dec-023 — clarify — clarify-answerer — 2026-06-20T05:02:25Z
+
+**Contexto**: Q2: frequencia do ciclo de carga de membros da GOB (FR-021-INFRA-SCHED)
+
+**Opcoes consideradas**: A — Cron fixo via env var default 0 * * * * sem trigger manual / B — Intervalo via env var default 60min + endpoint trigger manual ticker Go / C — Apenas trigger manual no MVP sem schedule automatico
+
+**Escolha**: B — Intervalo via env var (default 60min) + endpoint de trigger manual; ticker Go
+
+**Justificativa**: Briefing secao 3.1 Etapa 1 descreve a carga como chamada periodica (ou sob demanda), cobrindo explicitamente as duas modalidades. Opcao B é a unica que implementa ambas — ticker para periodico + endpoint para sob demanda. Opcao A exclui trigger manual contrariando ou sob demanda. Opcao C exclui agendamento automatico contrariando periodica. Constitution compativel — nenhum principio veda trigger manual ou ticker.
+
+**Score**: 2
+
+**Referencias**: docs/01-briefing-discovery/briefing.md — secao 3.1 Etapa 1: Chamada periodica (ou sob demanda), docs/01-briefing-discovery/briefing.md — secao 9 Itens a Definir: Frequencia do ciclo de carga
+
+**Artefato originador**: (nenhum)
+
+#### dec-024 — clarify — clarify-answerer — 2026-06-20T05:02:39Z
+
+**Contexto**: Q3: parametros de retry para chamadas ISAPI (FR-010..FR-012) e marcacao GOB (FR-015) antes de rotear para DLQ (FR-023-INFRA-RETRY)
+
+**Opcoes consideradas**: A — 3 tentativas backoff exponencial 1s 2s 4s / B — 5 tentativas backoff exponencial 1s 2s 4s 8s 16s / C — Configuravel via env vars default 3 tentativas / 1s inicial
+
+**Escolha**: C — Configurável via env vars, default 3 tentativas / 1s inicial
+
+**Justificativa**: Briefing secao 9 explicita que a estrategia de retry e detalhe de implementacao da Etapa 2 - No plan tecnico, nao determinando parametros concretos. Constitution Principio III exige retry + DLQ mas nao especifica contagem ou backoff. Opcao C satisfaz Principio III e alinha com espirito do Principio V (configuracao de runtime via env vars) tornando parametros ajustaveis por operador sem rebuild. Opcoes A e B fixam parametros no codigo sem evidencia de valores especificos em fonte autorizada.
+
+**Score**: 2
+
+**Referencias**: docs/constitution.md — Principio III (Resiliencia por Filas retry + DLQ MUST), docs/constitution.md — Principio V (Segredos como Configuracao de Runtime), docs/01-briefing-discovery/briefing.md — secao 9: Estrategia de retry — No plan tecnico
 
 **Artefato originador**: (nenhum)
 
