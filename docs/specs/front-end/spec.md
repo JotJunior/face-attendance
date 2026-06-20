@@ -2,7 +2,7 @@
 
 **Feature**: `front-end`
 **Created**: 2026-06-20
-**Status**: Draft
+**Status**: In Review — 2 bloqueios humanos pendentes (block-001: limiar offline, block-002: contrato API dashboard)
 
 ## Visão Geral
 
@@ -219,17 +219,24 @@ ao endpoint `/admin/sync` e exibir feedback de sucesso ou erro para o operador.
 ### Functional Requirements
 
 - **FR-001**: O sistema MUST exigir autenticação com login e senha antes de
-  exibir qualquer tela do painel. Credenciais são configuradas pelo operador como
-  variáveis de ambiente no backend.
+  exibir qualquer tela do painel. O backend valida as credenciais (usuário e senha
+  configurados como variáveis de ambiente) e emite um cookie httpOnly com TTL
+  configurável via env. Não é permitido armazenar token em LocalStorage (XSS).
+  (Clarificado em clarify: dec-006, score 3)
 - **FR-002**: O painel MUST usar dark mode como tema visual padrão. O sistema
   não precisa oferecer toggle de tema — dark mode é o único tema suportado nesta
   versão.
 - **FR-003**: O dashboard MUST exibir no mínimo: (a) total de membros com selfie
   no banco, (b) contagem de dispositivos ativos vs inativos com base no heartbeat,
   (c) número de eventos de presença marcados nas últimas 24 horas.
+  O contrato de API para obter esses dados está pendente de decisão humana
+  (block-002: endpoint `/admin/stats` único vs. chamadas paralelas a endpoints existentes).
 - **FR-004**: A tela de dispositivos MUST listar todos os dispositivos registrados
   com: identificador de dispositivo, IP, status de atividade (ativo/offline baseado
-  no último heartbeat), e se o webhook está configurado.
+  no último heartbeat), e se o webhook está configurado. O limiar exato de inatividade
+  está pendente (block-001). A tela de detalhe exibe dados atuais do dispositivo
+  (ID, MAC, IP, data de registro, último heartbeat, status calculado) — sem histórico
+  de série temporal, conforme schema existente. (dec-007, score 3)
 - **FR-005**: A tela de membros MUST listar membros com: nome, CPF mascarado,
   status na GOB, e estado de sincronização por dispositivo (usuário criado + face
   enviada + tentativas + último erro se houver).
@@ -239,9 +246,10 @@ ao endpoint `/admin/sync` e exibir feedback de sucesso ou erro para o operador.
 - **FR-007**: O painel MUST oferecer um botão de sincronização manual que aciona
   o endpoint existente de carga de membros. O botão MUST mostrar estado de
   carregamento durante a operação e feedback de sucesso/erro ao concluir.
-- **FR-008**: A tela de membros e a tela de logs MUST suportar filtragem/busca
-  do lado do cliente ou do servidor — ao menos por nome/CPF em membros, e por
-  intervalo de datas em logs.
+- **FR-008**: A tela de membros MUST suportar busca server-side via query param
+  (ex: `GET /admin/members?q=nome_ou_cpf`) com paginação cursor. A tela de logs
+  MUST suportar filtragem por intervalo de datas (server-side). Busca client-side
+  apenas para filtro rápido dentro da página já carregada. (dec-008, score 3)
 - **FR-009**: O painel MUST responder adequadamente a estados vazios: quando não
   há dados (nenhum dispositivo, nenhum membro, nenhum evento), exibir mensagem
   informativa em vez de tabelas vazias ou zeros silenciosos.
@@ -296,13 +304,18 @@ ao endpoint `/admin/sync` e exibir feedback de sucesso ou erro para o operador.
 
 ## Clarifications
 
-_Nenhuma ambiguidade crítica pendente. As decisões abaixo foram tomadas com base
-no briefing, constitution e contexto do sistema existente._
+_Etapa clarify executada em 2026-06-20. Decisões abaixo derivadas via heurística
+score 0..3 (briefing + constitution + código-fonte). Itens com `[BLOQUEIO HUMANO]`
+aguardam input do operador antes de avançar para plan._
 
-| Decisão | Escolha adotada | Justificativa |
-|---------|-----------------|---------------|
-| Credencial de admin | Variável de ambiente no backend | Constitution V: segredos como runtime; o token `AdminToken` já existe no `ServerConfig` |
-| Integração frontend | Arquivos estáticos servidos pelo servidor Go (`/admin/*`) | Sem overhead de deploy separado; consistente com arquitetura on-premise |
-| Limiar de dispositivo "offline" | `[NEEDS CLARIFICATION: quantas horas sem heartbeat tornam um dispositivo "offline"?]` | Impacta UX e alertas; valor típico: 1 hora, mas depende da frequência de heartbeat configurada nos dispositivos |
-| Paginação | Lado servidor para membros e logs (cursor ou offset) | Volume pode chegar a milhares; client-side filtering apenas para busca rápida em janela carregada |
-| Mecanismo de sessão | Cookie httpOnly com TTL configurável via env | Sem LocalStorage de token (XSS); alinhado com Constitution V |
+| Decisão | Escolha adotada | Score | Justificativa |
+|---------|-----------------|-------|---------------|
+| Credencial de admin | Variável de ambiente no backend | — | Constitution V: segredos como runtime; o token `AdminToken` já existe no `ServerConfig` |
+| Integração frontend | Arquivos estáticos servidos pelo servidor Go (`/admin/*`) | — | Sem overhead de deploy separado; consistente com arquitetura on-premise |
+| Limiar de dispositivo "offline" | `[BLOQUEIO HUMANO — block-001]` Aguarda resposta do operador: (A) 1h hardcoded, (B) 30min hardcoded, ou (C) env var `DEVICE_OFFLINE_THRESHOLD_HOURS` | 1 | Backend não tem scheduler de expiração — lógica é 100% frontend comparando `last_heartbeat_at` com hora atual. Nenhuma fonte define o valor concreto. |
+| Paginação | Lado servidor para membros e logs (cursor ou offset) | — | Volume pode chegar a milhares; client-side filtering apenas para busca rápida em janela carregada |
+| Mecanismo de sessão | Cookie httpOnly com TTL configurável via env | — | Sem LocalStorage de token (XSS); alinhado com Constitution V |
+| Mecanismo de autenticação (UI) | Formulário usuário + senha → backend valida via env vars → emite cookie httpOnly | 3 | FR-001 especifica "login e senha"; tabela Clarifications já decidiu cookie httpOnly; Constitution V requer config via env. (dec-006) |
+| Contrato de API do dashboard | `[BLOQUEIO HUMANO — block-002]` Aguarda resposta: (A) criar endpoint `/admin/stats` no backend, ou (B) frontend agrega via chamadas paralelas aos endpoints existentes | 0 | FR-003 define os 3 contadores mas não especifica contrato de API. Afeta escopo de backend nesta feature. |
+| Tela de detalhe de dispositivo | Exibe dados atuais: ID, MAC, IP, data de registro, último heartbeat e status calculado — sem nova tabela de histórico | 3 | Migration `000002` tem apenas `last_heartbeat_at` (campo único); briefing não menciona histórico; Constitution proíbe expansão de escopo sem amendment. (dec-007) |
+| Busca na tela de membros | Server-side via query param (ex: `GET /admin/members?q=nome`) com paginação cursor | 3 | Briefing: "centenas a poucos milhares de membros"; spec já decidiu paginação server-side; edge case refere volume alto. (dec-008) |
