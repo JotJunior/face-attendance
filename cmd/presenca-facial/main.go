@@ -115,6 +115,21 @@ func run() error {
 		return ips
 	}
 
+	// Admin UI config (painel de administração web — FASE 2/3)
+	adminLoginCfg := httphandler.AdminLoginConfig{
+		Username:      cfg.AdminUsername,
+		Password:      cfg.AdminPassword,
+		SessionSecret: cfg.AdminSessionSecret,
+		SessionTTL:    time.Duration(cfg.AdminSessionTTLHours) * time.Hour,
+	}
+	adminAPICfg := httphandler.AdminAPIConfig{
+		MemberRepo:             memberRepo,
+		DeviceRepo:             deviceRepo,
+		AttendanceRepo:         eventRepo,
+		DeviceOfflineThreshold: cfg.DeviceOfflineThresholdHours,
+		Logger:                 logger,
+	}
+
 	srv := httphandler.NewServer(httphandler.ServerConfig{
 		Addr:                    ":8080",
 		WebhookPathSecret:       cfg.WebhookPathSecret,
@@ -125,6 +140,11 @@ func run() error {
 		HealthHandler:           healthHandler,
 		AdminHandler:            adminHandler,
 		AllowedWebhookIPs:       allowedIPs,
+		// Admin UI — habilitado quando as env vars obrigatórias estão presentes
+		AdminUIEnabled:  cfg.AdminUsername != "" && cfg.AdminSessionSecret != "",
+		AdminLoginCfg:   adminLoginCfg,
+		AdminAPICfg:     adminAPICfg,
+		AdminAssets:     nil, // embed.FS configurado na FASE 3 (internal/web/embed.go)
 	})
 
 	// --- Orchestration context (definido antes dos workers p/ o consumer usar) ---

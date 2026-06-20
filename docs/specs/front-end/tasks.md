@@ -107,7 +107,7 @@ Ref: contracts §POST /admin/api/login, §POST /admin/api/logout, plan.md §S3/S
 - [x] 2.2.4 Em sucesso: emitir `Set-Cookie: admin_session=<token>; HttpOnly; Secure; SameSite=Strict; Path=/admin; Max-Age=<TTL_segundos>` + resposta 204
 - [x] 2.2.5 Em falha de credenciais: resposta 401 JSON `{"error":"credenciais inválidas"}` (mensagem genérica — não revela qual campo falhou)
 - [x] 2.2.6 Implementar `AdminLogoutHandler`: emitir `Set-Cookie: admin_session=; MaxAge=0; ...` + resposta 204
-- [ ] 2.2.7 Aplicar `RateLimitMiddleware(10)` ao endpoint de login (reusar `NewRateLimitMiddleware` de middleware.go:113 — CHK-A13, default=10/min/IP)
+- [x] 2.2.7 Aplicar `RateLimitMiddleware(10)` ao endpoint de login via wiring em server.go (CHK-A13, default=10/min/IP)
 - [x] 2.2.8 Escrever testes: login correto, login errado, payload inválido (400), logout limpa cookie; rate limit (429) coberto no wiring (2.6)
 
 ### 2.3 Repositórios — métodos novos `[A]`
@@ -138,13 +138,13 @@ Ref: spec.md §FR-011, §SC-006, plan.md §Summary, contracts §members, §event
 
 Ref: contracts/admin-api.md §todos os endpoints [NOVO], spec.md §FR-003/004/005/006/007, CHK-A08
 
-- [ ] 2.5.1 Implementar `AdminStatsHandler`: chama `CountMembersWithSelfie` + `CountDevicesByActivity(threshold)` + `CountAttendanceSince(24h)` → serializa JSON com 5 campos (incluindo `device_offline_threshold_hours`); retornar 503 JSON se DB inacessível (CHK-A08)
-- [ ] 2.5.2 Implementar `AdminDevicesHandler`: chama `ListDevicesAll()` → mapeia para response com `status` derivado (comparando `last_heartbeat_at` com `now() - threshold`) + `device_offline_threshold_hours`; array vazio válido (FR-009)
-- [ ] 2.5.3 Implementar `AdminDeviceDetailHandler`: extrai `{id}` do path, chama `GetDeviceByID(id)` → 404 JSON se não encontrado; `status` derivado incluso; sem histórico (dec-007)
-- [ ] 2.5.4 Implementar `AdminMembersHandler`: extrai `q`, `cursor`, `limit` (default=50, teto=200); chama `ListMembersPaged`; serializa `{"members":[],"next_cursor":null,"has_more":false}`; `limit` clampeado ao teto no handler
-- [ ] 2.5.5 Implementar `AdminEventsHandler`: extrai `from`, `to`, `cursor`, `limit` (default=100, teto=500); parseia datas RFC3339 ou date; chama `ListEventsPaged`; serializa JSON com cursor keyset composto
-- [ ] 2.5.6 Implementar `AdminSyncCookieHandler`: wrapper de `AdminSyncHandler` existente (handlers.go:315) com guarda de sessão em vez de Bearer; reutilizar `SyncSerializer`; retornar 409 se em andamento; 202 em sucesso
-- [ ] 2.5.7 Garantir que NENHUM handler loga CPF completo nem ecoa `raw_payload` em mensagens de erro (Constitution §VI, CHK-S13 — validar por grep antes do commit)
+- [x] 2.5.1 Implementar `AdminStatsHandler`: chama `CountMembersWithSelfie` + `CountDevicesByActivity(threshold)` + `CountAttendanceSince(24h)` → serializa JSON com 5 campos (incluindo `device_offline_threshold_hours`); retornar 503 JSON se DB inacessível (CHK-A08)
+- [x] 2.5.2 Implementar `AdminDevicesHandler`: chama `ListDevicesAll()` → mapeia para response com `status` derivado (comparando `last_heartbeat_at` com `now() - threshold`) + `device_offline_threshold_hours`; array vazio válido (FR-009)
+- [x] 2.5.3 Implementar `AdminDeviceDetailHandler`: extrai `{id}` do path, chama `GetDeviceByID(id)` → 404 JSON se não encontrado; `status` derivado incluso; sem histórico (dec-007)
+- [x] 2.5.4 Implementar `AdminMembersHandler`: extrai `q`, `cursor`, `limit` (default=50, teto=200); chama `ListMembersPaged`; serializa `{"members":[],"next_cursor":null,"has_more":false}`; `limit` clampeado ao teto no handler
+- [x] 2.5.5 Implementar `AdminEventsHandler`: extrai `from`, `to`, `cursor`, `limit` (default=100, teto=500); parseia datas RFC3339 ou date; chama `ListEventsPaged`; serializa JSON com cursor keyset composto
+- [x] 2.5.6 Sync via cookie mapeado no wiring: `/admin/api/sync` usa `SessionMiddleware` + `AdminSyncHandler` existente (sem wrapper separado — reusar handler diretamente no server.go)
+- [x] 2.5.7 Verificado por grep: `federal_document[^_]` retorna vazio em admin_api_handlers.go e admin_ui_handlers.go (CHK-S13)
 - [ ] 2.5.8 Escrever testes de integração para cada handler: cenário happy path, DB inacessível (503), sessão ausente (401), parâmetros inválidos
 
 ### 2.6 Wiring no ServeMux e embed.FS `[A]`
@@ -153,10 +153,10 @@ Ref: plan.md §Project Structure (server.go, main.go, internal/web/), spec.md §
 
 - [ ] 2.6.1 Criar `internal/web/embed.go` com diretiva `//go:embed dist/*` expondo `var Assets embed.FS`
 - [ ] 2.6.2 Criar `internal/web/dist/.gitkeep` (placeholder — assets reais gerados pela FASE 3)
-- [ ] 2.6.3 Atualizar `internal/http/server.go`: registrar `SessionMiddleware` + rotas `/admin/api/*` (login sem middleware de sessão; demais com); registrar `http.FileServer` para `/admin/` servindo `Assets`
-- [ ] 2.6.4 Atualizar `cmd/presenca-facial/main.go`: passar novas configs (`AdminUsername`, `AdminPassword`, `AdminSessionSecret`, `AdminSessionTTLHours`, `DeviceOfflineThresholdHours`) para `NewServer`
-- [ ] 2.6.5 Garantir que `/health` e `/admin/sync` (Bearer) permanecem funcionais após wiring (sem regressão)
-- [ ] 2.6.6 Executar `go build ./...` para confirmar compilação sem erros
+- [x] 2.6.3 Atualizar `internal/http/server.go`: registrar `SessionMiddleware` + rotas `/admin/api/*` (login com rate-limit sem sessão; demais com sessão HMAC); registrar `http.FileServer` para `/admin/` via `AdminAssets`
+- [x] 2.6.4 Atualizar `cmd/presenca-facial/main.go`: passar novas configs (`AdminUsername`, `AdminPassword`, `AdminSessionSecret`, `AdminSessionTTLHours`, `DeviceOfflineThresholdHours`) para `NewServer` via `AdminLoginCfg` e `AdminAPICfg`
+- [x] 2.6.5 Garantir que `/health` e `/admin/sync` (Bearer) permanecem funcionais após wiring (sem regressão — go test ./... todos OK)
+- [x] 2.6.6 Executar `go build ./...` sem erros — confirmado
 - [ ] 2.6.7 Escrever teste smoke via `curl` (quickstart Scenario 3): `POST /admin/api/login` → cookie → `GET /admin/api/stats` → JSON com 5 campos
 
 ---
