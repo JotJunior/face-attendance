@@ -87,10 +87,13 @@ campos exatos.
 ### Response
 - **200 OK**.
 
-> NOTA: heartbeat e webhook PODEM ser a mesma rota fisica se o dispositivo enviar
-> ambos pela URL configurada; nesse caso o handler distingue por `eventType`. A
-> decisao (rota unica vs separada) e de execute-task; o contrato firme e: receber
-> heartbeat → registrar/atualizar dispositivo.
+> NOTA (dec-038): rota UNICA para todos os eventos do dispositivo. O DS-K1T673DWX
+> envia heartbeat e reconhecimento pelo mesmo path configurado em
+> `HttpHostNotification`. O handler distingue por `eventType`:
+> - `AccessControllerEvent` → processar reconhecimento facial (extrair employeeNoString)
+> - `IOEvent`, `SystemEvent`, `AlarmEvent` e outros → registrar/atualizar dispositivo (liveness)
+> - QUALQUER request com `macAddress`/`ipAddress` no payload → upsert em `devices`
+> O path do heartbeat e o MESMO path do webhook (configurado via `WEBHOOK_PATH_SECRET`).
 
 ---
 
