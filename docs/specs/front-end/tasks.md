@@ -91,11 +91,11 @@ Ref: checklists/performance.md CHK-P11, CHK-P12, plan.md §Project Structure (se
 
 Ref: spec.md §FR-001, FR-012, dec-006, plan.md §Quality Gate S1/S3/S5, contracts §POST /admin/api/login
 
-- [ ] 2.1.1 Criar `internal/http/session.go` com função `signToken(secret, sub, ttl) string` usando `crypto/hmac` + `crypto/sha256` stdlib (payload JSON `{"sub":"<user>","exp":<unix>}` → base64url + `.` + base64url(HMAC))
-- [ ] 2.1.2 Implementar `verifyToken(secret, token) (sub string, ok bool)` com `crypto/subtle.ConstantTimeCompare` para comparação do HMAC (anti-timing-attack)
-- [ ] 2.1.3 Implementar `SessionMiddleware(secret string) func(http.Handler) http.Handler` que lê o cookie `admin_session`, verifica assinatura e expiração, e chama `next` ou responde 401 JSON
-- [ ] 2.1.4 Garantir que `SessionMiddleware` preserva a URL atual em 401 (para o frontend incluir `?redirect=<path>` — FR-012)
-- [ ] 2.1.5 Escrever testes unitários para `session.go`: token válido, token expirado, HMAC adulterado, token malformado, comparação timing-safe
+- [x] 2.1.1 Criar `internal/http/session.go` com função `signToken(secret, sub, ttl) string` usando `crypto/hmac` + `crypto/sha256` stdlib (payload JSON `{"sub":"<user>","exp":<unix>}` → base64url + `.` + base64url(HMAC))
+- [x] 2.1.2 Implementar `verifyToken(secret, token) (sub string, ok bool)` com `crypto/subtle.ConstantTimeCompare` para comparação do HMAC (anti-timing-attack)
+- [x] 2.1.3 Implementar `SessionMiddleware(secret string) func(http.Handler) http.Handler` que lê o cookie `admin_session`, verifica assinatura e expiração, e chama `next` ou responde 401 JSON
+- [x] 2.1.4 Garantir que `SessionMiddleware` preserva a URL atual em 401 (para o frontend incluir `?redirect=<path>` — FR-012)
+- [x] 2.1.5 Escrever testes unitários para `session.go`: token válido, token expirado, HMAC adulterado, token malformado, comparação timing-safe
 
 ### 2.2 Handler de autenticação — login/logout `[C]`
 
