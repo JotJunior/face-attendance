@@ -22,20 +22,22 @@ sem qualquer acao manual.
 ela o sistema nao entrega valor; todas as demais etapas existem para habilita-la.
 
 **Independent Test**: com um membro ja carregado no dispositivo (via US2/US3), simular o
-recebimento de um evento de reconhecimento no webhook contendo `employeeNo` = CPF do
-membro, e verificar que uma chamada de marcacao de presenca e enviada a GOB com o CPF
-correto.
+recebimento de um evento de reconhecimento no webhook contendo `employeeNoString` = CPF do
+membro (campo bruto do payload HikVision — dec-022), e verificar que uma chamada de
+marcacao de presenca e enviada a GOB com o CPF correto.
 
 **Acceptance Scenarios**:
 
-1. **Given** um membro cadastrado no dispositivo com `employeeNo` = CPF, **When** o
-   dispositivo envia ao webhook um evento `AccessControl` de reconhecimento positivo com
-   esse `employeeNo`, **Then** o sistema envia `POST {GOB_STATE_URL}/attendance/3ff4708cb695ad1a6e9f87cb714e1f22`
+1. **Given** um membro cadastrado no dispositivo com `employeeNo` = CPF (campo ISAPI
+   interno), **When** o dispositivo envia ao webhook um evento `AccessControl` de
+   reconhecimento positivo contendo `employeeNoString` = CPF no payload
+   `AccessControllerEvent`/`EventNotificationAlert`, **Then** o sistema extrai o CPF de
+   `employeeNoString`, envia `POST {GOB_STATE_URL}/attendance/3ff4708cb695ad1a6e9f87cb714e1f22`
    com header `Authorization: <GOB_STATE_TOKEN>` e body `{ "cpf": <cpf-do-membro> }`.
 2. **Given** o mesmo evento entregue duas vezes (redelivery), **When** ambos sao
    processados, **Then** a presenca resultante e idempotente (re-execucao nao corrompe o
    estado na GOB).
-3. **Given** um evento de webhook cujo `employeeNo` nao corresponde a nenhum membro
+3. **Given** um evento de webhook cujo `employeeNoString` nao corresponde a nenhum membro
    conhecido, **When** o sistema processa o evento, **Then** registra log estruturado de
    evento desconhecido e nao envia marcacao.
 
@@ -187,14 +189,17 @@ que nao ha duplicacao e que o liveness e atualizado.
 **Etapa 3 — Marcacao de presenca (GOB)**
 
 - **FR-014**: System MUST expor um endpoint de webhook que receba o evento `AccessControl`
-  de reconhecimento enviado pelo dispositivo HikVision, contendo `employeeNo` = CPF.
-- **FR-015**: System MUST, ao receber um evento de reconhecimento positivo, enviar
-  `POST {GOB_STATE_URL}/attendance/3ff4708cb695ad1a6e9f87cb714e1f22` com header
-  `Authorization: <GOB_STATE_TOKEN>` e body `{ "cpf": <cpf-do-membro> }`.
+  de reconhecimento enviado pelo dispositivo HikVision; o CPF do membro reconhecido vem no
+  campo `employeeNoString` dentro de `AccessControllerEvent`/`EventNotificationAlert` do
+  payload bruto (conforme codigo legacy `WebhookController.php:212` e
+  `WebhookEventProcessor.php:154,232` — dec-022).
+- **FR-015**: System MUST, ao receber um evento de reconhecimento positivo, extrair o CPF
+  de `employeeNoString` e enviar `POST {GOB_STATE_URL}/attendance/3ff4708cb695ad1a6e9f87cb714e1f22`
+  com header `Authorization: <GOB_STATE_TOKEN>` e body `{ "cpf": <cpf-do-membro> }`.
 - **FR-016**: System MUST tornar a marcacao de presenca idempotente em re-entrega do mesmo
   evento de reconhecimento.
 - **FR-017**: System MUST ignorar (com log estruturado) eventos de webhook cujo
-  `employeeNo` nao corresponda a um membro conhecido, sem marcar presenca.
+  `employeeNoString` nao corresponda a um membro conhecido, sem marcar presenca.
 
 **Requisitos transversais**
 
@@ -207,14 +212,16 @@ que nao ha duplicacao e que o liveness e atualizado.
 
 **Decisoes de infraestrutura auditaveis**
 
-- **FR-021-INFRA-SCHED**: A frequencia do ciclo de carga de membros (FR-004) e configuravel;
-  default ate definicao no clarify = execucao periodica agendada + gatilho manual sob demanda.
-  [NEEDS CLARIFICATION: cron fixo, intervalo configuravel, ou webhook da GOB?]
+- **FR-021-INFRA-SCHED**: A frequencia do ciclo de carga de membros (FR-004) e configuravel
+  via env var `MEMBER_SYNC_INTERVAL_MINUTES` (default: 60); o sistema MUST executar o
+  ciclo periodicamente por ticker interno E expor endpoint HTTP de trigger manual sob
+  demanda (dec-023 — briefing secao 3.1: "chamada periodica (ou sob demanda)").
 - **FR-022-INFRA-IDEMP**: A chave de idempotencia de todas as escritas externas e o CPF
   (`employeeNo`/`FPID` no HikVision; `cpf` na GOB), com escopo por membro.
 - **FR-023-INFRA-RETRY**: As chamadas ISAPI (FR-010..FR-012) e a marcacao GOB (FR-015) MUST
-  ter politica de retry com dead-letter queue. [NEEDS CLARIFICATION: parametros de backoff
-  e numero maximo de tentativas antes da DLQ]
+  ter politica de retry configuravel via env vars `RETRY_MAX_ATTEMPTS` (default: 3) e
+  `RETRY_INITIAL_BACKOFF_MS` (default: 1000ms), com backoff exponencial; apos esgotar as
+  tentativas, rotear para DLQ (dec-024 — Constitution Principio III + Principio V).
 
 ### Key Entities
 
@@ -224,8 +231,8 @@ que nao ha duplicacao e que o liveness e atualizado.
 - **Device (Dispositivo)**: aparelho HikVision na rede local. Identificado pelo heartbeat;
   guarda estado de registro e liveness. Destino da carga de usuarios/faces.
 - **AttendanceEvent (Evento de Presenca)**: derivado de um evento de reconhecimento
-  (`AccessControl` com `employeeNo` = CPF) recebido no webhook; resulta na marcacao de
-  presenca na GOB.
+  (`AccessControl` com `employeeNoString` = CPF no payload bruto HikVision) recebido no
+  webhook; o CPF e extraido de `employeeNoString` e resulta na marcacao de presenca na GOB.
 - **ProcessingMessage (Mensagem de Processamento)**: unidade enfileirada representando um
   membro valido a registrar no dispositivo (chaveada por CPF).
 
@@ -256,11 +263,12 @@ que nao ha duplicacao e que o liveness e atualizado.
 - Cadastro manual de membros (GOB e a fonte de verdade).
 - Abstracao multi-fornecedor de biometria (HikVision e o unico fornecedor no MVP).
 
-## Resolved Ambiguities / Pending Clarifications
+## Resolved Ambiguities
 
-| # | Item (briefing sec.9) | Tratamento | Status |
-|---|------------------------|------------|--------|
-| 1 | Frequencia do ciclo de carga | FR-021-INFRA-SCHED, default periodico+manual | clarify |
-| 2 | Estrategia de retry ISAPI | FR-023-INFRA-RETRY, retry+DLQ obrigatorios; parametros a definir | clarify |
-| 3 | Formato do CPF enviado ao HikVision (mascara vs digits) | Default documentado: usar o formato de `federal_document` como recebido da GOB para `employeeNo`/`FPID`; o body de marcacao GOB usa o formato mascarado verificado `00.000.000-00`. A consistencia exata e detalhe do plan. | default-documentado |
-| 4 | Provisionamento de credenciais ISAPI | FR-020 fixa env vars de runtime como mecanismo; o meio de provisionamento operacional (arquivo de config vs banco) e detalhe do plan/ops. | default-documentado |
+| # | Item (briefing sec.9) | Tratamento | Status | Decisao |
+|---|------------------------|------------|--------|---------|
+| 1 | Frequencia do ciclo de carga | FR-021-INFRA-SCHED: intervalo configuravel via `MEMBER_SYNC_INTERVAL_MINUTES` (default 60min) + endpoint de trigger manual; ticker Go. | resolvido-clarify | dec-023 |
+| 2 | Estrategia de retry ISAPI | FR-023-INFRA-RETRY: retry configuravel via `RETRY_MAX_ATTEMPTS` (default 3) e `RETRY_INITIAL_BACKOFF_MS` (default 1000ms); backoff exponencial; DLQ apos esgotar tentativas. | resolvido-clarify | dec-024 |
+| 3 | Campo bruto `employeeNoString` vs `employeeNo` | FR-014/FR-017/US1: o campo no payload bruto do webhook HikVision e `employeeNoString` (verificado em `WebhookController.php:212` e `WebhookEventProcessor.php:154,232`). `employeeNo` e o nome interno apos normalizacao. Spec corrigida. | resolvido-clarify | dec-022 |
+| 4 | Formato do CPF enviado ao HikVision (mascara vs digits) | Default documentado: usar o formato de `federal_document` como recebido da GOB para `employeeNo`/`FPID`; o body de marcacao GOB usa o formato mascarado verificado `00.000.000-00`. A consistencia exata e detalhe do plan. | default-documentado | — |
+| 5 | Provisionamento de credenciais ISAPI | FR-020 fixa env vars de runtime como mecanismo; o meio de provisionamento operacional (arquivo de config vs banco) e detalhe do plan/ops. | default-documentado | — |
