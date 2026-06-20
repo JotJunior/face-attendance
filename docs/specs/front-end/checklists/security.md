@@ -104,9 +104,11 @@
 
 - [ ] CHK-S14 — A política de retenção e descarte de `AttendanceEvent` e demais PII
   está definida para atender LGPD (art. 15/16)? [Compliance, Gap] {humano}
-  > [Gap] A spec e o plan não mencionam política de retenção de dados de eventos
-  > de presença (que contêm CPF e biometria facial — dados sensíveis pela LGPD).
-  > Decisão de negócio: qual o prazo de retenção e como é feito o descarte?
+  > [Gap — DEFERIDO, dec-032] A política de retenção de `AttendanceEvent` (dados de
+  > presença biométrica — LGPD art. 15/16) está **explicitamente fora desta feature**.
+  > Decisão documentada em `spec.md §Edge Cases` e `tasks.md §Escopo Excluído`.
+  > Uma feature dedicada de purga/retenção deve ser criada separadamente (feature futura).
+  > Este checklist permanece `[ ]` até a feature de retenção ser implementada.
 
 ---
 

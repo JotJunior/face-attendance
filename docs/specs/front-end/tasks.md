@@ -53,10 +53,10 @@ Ref: checklists/security.md CHK-S06, CHK-S16, CHK-S19, CHK-S24
 - **Métricas por endpoint** (CHK-A22): N/A para MVP on-premise; logger existente cobre; sem Prometheus nesta feature (decisão explícita).
 - **Versionamento de API** (CHK-A04): sem prefixo `/v1/` para MVP; namespace `/admin/api/` serve como versionamento implícito (decisão explícita: MVP on-premise single-binary).
 
-- [ ] 1.1.1 Documentar os defaults técnicos acima em `docs/specs/front-end/engineering-decisions.md` (arquivo de referência para execute-task)
-- [ ] 1.1.2 Atualizar `quickstart.md` com pré-requisito de TLS, comportamento de rotação de secret e defaults de TTL/page-size
-- [ ] 1.1.3 Verificar gap de retenção de PII: adicionar nota em spec.md §Edge Cases e em checklists/security.md CHK-S14 apontando "feature futura de purga/retenção" (dec-032)
-- [ ] 1.1.4 Validar empiricamente que `RateLimitMiddleware(10)` (middleware.go:113) existe e aceita `maxPerMinute int` antes de instanciar para o login
+- [x] 1.1.1 Documentar os defaults técnicos acima em `docs/specs/front-end/engineering-decisions.md` (arquivo de referência para execute-task)
+- [x] 1.1.2 Atualizar `quickstart.md` com pré-requisito de TLS, comportamento de rotação de secret e defaults de TTL/page-size
+- [x] 1.1.3 Verificar gap de retenção de PII: adicionar nota em spec.md §Edge Cases e em checklists/security.md CHK-S14 apontando "feature futura de purga/retenção" (dec-032)
+- [x] 1.1.4 Validar empiricamente que `RateLimitMiddleware(10)` (middleware.go:113) existe e aceita `maxPerMinute int` antes de instanciar para o login
 
 ### 1.2 Configuração de ambiente — novas env vars `[A]`
 

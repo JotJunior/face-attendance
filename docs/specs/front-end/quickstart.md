@@ -3,11 +3,29 @@
 Cenários de teste que validam a implementação end-to-end. Cobrem happy path,
 error cases e o roundtrip backend↔frontend obrigatório.
 
-> Pré-requisitos de runtime: PostgreSQL + RabbitMQ no ar; binário do serviço
-> compilado com os assets embutidos (`embed.FS`); env vars de runtime setadas
-> (Constitution §V): `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `ADMIN_SESSION_SECRET`,
-> `ADMIN_SESSION_TTL_HOURS`, `DEVICE_OFFLINE_THRESHOLD_HOURS`, além das já
-> existentes (`ADMIN_TOKEN`, `DATABASE_URL`, etc.).
+> **Pré-requisitos de deploy (obrigatórios):**
+>
+> - **TLS**: o cookie `admin_session` tem flag `Secure`; HTTPS é obrigatório mesmo
+>   em LAN on-premise. Configurar TLS no proxy reverso (nginx, Caddy) ou no binário
+>   diretamente. Sem HTTPS, o browser descarta o cookie e o login não funciona.
+>
+> - **Env vars obrigatórias** (sem default — serviço recusa inicializar se ausentes):
+>   `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `ADMIN_SESSION_SECRET`, além das já
+>   existentes (`ADMIN_TOKEN`, `WEBHOOK_PATH_SECRET`, `DATABASE_URL`, `RABBITMQ_URL`,
+>   `GOB_STATE_URL`, `GOB_STATE_TOKEN`).
+>
+> - **Env vars opcionais** com default:
+>   | Variável | Default | Descrição |
+>   |----------|---------|-----------|
+>   | `ADMIN_SESSION_TTL_HOURS` | `8` | TTL da sessão de admin em horas |
+>   | `DEVICE_OFFLINE_THRESHOLD_HOURS` | `24` | Horas sem heartbeat para considerar device offline |
+>
+> - **Rotação de secret**: rotacionar `ADMIN_SESSION_SECRET` invalida **todas** as
+>   sessões ativas imediatamente (HMAC stateless — sem estado em banco). Usuários
+>   autenticados perdem a sessão e precisam fazer login novamente.
+>
+> - **Assets embutidos**: binário compilado com `embed.FS` (FASE 3 gera os assets
+>   em `internal/web/dist/` antes do `go build`).
 
 ---
 

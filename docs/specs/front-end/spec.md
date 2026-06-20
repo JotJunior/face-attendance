@@ -218,6 +218,11 @@ ao endpoint `/admin/sync` e exibir feedback de sucesso ou erro para o operador.
   bloqueado na tela.
 - CPF exibido em telas de membros e logs: deve ser mascarado (`***.000.***-**`)
   para reduzir exposição de dado sensível no painel.
+- **[Fora de escopo — feature futura]** Retenção e purga de PII (dec-032): a política
+  de retenção de `AttendanceEvent` (dados de presença biométrica — LGPD art. 15/16)
+  é **deferida**. Não há prazo de expiração automática nem mecanismo de descarte nesta
+  feature. Uma feature dedicada de purga/retenção deve ser criada separadamente para
+  atender LGPD. Ver `checklists/security.md CHK-S14` e `tasks.md §Escopo Excluído`.
 
 ---
 
