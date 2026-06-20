@@ -661,6 +661,11 @@ function renderMembers() {
 
   tbody.innerHTML = items.map(m => {
     const syncBadge = syncBadgeMap[m.sync_status] ?? `<span class="badge badge-pending">${escHtml(m.sync_status ?? '—')}</span>`;
+    // Reenvio só faz sentido p/ "failed": têm selfie mas erraram o enrollment.
+    // Os "pending" da lista são membros SEM selfie (nada a enrolar); "synced" já ok.
+    const action = m.sync_status === 'failed'
+      ? `<button class="btn btn-ghost btn-sm" data-resync-id="${escHtml(String(m.id))}" data-resync-name="${escHtml(m.name ?? 'membro')}">Reenviar</button>`
+      : `<span class="td-muted">—</span>`;
     return `
       <tr>
         <td>${escHtml(m.name ?? '—')}</td>
@@ -668,6 +673,7 @@ function renderMembers() {
         <td>${syncBadge}</td>
         <td class="hide-tablet hide-mobile"><span class="td-muted">${escHtml(m.status ?? '—')}</span></td>
         <td class="hide-mobile td-muted td-mono">${escHtml(m.last_failed_stage ?? '—')}</td>
+        <td>${action}</td>
       </tr>
     `;
   }).join('');
@@ -887,11 +893,44 @@ function handleHashChange() {
 
 // ─── BOOT ─────────────────────────────────────────────────────
 
+// Reenvio individual: delega o clique no botão "Reenviar" das linhas de membro.
+// O #members-tbody persiste entre renders (só o innerHTML troca), então 1 listener basta.
+function initMembersActions() {
+  const tbody = $('members-tbody');
+  if (!tbody) return;
+  tbody.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-resync-id]');
+    if (!btn || btn.disabled) return;
+    const id   = btn.dataset.resyncId;
+    const name = btn.dataset.resyncName || 'membro';
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Enviando...';
+    try {
+      const res = await apiPost(`members/${id}/resync`);
+      if (res.status === 401) return; // interceptado → login
+      if (res.status === 202) {
+        showToast('success', 'Reenviado', `${name} foi enfileirado para reprocessamento.`);
+      } else {
+        let msg = `Status ${res.status}`;
+        try { const d = await res.json(); if (d.error) msg = d.error; } catch { /* ignore */ }
+        showToast('error', 'Falha ao reenviar', msg);
+      }
+    } catch (err) {
+      showToast('error', 'Falha na conexão', err.message === 'timeout' ? 'Tempo esgotado' : err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = original;
+    }
+  });
+}
+
 function init() {
   initLogin();
   initSync();
   initDevicesBackBtn();
   initMembersSearch();
+  initMembersActions();
   initEventsFilter();
   initMobileSidebar();
   initKeyboardNav();

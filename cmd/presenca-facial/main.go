@@ -60,9 +60,13 @@ func run() error {
 	gobClient := gob.New(cfg.GobStateURL, cfg.GobStateToken)
 
 	// --- RabbitMQ ---
+	// O publisher também é necessário quando o painel admin está ligado: o reenvio
+	// individual de membro (POST /admin/api/members/{id}/resync) publica na fila,
+	// não só o scheduler/workers.
+	adminUIEnabled := cfg.AdminUsername != "" && cfg.AdminSessionSecret != ""
 	var pub *queue.Publisher
 	var amqpConn *amqp.Connection
-	if cfg.RunScheduler || cfg.RunWorkers {
+	if cfg.RunScheduler || cfg.RunWorkers || adminUIEnabled {
 		conn, ch, amqpErr := queue.Connect(cfg.RabbitMQURL)
 		if amqpErr != nil {
 			return fmt.Errorf("rabbitmq: %w", amqpErr)
@@ -143,10 +147,15 @@ func run() error {
 		AdminHandler:            adminHandler,
 		AllowedWebhookIPs:       allowedIPs,
 		// Admin UI — habilitado quando as env vars obrigatórias estão presentes
-		AdminUIEnabled:  cfg.AdminUsername != "" && cfg.AdminSessionSecret != "",
-		AdminLoginCfg:   adminLoginCfg,
-		AdminAPICfg:     adminAPICfg,
-		AdminAssets:     http.FS(web.Assets), // embed.FS — assets populados na FASE 3
+		AdminUIEnabled: adminUIEnabled,
+		AdminLoginCfg:  adminLoginCfg,
+		AdminAPICfg:    adminAPICfg,
+		AdminResyncCfg: httphandler.AdminResyncConfig{
+			MemberFinder: memberRepo,
+			Publisher:    pub, // não-nil quando adminUIEnabled (ver bloco RabbitMQ)
+			Logger:       logger,
+		},
+		AdminAssets: http.FS(web.Assets), // embed.FS — assets populados na FASE 3
 	})
 
 	// --- Orchestration context (definido antes dos workers p/ o consumer usar) ---

@@ -101,6 +101,34 @@ func (r *MemberRepository) FindByCPF(ctx context.Context, cpfDigits string) (*do
 	return &members[0], nil
 }
 
+// FindByID busca um membro pela chave primária. Retorna (nil, nil) se não existir.
+// Usado pelo reenvio individual (POST /admin/api/members/{id}/resync), que opera
+// por id porque o frontend só conhece o CPF mascarado.
+func (r *MemberRepository) FindByID(ctx context.Context, id int64) (*domain.Member, error) {
+	query := `
+		SELECT id, gob_id, federal_document, name, status,
+		       mobile_number, url_selfie, gob_created_at, gob_updated_at,
+		       created_at, updated_at
+		FROM members
+		WHERE id = $1
+		LIMIT 1
+	`
+	rows, err := r.pool.Query(ctx, query, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	members, err := scanMembers(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(members) == 0 {
+		return nil, nil
+	}
+	return &members[0], nil
+}
+
 // scanMembers reads all rows into domain.Member values (explicit mapper — no ORM).
 func scanMembers(rows pgx.Rows) ([]domain.Member, error) {
 	var members []domain.Member

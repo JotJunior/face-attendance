@@ -31,7 +31,8 @@ type ServerConfig struct {
 	AdminUIEnabled    bool
 	AdminLoginCfg     AdminLoginConfig
 	AdminAPICfg       AdminAPIConfig
-	AdminAssets       http.FileSystem // embed.FS servindo /admin/*
+	AdminResyncCfg    AdminResyncConfig // reenvio individual de membro
+	AdminAssets       http.FileSystem   // embed.FS servindo /admin/*
 }
 
 // NewServer constructs an HTTP server with the routes and middleware wired up.
@@ -85,6 +86,8 @@ func NewServer(cfg ServerConfig) *Server {
 		mux.Handle("/admin/api/devices/", sessionMW(adminDevicesRouter(cfg.AdminAPICfg)))
 		mux.Handle("/admin/api/devices", sessionMW(AdminDevicesHandler(cfg.AdminAPICfg)))
 		mux.Handle("/admin/api/members", sessionMW(AdminMembersHandler(cfg.AdminAPICfg)))
+		// Subtree p/ ações por membro: POST /admin/api/members/{id}/resync
+		mux.Handle("/admin/api/members/", sessionMW(AdminMemberResyncHandler(cfg.AdminResyncCfg)))
 		mux.Handle("/admin/api/events", sessionMW(AdminEventsHandler(cfg.AdminAPICfg)))
 
 		// Sync manual via cookie (wraps o AdminSyncHandler existente com sessão)
