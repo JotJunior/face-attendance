@@ -149,6 +149,10 @@ img, svg {
   overflow-y: auto;
   background: var(--bg-base);
   position: relative;
+  /* A .sidebar é position:fixed (fora do fluxo do grid); sem isto o
+     main-content é auto-colocado na coluna 1 (largura da sidebar) e some
+     atrás dela. Forçar a coluna 2 (1fr). Resetado p/ col 1 no mobile. */
+  grid-column: 2;
 }
 
 .main-content::before {
@@ -1681,6 +1685,7 @@ img, svg {
 
   .main-content {
     padding-top: var(--space-7);
+    grid-column: 1; /* grid mobile é single-column; sidebar vira drawer */
   }
 
   .content-area {
