@@ -1,0 +1,10 @@
+.idea
+.DS_Store
+legacy/
+tmp/
+
+t.txt
+t.json
+t.md
+
+
