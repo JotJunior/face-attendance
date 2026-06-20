@@ -114,25 +114,25 @@ Ref: contracts §POST /admin/api/login, §POST /admin/api/logout, plan.md §S3/S
 
 Ref: plan.md §Project Structure, contracts §stats, §members, §events, CHK-P10/P11/P12
 
-- [ ] 2.3.1 Adicionar `CountMembersWithSelfie(ctx) (int, error)` a `internal/repository/member_repository.go` (COUNT WHERE url_selfie IS NOT NULL AND url_selfie != '')
-- [ ] 2.3.2 Adicionar `CountDevicesByActivity(ctx, thresholdHours int) (active, inactive int, error)` a `internal/repository/device_repository.go` (dois contadores numa query com CASE/filter — sem N+1)
-- [ ] 2.3.3 Adicionar `ListDevicesAll(ctx) ([]domain.Device, error)` a `internal/repository/device_repository.go` (sem paginação — dezenas de dispositivos apenas)
-- [ ] 2.3.4 Adicionar `GetDeviceByID(ctx, id int) (domain.Device, error)` a `internal/repository/device_repository.go` com retorno de `pgx.ErrNoRows` mapeado para 404
-- [ ] 2.3.5 Adicionar `CountAttendanceSince(ctx, since time.Time) (int, error)` a `internal/repository/attendance_event_repository.go`
-- [ ] 2.3.6 Adicionar `ListMembersPaged(ctx, q string, cursor int, limit int) ([]MemberView, nextCursor int, hasMore bool, error)` a `internal/repository/member_repository.go` — JOIN com `member_processing_status` (LEFT JOIN por `federal_document`) para trazer `sync_status` sem N+1 (CHK-P12); busca icase em `name` e `federal_document`; keyset por `id`
-- [ ] 2.3.7 Adicionar `ListEventsPaged(ctx, from, to time.Time, cursor CursorEvt, limit int) ([]EventView, nextCursor CursorEvt, hasMore bool, error)` com keyset sobre `(created_at DESC, id DESC)` e JOIN com `devices` + `members`; excluir `raw_payload` e `event_key`
+- [x] 2.3.1 Adicionar `CountMembersWithSelfie(ctx) (int, error)` a `internal/repository/member_repository.go` (COUNT WHERE url_selfie IS NOT NULL AND url_selfie != '')
+- [x] 2.3.2 Adicionar `CountDevicesByActivity(ctx, thresholdHours int) (active, inactive int, error)` a `internal/repository/device_repository.go` (dois contadores numa query com CASE/filter — sem N+1)
+- [x] 2.3.3 Adicionar `ListDevicesAll(ctx) ([]domain.Device, error)` a `internal/repository/device_repository.go` (sem paginação — dezenas de dispositivos apenas)
+- [x] 2.3.4 Adicionar `GetDeviceByID(ctx, id int64) (*domain.Device, error)` a `internal/repository/device_repository.go` com retorno de `pgx.ErrNoRows` mapeado para 404
+- [x] 2.3.5 Adicionar `CountAttendanceSince(ctx, since time.Time) (int, error)` a `internal/repository/attendance_event_repository.go`
+- [x] 2.3.6 Adicionar `ListMembersPaged(ctx, q string, cursor int, limit int) ([]domain.MemberView, nextCursor int, hasMore bool, error)` a `internal/repository/member_repository.go` — LEFT JOIN com `member_processing_status` para trazer `sync_status` sem N+1 (CHK-P12); busca icase; keyset por `id`
+- [x] 2.3.7 Adicionar `ListEventsPaged(ctx, from, to time.Time, cursor domain.CursorEvt, limit int) ([]domain.EventView, nextCursor domain.CursorEvt, hasMore bool, error)` com keyset sobre `(created_at DESC, id DESC)` e JOIN com `devices` + `members`; excluir `raw_payload` e `event_key`
 - [ ] 2.3.8 Escrever testes de integração para cada método novo usando banco de teste (variável de env `TEST_DATABASE_URL`): dados seed → assert contagem/resultados + cursor de paginação
 
 ### 2.4 DTOs de view e mascaramento de CPF `[C]`
 
 Ref: spec.md §FR-011, §SC-006, plan.md §Summary, contracts §members, §events
 
-- [ ] 2.4.1 Criar `internal/domain/view.go` com função `maskCPF(cpf string) string` retornando formato `***.NNN.NNN-**` (substituindo os 3 primeiros dígitos e os 2 últimos verificadores — CPF cru nunca exposto)
-- [ ] 2.4.2 Definir `MemberView` struct com campos: `id`, `name`, `federal_document_masked`, `status`, `sync_status`, `last_failed_stage` (todos snake_case via json tags)
-- [ ] 2.4.3 Definir `EventView` struct com campos: `id`, `event_datetime`, `created_at`, `device_id`, `device_identifier`, `member_name`, `federal_document_masked`, `marking_status`, `marked_at` (sem `raw_payload`, sem `event_key`)
-- [ ] 2.4.4 Implementar função `deriveSyncStatus(outcome domain.ProcessingOutcome) string` retornando `"synced"`, `"failed"` ou `"pending"`
-- [ ] 2.4.5 Implementar função `deriveMarkingStatus(event domain.AttendanceEvent) string` retornando `"marked"`, `"pending"`, `"failed"` ou `"unauthorized"`
-- [ ] 2.4.6 Escrever testes unitários para `maskCPF`, `deriveSyncStatus` e `deriveMarkingStatus` com edge cases (CPF vazio, CPF mal-formatado, outcome sem erro)
+- [x] 2.4.1 Criar `internal/domain/view.go` com função `maskCPF(cpf string) string` retornando formato `***.NNN.NNN-**` (substituindo os 3 primeiros dígitos e os 2 últimos verificadores — CPF cru nunca exposto)
+- [x] 2.4.2 Definir `MemberView` struct com campos: `id`, `name`, `federal_document_masked`, `status`, `sync_status`, `last_failed_stage` (todos snake_case via json tags)
+- [x] 2.4.3 Definir `EventView` struct com campos: `id`, `event_datetime`, `created_at`, `device_id`, `device_identifier`, `member_name`, `federal_document_masked`, `marking_status`, `marked_at` (sem `raw_payload`, sem `event_key`)
+- [x] 2.4.4 Implementar função `DeriveSyncStatus(outcome *ProcessingOutcome) string` retornando `"synced"`, `"failed"` ou `"pending"`
+- [x] 2.4.5 Implementar função `DeriveMarkingStatus(event AttendanceEvent) string` retornando `"marked"`, `"pending"`, `"failed"` ou `"unauthorized"`
+- [x] 2.4.6 Escrever testes unitários para `MaskCPF`, `DeriveSyncStatus` e `DeriveMarkingStatus` com edge cases (CPF vazio, CPF mal-formatado, outcome sem erro)
 
 ### 2.5 Handlers da API admin `[A]`
 
