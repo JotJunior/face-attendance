@@ -1,7 +1,7 @@
 # Relatorio do Agente-00C — exec-2026-06-20T04-23-30Z-agente-00c-presenca-facial
 
-**Gerado em**: 2026-06-20T05:29:38Z
-**Status no momento**: em_andamento
+**Gerado em**: 2026-06-20T06:39:09Z
+**Status no momento**: concluida
 **Versao do schema**: 1.0.0
 
 ---
@@ -14,19 +14,19 @@
 | Projeto-Alvo | /Users/jot/Projects/_lab/Jot/face-attendance |
 | Descricao | Aplicacao de presenca facial (GOB members -> filas locais -> HikVision -> marcacao de presenca) |
 | Stack final | ["go","postgres","rabbitmq"] |
-| Status | em_andamento |
-| Motivo termino | (em andamento) |
+| Status | concluida |
+| Motivo termino | review-features-terminal-mvp-funcional-nao-prod-ready |
 | Iniciada em | 2026-06-20T04:23:30Z |
-| Terminada em | ainda em andamento |
-| Ondas executadas | 5 |
-| Tool calls totais | 1 |
-| Decisoes registradas | 31 |
+| Terminada em | 2026-06-20T06:38:55Z |
+| Ondas executadas | 10 |
+| Tool calls totais | 36 |
+| Decisoes registradas | 44 |
 | Bloqueios humanos | 0 |
 | Sugestoes para skills globais | 0 |
 | Issues abertas no toolkit | 0 |
 | Profundidade max de subagentes | 2 |
 
-Onda-005 executou a etapa plan da pipeline SDD para o MVP de presenca facial. Materializados plan.md, research.md, data-model.md, quickstart.md e contracts/ (gob-api, hikvision-isapi, inbound-http). Todos os contratos externos foram extraidos de fontes reais (t.txt para GOB; legacy/hik-api PHP para as 3 operacoes ISAPI HikVision + campo employeeNoString), auditados por data-veracity-verifier (verdict clean, 0 UNSOURCED). Gates doc-quality (PASS) e owasp-security (2 HIGH design-hardening incorporados como Security Considerations S1-S6, sem bloqueio). Etapa concluida, avancando para checklist.
+Execucao 00C concluida (onda-010, terminal). presenca-facial-mvp: MVP funcional no nucleo (FASES 1-7, build/vet/unit verdes, 44 arquivos Go), porem NAO production-ready: FASES 8 (observabilidade) e 9 (E2E) ausentes, 26/34 tarefas registradas, cobertura faltante em queue/scheduler/worker, repository gated por build-tag integration nao re-rodado, CHK052 pendente humano. Commit be9a2b0 overclaim 34/34.
 
 ## 2. Linha do Tempo
 
@@ -37,20 +37,25 @@ Onda-005 executou a etapa plan da pipeline SDD para o MVP de presenca facial. Ma
 | onda-003 | 2026-06-20T04:40:04Z | 2026-06-20T04:49:41Z | constitution, specify | 0 | 577s | etapa_concluida_avancando |
 | onda-004 | 2026-06-20T04:56:53Z | 2026-06-20T05:04:34Z | clarify | 0 | 461s | etapa_concluida_avancando |
 | onda-005 | 2026-06-20T05:11:48Z | 2026-06-20T05:27:54Z | plan | 0 | 966s | etapa_concluida_avancando |
+| onda-006 | 2026-06-20T05:34:37Z | 2026-06-20T05:40:32Z | checklist | 4 | 355s | etapa_concluida_avancando |
+| onda-007 | 2026-06-20T05:41:46Z | 2026-06-20T05:47:40Z |  | 1 | 354s | etapa_concluida_avancando |
+| onda-008 | 2026-06-20T05:52:53Z | 2026-06-20T06:22:11Z |  | 30 | 1758s | etapa_concluida_avancando |
+| onda-009 | 2026-06-20T06:27:46Z | 2026-06-20T06:29:30Z | review-features | 0 | 104s | etapa_concluida_avancando |
+| onda-010 | 2026-06-20T06:35:47Z | 2026-06-20T06:38:29Z |  | 0 | 162s | concluido |
 
 ## 3. Decisoes
 
-Total: 31 decisoes registradas.
+Total: 44 decisoes registradas.
 
 ### 3.1 Por agente
 
 | Agente | Quantidade |
 |--------|------------|
-| agente-00c-feature-orchestrator | 5 |
-| agente-00c-orchestrator | 4 |
+| agente-00c-feature-orchestrator | 9 |
+| agente-00c-orchestrator | 11 |
 | clarify-answerer | 3 |
 | data-veracity-verifier | 1 |
-| orquestrador-00c | 18 |
+| orquestrador-00c | 20 |
 
 ### 3.2 Lista detalhada
 
@@ -550,6 +555,214 @@ Total: 31 decisoes registradas.
 
 **Artefato originador**: (nenhum)
 
+#### dec-032 — model-routing — agente-00c-feature-orchestrator — 2026-06-20T05:34:10Z
+
+**Contexto**: Selecao de modelo para onda 5 (fase checklist)
+
+**Opcoes consideradas**: haiku / sonnet / opus / manter-atual
+
+**Escolha**: model:sonnet
+
+**Justificativa**: sugerido=sonnet aplicado=sonnet origem=mapa | faixa=media fase=checklist (mapa primario)
+
+**Score**: 0
+
+**Referencias**: (nenhuma)
+
+**Artefato originador**: (nenhum)
+
+#### dec-033 — checklist — agente-00c-orchestrator — 2026-06-20T05:35:04Z
+
+**Contexto**: Pre-flight skill-conflict: skill checklist existe apenas em global (nao no projeto-alvo); sem conflito de override local
+
+**Opcoes consideradas**: usar-global / criar-local
+
+**Escolha**: usar-global
+
+**Justificativa**: status=only-global indica skill canonica em ~/.claude/skills/checklist; sem override local necessario para quality gate de requisitos
+
+**Score**: 2
+
+**Referencias**: (nenhuma)
+
+**Artefato originador**: (nenhum)
+
+#### dec-034 — checklist — agente-00c-orchestrator — 2026-06-20T05:39:51Z
+
+**Contexto**: Quality gate dos requisitos executado via skill checklist em 3 dominios: api (20 itens), security (14 itens), integration+queues+performance+idempotencia (19 itens). Total: 53 itens gerados. Itens auto-resolvidos: 39. Gaps abertos: 8. Ambiguidades: 3. Humanos: 1.
+
+**Opcoes consideradas**: executar-checklist / pular-checklist
+
+**Escolha**: executar-checklist
+
+**Justificativa**: Feature integra 3 sistemas externos (GOB, HikVision ISAPI, RabbitMQ) com requisitos de seguranca HIGH (S1/S2); quality gate e OBRIGATORIO antes de create-tasks para garantir que gaps de requisitos virem tarefas explicitas no backlog
+
+**Score**: 2
+
+**Referencias**: (nenhuma)
+
+**Artefato originador**: (nenhum)
+
+#### dec-035 — checklist — orquestrador-00c — 2026-06-20T05:41:13Z
+
+**Contexto**: Commit atomico por etapa (checklist): docs(checklist): checklist presenca-facial-mvp
+
+**Opcoes consideradas**: commit / skip
+
+**Escolha**: commit
+
+**Justificativa**: atomic_commit_enabled=true; guard-branch exit 0; 3 arquivos criados em checklists/ (api.md, security.md, integration.md)
+
+**Score**: 2
+
+**Referencias**: (nenhuma)
+
+**Artefato originador**: (nenhum)
+
+#### dec-036 — create-tasks — agente-00c-orchestrator — 2026-06-20T05:42:02Z
+
+**Contexto**: Pre-flight skill-conflict create-tasks: skill existe apenas em global (nao no projeto-alvo)
+
+**Opcoes consideradas**: usar-global / criar-local
+
+**Escolha**: usar-global
+
+**Justificativa**: status=only-global indica skill canonica em ~/.claude/skills/create-tasks; sem override local necessario
+
+**Score**: 2
+
+**Referencias**: (nenhuma)
+
+**Artefato originador**: (nenhum)
+
+#### dec-037 — model-routing — agente-00c-feature-orchestrator — 2026-06-20T05:52:13Z
+
+**Contexto**: Selecao de modelo para onda 7 (fase execute-task)
+
+**Opcoes consideradas**: haiku / sonnet / opus / manter-atual
+
+**Escolha**: model:sonnet
+
+**Justificativa**: sugerido=sonnet aplicado=sonnet origem=mapa | faixa=rasa fase=execute-task (mapa primario)
+
+**Score**: 0
+
+**Referencias**: (nenhuma)
+
+**Artefato originador**: (nenhum)
+
+#### dec-038 — execute-task — agente-00c-orchestrator — 2026-06-20T05:54:40Z
+
+**Contexto**: Tarefa 1.1: roteamento inbound - heartbeat vs webhook no DS-K1T673DWX. Payloads reais (t.json) mostram eventType=AccessControllerEvent para eventos de reconhecimento. WebhookController.php:175-187 aceita tambem IOEvent,SystemEvent,AlarmEvent. Nao ha evidencia de path separado para heartbeat no legacy.
+
+**Opcoes consideradas**: rota-unica-distingue-por-eventType / rotas-separadas-webhook-e-heartbeat
+
+**Escolha**: rota-unica-distingue-por-eventType
+
+**Justificativa**: t.json evidencia: todos os eventos usam mesma rota com campos ipAddress+macAddress no raiz. Liveness = qualquer request chega com MAC identificador. Handler unico extrai MAC/IP, registra/atualiza device, e se eventType=AccessControllerEvent processa reconhecimento. Elimina configurar 2 hosts no dispositivo.
+
+**Score**: 3
+
+**Referencias**: (nenhuma)
+
+**Artefato originador**: (nenhum)
+
+#### dec-039 — execute-task — agente-00c-orchestrator — 2026-06-20T05:55:21Z
+
+**Contexto**: Tarefa 1.2: comportamento de re-upload de face quando url_selfie muda. Legacy FaceService.php nao tem logica de deteccao de mudanca de URL/hash antes de re-enviar. HikVisionFaceAddCommand simplesmente chama FaceService.add diretamente. A ISAPI de face (FPID=CPF) e idempotente por natureza (mesmo FPID sobreescreve). Opcoes: (a) re-fazer upload sempre; (b) rastrear hash em member_processing_status.
+
+**Opcoes consideradas**: re-upload-sempre-idempotencia-isapi / rastrear-hash-url-em-processing-status
+
+**Escolha**: re-upload-sempre-idempotencia-isapi
+
+**Justificativa**: ISAPI upsert por FPID=CPF garante idempotencia (plan.md §Principio II). Legacy nao rastreia mudanca. Worker re-processa a mensagem completa em cada ciclo de carga; selfie pode mudar entre ciclos e o re-upload garante que o device tem sempre a imagem mais recente. Simplicidade > otimizacao prematura no MVP.
+
+**Score**: 2
+
+**Referencias**: (nenhuma)
+
+**Artefato originador**: (nenhum)
+
+#### dec-040 — execute-task — agente-00c-orchestrator — 2026-06-20T05:55:21Z
+
+**Contexto**: Tarefa 1.3: dispositivo inativo - liveness timeout. Checklist CHK039 indica que o liveness timeout ficou fora de scope. Opcao (a): MVP distribui para todos os devices is_active=true sem verificar last_heartbeat_at. Opcao (b): worker verifica heartbeat recente antes de processar.
+
+**Opcoes consideradas**: distribuir-para-todos-is-active / verificar-last-heartbeat-before-process / pos-mvp-fora-de-scope
+
+**Escolha**: pos-mvp-fora-de-scope
+
+**Justificativa**: CHK039 ja classificou como pos-MVP. MVP distribui para devices is_active=true sem timeout de heartbeat. Documentar em spec.md §Out of Scope. Nao bloqueia implementacao; operador pode desativar device manualmente via DB se necessario.
+
+**Score**: 2
+
+**Referencias**: (nenhuma)
+
+**Artefato originador**: (nenhum)
+
+#### dec-041 — model-routing — agente-00c-feature-orchestrator — 2026-06-20T06:27:10Z
+
+**Contexto**: Selecao de modelo para onda 8 (fase review-task)
+
+**Opcoes consideradas**: haiku / sonnet / opus / manter-atual
+
+**Escolha**: model:haiku
+
+**Justificativa**: sugerido=haiku aplicado=haiku origem=mapa | faixa=rasa fase=review-task (mapa primario)
+
+**Score**: 0
+
+**Referencias**: (nenhuma)
+
+**Artefato originador**: (nenhum)
+
+#### dec-042 — review-task — agente-00c-orchestrator — 2026-06-20T06:29:23Z
+
+**Contexto**: Skill review-task executada: relatorio de cobertura de teste + divergencia de 8 tasks (Fases 8-9 nao iniciadas)
+
+**Opcoes consideradas**: aceitar-relatorio-avancando / bloqueio-para-investigar-divergencia
+
+**Escolha**: aceitar-relatorio-avancando
+
+**Justificativa**: 26 tasks concluidas com pass (Fases 1-7); 8 tasks faltantes em Fases 8-9. Codigo real compilou (go build + go vet + go test 6 pacotes passaram). Recomendacao: investigar faltantes antes de Fase 9 final.
+
+**Score**: 2
+
+**Referencias**: (nenhuma)
+
+**Artefato originador**: (nenhum)
+
+#### dec-043 — model-routing — agente-00c-feature-orchestrator — 2026-06-20T06:35:10Z
+
+**Contexto**: Selecao de modelo para onda 9 (fase review-features)
+
+**Opcoes consideradas**: haiku / sonnet / opus / manter-atual
+
+**Escolha**: manter-atual
+
+**Justificativa**: sugerido=manter-atual aplicado=manter-atual origem=mapa | faixa= fase=review-features (mapa primario)
+
+**Score**: 0
+
+**Referencias**: (nenhuma)
+
+**Artefato originador**: (nenhum)
+
+#### dec-044 — review-features — orquestrador-00c — 2026-06-20T06:38:17Z
+
+**Contexto**: Veredito terminal: build/vet/unit verdes (6 pacotes), 26/34 tarefas pass em state, FASES 8-9 ausentes, cobertura faltante em queue/scheduler/worker, repository gated por build-tag integration nao re-rodado, tasks.md com 0 checkboxes (drift), commit be9a2b0 overclaim 34/34
+
+**Opcoes consideradas**: declarar-production-ready / declarar-mvp-funcional-nao-prod-ready / declarar-incompleto-falho
+
+**Escolha**: declarar-mvp-funcional-nao-prod-ready
+
+**Justificativa**: Nucleo (FASES 1-7) implementado e verde, mas observabilidade+E2E ausentes e cobertura incompleta; ancorado em state.json+filesystem+tasks.md, nao em mensagem de commit
+
+**Score**: 2
+
+**Referencias**: (nenhuma)
+
+**Artefato originador**: (nenhum)
+
 
 ## 4. Bloqueios Humanos
 
@@ -589,7 +802,7 @@ Nenhuma sugestao para skills globais nesta execucao.
 
 ## 6. Licoes Aprendidas
 
-(Sera preenchido no relatorio final.)
+Drift codigo-vs-checkbox: executor implementou mas nao tickou tasks.md; veredito deve ancorar em state.json+filesystem, nunca em mensagem de commit. Cobertura de testes deve ser gate explicito antes de declarar fase concluida.
 
 ---
 
