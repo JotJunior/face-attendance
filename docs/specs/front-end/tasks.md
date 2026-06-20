@@ -62,12 +62,12 @@ Ref: checklists/security.md CHK-S06, CHK-S16, CHK-S19, CHK-S24
 
 Ref: spec.md §FR-001, plan.md §Constitution V, dec-012/015, contracts/admin-api.md
 
-- [ ] 1.2.1 Adicionar `ADMIN_USERNAME` a `internal/config/config.go` via `require()` (sem default; obrigatória)
-- [ ] 1.2.2 Adicionar `ADMIN_PASSWORD` a `internal/config/config.go` via `require()` (sem default; obrigatória)
-- [ ] 1.2.3 Adicionar `ADMIN_SESSION_SECRET` a `internal/config/config.go` via `require()` (sem default; obrigatória)
-- [ ] 1.2.4 Adicionar `ADMIN_SESSION_TTL_HOURS` a `internal/config/config.go` via `optionalInt(default=8)` (dec-default: 8h)
-- [ ] 1.2.5 Adicionar `DEVICE_OFFLINE_THRESHOLD_HOURS` a `internal/config/config.go` via `optionalInt(default=24)` (dec-012/015)
-- [ ] 1.2.6 Escrever testes unitários para `config.go` validando ausência das env vars obrigatórias retorna erro descritivo
+- [x] 1.2.1 Adicionar `ADMIN_USERNAME` a `internal/config/config.go` via `require()` (sem default; obrigatória)
+- [x] 1.2.2 Adicionar `ADMIN_PASSWORD` a `internal/config/config.go` via `require()` (sem default; obrigatória)
+- [x] 1.2.3 Adicionar `ADMIN_SESSION_SECRET` a `internal/config/config.go` via `require()` (sem default; obrigatória)
+- [x] 1.2.4 Adicionar `ADMIN_SESSION_TTL_HOURS` a `internal/config/config.go` via `optionalInt(default=8)` (dec-default: 8h)
+- [x] 1.2.5 Adicionar `DEVICE_OFFLINE_THRESHOLD_HOURS` a `internal/config/config.go` via `optionalInt(default=24)` (dec-012/015)
+- [x] 1.2.6 Escrever testes unitários para `config.go` validando ausência das env vars obrigatórias retorna erro descritivo
 
 ### 1.3 Migrations de índice para queries novas `[A]`
 

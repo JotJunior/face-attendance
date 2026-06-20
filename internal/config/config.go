@@ -32,6 +32,15 @@ type Config struct {
 	AdminToken        string // ADMIN_TOKEN
 	WebhookPathSecret string // WEBHOOK_PATH_SECRET
 
+	// Admin UI authentication
+	AdminUsername          string // ADMIN_USERNAME (required)
+	AdminPassword          string // ADMIN_PASSWORD (required, sensitive — never log)
+	AdminSessionSecret     string // ADMIN_SESSION_SECRET (required, sensitive — never log)
+	AdminSessionTTLHours   int    // ADMIN_SESSION_TTL_HOURS (default: 8)
+
+	// Device monitoring
+	DeviceOfflineThresholdHours int // DEVICE_OFFLINE_THRESHOLD_HOURS (default: 24)
+
 	// Rate limiting
 	WebhookRateLimitPerIPPerMin int // WEBHOOK_RATE_LIMIT_PER_IP_PER_MIN (default: 60)
 	AdminSyncMinIntervalSeconds int // ADMIN_SYNC_MIN_INTERVAL_SECONDS (default: 60)
@@ -112,6 +121,13 @@ func Load() (*Config, error) {
 		RunWorkers:                optionalBool("RUN_WORKERS", true),
 		WebhookRateLimitPerIPPerMin: optionalInt("WEBHOOK_RATE_LIMIT_PER_IP_PER_MIN", 60),
 		AdminSyncMinIntervalSeconds: optionalInt("ADMIN_SYNC_MIN_INTERVAL_SECONDS", 60),
+		// Admin UI authentication (FASE 2 — interface de administração)
+		AdminUsername:               require("ADMIN_USERNAME"),
+		AdminPassword:               require("ADMIN_PASSWORD"),
+		AdminSessionSecret:          require("ADMIN_SESSION_SECRET"),
+		AdminSessionTTLHours:        optionalInt("ADMIN_SESSION_TTL_HOURS", 8),
+		// Device monitoring threshold
+		DeviceOfflineThresholdHours: optionalInt("DEVICE_OFFLINE_THRESHOLD_HOURS", 24),
 	}
 
 	// Load per-device ISAPI configs: ISAPI_DEVICE_1_HOST, ISAPI_DEVICE_2_HOST, ...
