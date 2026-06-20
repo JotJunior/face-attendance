@@ -213,7 +213,7 @@ func TestSecurity_LogoutThenRequestReturns401(t *testing.T) {
 	logoutReq := httptest.NewRequest(http.MethodPost, "/admin/api/logout", nil)
 	logoutReq.AddCookie(&http.Cookie{Name: "admin_session", Value: sessionToken})
 	logoutRR := httptest.NewRecorder()
-	AdminLogoutHandler().ServeHTTP(logoutRR, logoutReq)
+	AdminLogoutHandler(true).ServeHTTP(logoutRR, logoutReq)
 	if logoutRR.Code != http.StatusNoContent {
 		t.Errorf("logout: status %d, want 204", logoutRR.Code)
 	}

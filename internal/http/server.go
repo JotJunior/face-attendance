@@ -78,7 +78,7 @@ func NewServer(cfg ServerConfig) *Server {
 		mux.Handle("/admin/api/login", loginRL.Handler(AdminLoginHandler(cfg.AdminLoginCfg)))
 
 		// Logout: sem sessão obrigatória (permite limpar cookie expirado)
-		mux.Handle("/admin/api/logout", AdminLogoutHandler())
+		mux.Handle("/admin/api/logout", AdminLogoutHandler(cfg.AdminLoginCfg.CookieSecure))
 
 		// Rotas protegidas por sessão HMAC
 		mux.Handle("/admin/api/stats", sessionMW(AdminStatsHandler(cfg.AdminAPICfg)))

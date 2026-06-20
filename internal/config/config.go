@@ -37,6 +37,7 @@ type Config struct {
 	AdminPassword          string // ADMIN_PASSWORD (required, sensitive — never log)
 	AdminSessionSecret     string // ADMIN_SESSION_SECRET (required, sensitive — never log)
 	AdminSessionTTLHours   int    // ADMIN_SESSION_TTL_HOURS (default: 8)
+	AdminCookieSecure      bool   // ADMIN_COOKIE_SECURE (default: true; setar false p/ deploy HTTP on-premise sem TLS)
 
 	// Device monitoring
 	DeviceOfflineThresholdHours int // DEVICE_OFFLINE_THRESHOLD_HOURS (default: 24)
@@ -126,6 +127,7 @@ func Load() (*Config, error) {
 		AdminPassword:               require("ADMIN_PASSWORD"),
 		AdminSessionSecret:          require("ADMIN_SESSION_SECRET"),
 		AdminSessionTTLHours:        optionalInt("ADMIN_SESSION_TTL_HOURS", 8),
+		AdminCookieSecure:           optionalBool("ADMIN_COOKIE_SECURE", true),
 		// Device monitoring threshold
 		DeviceOfflineThresholdHours: optionalInt("DEVICE_OFFLINE_THRESHOLD_HOURS", 24),
 	}

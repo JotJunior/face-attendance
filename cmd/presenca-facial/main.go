@@ -122,6 +122,7 @@ func run() error {
 		Password:      cfg.AdminPassword,
 		SessionSecret: cfg.AdminSessionSecret,
 		SessionTTL:    time.Duration(cfg.AdminSessionTTLHours) * time.Hour,
+		CookieSecure:  cfg.AdminCookieSecure,
 	}
 	adminAPICfg := httphandler.AdminAPIConfig{
 		MemberRepo:             memberRepo,

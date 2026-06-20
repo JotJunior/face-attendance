@@ -27,6 +27,7 @@ type AdminLoginConfig struct {
 	Password      string        // sensível — nunca logar
 	SessionSecret string        // sensível — nunca logar
 	SessionTTL    time.Duration // derivado de AdminSessionTTLHours
+	CookieSecure  bool          // atributo Secure do cookie (ADMIN_COOKIE_SECURE; false p/ HTTP on-premise sem TLS)
 }
 
 // AdminLoginHandler cria um http.Handler que processa POST /admin/api/login.
@@ -83,7 +84,7 @@ func AdminLoginHandler(cfg AdminLoginConfig) http.Handler {
 			Path:     "/admin",
 			MaxAge:   ttlSeconds,
 			HttpOnly: true,
-			Secure:   true,
+			Secure:   cfg.CookieSecure,
 			SameSite: http.SameSiteStrictMode,
 		})
 		w.Header().Set("Content-Type", "application/json")
@@ -92,8 +93,9 @@ func AdminLoginHandler(cfg AdminLoginConfig) http.Handler {
 }
 
 // AdminLogoutHandler cria um http.Handler que processa POST /admin/api/logout.
-// Limpa o cookie de sessão emitindo MaxAge=0.
-func AdminLogoutHandler() http.Handler {
+// Limpa o cookie de sessão emitindo MaxAge=0. O cookieSecure deve casar com o
+// emitido no login para o browser limpar corretamente.
+func AdminLogoutHandler(cookieSecure bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, `{"error":"método não permitido"}`, http.StatusMethodNotAllowed)
@@ -107,7 +109,7 @@ func AdminLogoutHandler() http.Handler {
 			Path:     "/admin",
 			MaxAge:   0,
 			HttpOnly: true,
-			Secure:   true,
+			Secure:   cookieSecure,
 			SameSite: http.SameSiteStrictMode,
 		})
 		w.Header().Set("Content-Type", "application/json")

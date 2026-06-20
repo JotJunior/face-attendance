@@ -19,6 +19,37 @@ var testLoginConfig = AdminLoginConfig{
 	Password:      "senha_segura_teste",
 	SessionSecret: "segredo-hmac-32-bytes-para-testes-",
 	SessionTTL:    time.Hour,
+	CookieSecure:  true,
+}
+
+// TestAdminLoginHandler_CookieSecureConfigurable garante que o atributo Secure
+// do cookie segue AdminLoginConfig.CookieSecure (ADMIN_COOKIE_SECURE). Em deploy
+// HTTP on-premise sem TLS, Secure=true faria o browser descartar o cookie e o
+// login entraria em loop de redirect — bug detectado na validação no Pi.
+func TestAdminLoginHandler_CookieSecureConfigurable(t *testing.T) {
+	for _, secure := range []bool{true, false} {
+		cfg := testLoginConfig
+		cfg.CookieSecure = secure
+		req := httptest.NewRequest(http.MethodPost, "/admin/api/login",
+			strings.NewReader(`{"username":"operador","password":"senha_segura_teste"}`))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+
+		AdminLoginHandler(cfg).ServeHTTP(rr, req)
+
+		var c *http.Cookie
+		for _, ck := range rr.Result().Cookies() {
+			if ck.Name == "admin_session" {
+				c = ck
+			}
+		}
+		if c == nil {
+			t.Fatalf("CookieSecure=%v: cookie admin_session não emitido", secure)
+		}
+		if c.Secure != secure {
+			t.Errorf("CookieSecure=%v: cookie.Secure = %v, want %v", secure, c.Secure, secure)
+		}
+	}
 }
 
 func TestAdminLoginHandler_Success(t *testing.T) {
@@ -149,7 +180,7 @@ func TestAdminLogoutHandler_ClearsCookie(t *testing.T) {
 	req.AddCookie(&http.Cookie{Name: "admin_session", Value: "token_existente"})
 	rr := httptest.NewRecorder()
 
-	AdminLogoutHandler().ServeHTTP(rr, req)
+	AdminLogoutHandler(true).ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusNoContent {
 		t.Errorf("status = %d, want 204", rr.Code)
