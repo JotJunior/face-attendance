@@ -1,11 +1,17 @@
 package httphandler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
+	"mime"
+	"mime/multipart"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jotjunior/face-attendance/internal/domain"
@@ -108,8 +114,17 @@ func (h *EventHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// HikVision posta o evento como multipart/form-data (parte "event_log" com
+	// Content-Type application/json); algumas configs postam JSON puro.
+	eventJSON, err := extractEventJSON(r.Header.Get("Content-Type"), rawBody)
+	if err != nil {
+		h.logger.Warn("attendance_event_received", deviceID, "", "could not extract event payload, ignoring")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	var payload hikPayload
-	if err := json.Unmarshal(rawBody, &payload); err != nil {
+	if err := json.Unmarshal(eventJSON, &payload); err != nil {
 		h.logger.Warn("attendance_event_received", deviceID, "", "payload not JSON, ignoring")
 		w.WriteHeader(http.StatusOK)
 		return
@@ -180,7 +195,7 @@ func (h *EventHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rawPayload := rawBody
+	rawPayload := eventJSON
 	if !json.Valid(rawPayload) {
 		rawPayload = []byte(`{}`)
 	}
@@ -221,8 +236,8 @@ func (h *EventHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if attendanceStatus != "authorized" {
-		h.logger.Info("attendance_event_received", deviceID, cpfDigits, "attendanceStatus not authorized; not marking")
+	if !accessGranted(payload, attendanceStatus) {
+		h.logger.Info("attendance_event_received", deviceID, cpfDigits, "evento não é acesso concedido; não marca")
 		w.WriteHeader(http.StatusOK)
 		return
 	}
@@ -324,6 +339,71 @@ func (h *AdminSyncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // --- helpers ---
+
+// extractEventJSON retorna o JSON do evento de um request HikVision.
+// HikVision posta multipart/form-data com a parte "event_log" (application/json);
+// algumas configs postam JSON puro. Retorna os bytes JSON para unmarshal/armazenamento.
+func extractEventJSON(contentType string, body []byte) ([]byte, error) {
+	mediaType, params, err := mime.ParseMediaType(contentType)
+	if err != nil || !strings.HasPrefix(mediaType, "multipart/") {
+		// Não-multipart: trata o corpo como JSON direto.
+		return body, nil
+	}
+	boundary := params["boundary"]
+	if boundary == "" {
+		return nil, fmt.Errorf("multipart sem boundary")
+	}
+	reader := multipart.NewReader(bytes.NewReader(body), boundary)
+	for {
+		part, err := reader.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		if part.FormName() == "event_log" {
+			return io.ReadAll(part)
+		}
+	}
+	return nil, fmt.Errorf("parte event_log ausente")
+}
+
+// accessGranted reporta se o evento representa um acesso concedido a ser marcado.
+// Marca quando o device opera em attendance mode (attendanceStatus "authorized")
+// OU quando é uma face autenticada com sucesso (AccessControllerEvent
+// majorEventType=5, subEventType=75 — verificado contra o dispositivo real;
+// heartbeats vêm como major=2/sub=38 e não marcam).
+func accessGranted(p hikPayload, attendanceStatus string) bool {
+	if attendanceStatus == "authorized" {
+		return true
+	}
+	if p.AccessControllerEvent == nil {
+		return false
+	}
+	major, okMajor := toInt(p.AccessControllerEvent.MajorEventType)
+	sub, okSub := toInt(p.AccessControllerEvent.SubEventType)
+	return okMajor && okSub && major == 5 && sub == 75
+}
+
+// toInt coage um valor JSON (float64/int/string) para int.
+func toInt(v interface{}) (int, bool) {
+	switch n := v.(type) {
+	case float64:
+		return int(n), true
+	case int:
+		return n, true
+	case int64:
+		return int(n), true
+	case json.Number:
+		i, err := n.Int64()
+		return int(i), err == nil
+	case string:
+		i, err := strconv.Atoi(strings.TrimSpace(n))
+		return i, err == nil
+	}
+	return 0, false
+}
 
 func extractEmployeeNo(p hikPayload) string {
 	if p.AccessControllerEvent != nil && p.AccessControllerEvent.EmployeeNoString != "" {
