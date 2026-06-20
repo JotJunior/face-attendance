@@ -151,8 +151,8 @@ Ref: contracts/admin-api.md §todos os endpoints [NOVO], spec.md §FR-003/004/00
 
 Ref: plan.md §Project Structure (server.go, main.go, internal/web/), spec.md §FR-013
 
-- [ ] 2.6.1 Criar `internal/web/embed.go` com diretiva `//go:embed dist/*` expondo `var Assets embed.FS`
-- [ ] 2.6.2 Criar `internal/web/dist/.gitkeep` (placeholder — assets reais gerados pela FASE 3)
+- [x] 2.6.1 Criar `internal/web/embed.go` com diretiva `//go:embed all:dist` expondo `var Assets embed.FS`
+- [x] 2.6.2 Criar `internal/web/dist/.gitkeep` (placeholder — assets reais gerados pela FASE 3)
 - [x] 2.6.3 Atualizar `internal/http/server.go`: registrar `SessionMiddleware` + rotas `/admin/api/*` (login com rate-limit sem sessão; demais com sessão HMAC); registrar `http.FileServer` para `/admin/` via `AdminAssets`
 - [x] 2.6.4 Atualizar `cmd/presenca-facial/main.go`: passar novas configs (`AdminUsername`, `AdminPassword`, `AdminSessionSecret`, `AdminSessionTTLHours`, `DeviceOfflineThresholdHours`) para `NewServer` via `AdminLoginCfg` e `AdminAPICfg`
 - [x] 2.6.5 Garantir que `/health` e `/admin/sync` (Bearer) permanecem funcionais após wiring (sem regressão — go test ./... todos OK)

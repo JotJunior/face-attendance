@@ -22,6 +22,7 @@ import (
 	"github.com/jotjunior/face-attendance/internal/queue"
 	"github.com/jotjunior/face-attendance/internal/repository"
 	"github.com/jotjunior/face-attendance/internal/scheduler"
+	"github.com/jotjunior/face-attendance/internal/web"
 	"github.com/jotjunior/face-attendance/internal/worker"
 )
 
@@ -144,7 +145,7 @@ func run() error {
 		AdminUIEnabled:  cfg.AdminUsername != "" && cfg.AdminSessionSecret != "",
 		AdminLoginCfg:   adminLoginCfg,
 		AdminAPICfg:     adminAPICfg,
-		AdminAssets:     nil, // embed.FS configurado na FASE 3 (internal/web/embed.go)
+		AdminAssets:     http.FS(web.Assets), // embed.FS — assets populados na FASE 3
 	})
 
 	// --- Orchestration context (definido antes dos workers p/ o consumer usar) ---
