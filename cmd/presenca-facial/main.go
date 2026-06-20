@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	amqp "github.com/rabbitmq/amqp091-go"
 
 	"github.com/jotjunior/face-attendance/internal/config"
 	"github.com/jotjunior/face-attendance/internal/domain"
@@ -59,11 +60,13 @@ func run() error {
 
 	// --- RabbitMQ ---
 	var pub *queue.Publisher
+	var amqpConn *amqp.Connection
 	if cfg.RunScheduler || cfg.RunWorkers {
 		conn, ch, amqpErr := queue.Connect(cfg.RabbitMQURL)
 		if amqpErr != nil {
 			return fmt.Errorf("rabbitmq: %w", amqpErr)
 		}
+		amqpConn = conn
 		defer conn.Close() //nolint:errcheck
 		defer ch.Close()   //nolint:errcheck
 
@@ -124,45 +127,76 @@ func run() error {
 		AllowedWebhookIPs:       allowedIPs,
 	})
 
-	// --- Workers (one per ISAPI device) ---
-	if cfg.RunWorkers && pub != nil {
-		for _, devCfg := range cfg.ISAPIDevices {
-			devCfg := devCfg
-			isapiClient := hikvision.New(hikvision.DeviceConfig{
-				Host:     devCfg.Host,
-				Username: devCfg.Username,
-				Password: devCfg.Password,
-			})
-
-			device, findErr := deviceRepo.FindByIdentifier(context.Background(), devCfg.Host)
-			if findErr != nil {
-				logger.Error("worker_started", devCfg.Host, "", "device lookup failed", findErr)
-				continue
-			}
-			var deviceID int64
-			if device != nil {
-				deviceID = device.ID
-			}
-
-			webhookURL := fmt.Sprintf("http://%s/webhook/%s", devCfg.Host, cfg.WebhookPathSecret)
-			proc := worker.NewProcessor(
-				isapiClient,
-				outcomeRepo,
-				pub,
-				deviceID,
-				cfg.RetryMaxAttempts,
-				cfg.RetryInitialBackoffMs,
-				webhookURL,
-			)
-			_ = proc
-			logger.Info("worker_started", devCfg.Host, "", "worker initialized",
-				slog.Int("device_index", devCfg.Index))
-		}
-	}
-
-	// --- Orchestration ---
+	// --- Orchestration context (definido antes dos workers p/ o consumer usar) ---
 	rootCtx, rootCancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer rootCancel()
+
+	// --- Worker: consumer da fila de provisionamento de membros ---
+	// Consome member.processing e executa as operações ISAPI (cadastro de
+	// usuário + upload de face) no leitor. A topologia é de fila única, então
+	// provisiona o primeiro device configurado.
+	if cfg.RunWorkers && pub != nil && amqpConn != nil && len(cfg.ISAPIDevices) > 0 {
+		devCfg := cfg.ISAPIDevices[0]
+		if len(cfg.ISAPIDevices) > 1 {
+			logger.Info("worker_started", "", "", "múltiplos devices configurados; a fila única provisiona apenas o primeiro")
+		}
+
+		isapiClient := hikvision.New(hikvision.DeviceConfig{
+			Host:     devCfg.Host,
+			Username: devCfg.Username,
+			Password: devCfg.Password,
+		})
+
+		// Resolve o deviceID pelo device ativo cujo IP == host configurado
+		// (o device se registra por MAC via heartbeat, não pelo host ISAPI).
+		var deviceID int64
+		if devices, listErr := deviceRepo.ListActive(context.Background()); listErr == nil {
+			for _, d := range devices {
+				if d.IPAddress != nil && *d.IPAddress == devCfg.Host {
+					deviceID = d.ID
+					break
+				}
+			}
+		}
+
+		// webhookURL vazio + configureWebhook=false: o worker NÃO reconfigura o
+		// webhook do leitor (configurado uma vez, fora do provisionamento).
+		proc := worker.NewProcessor(
+			isapiClient,
+			outcomeRepo,
+			pub,
+			deviceID,
+			cfg.RetryMaxAttempts,
+			cfg.RetryInitialBackoffMs,
+			"",
+			false,
+		)
+
+		consumerCh, chErr := amqpConn.Channel()
+		if chErr != nil {
+			return fmt.Errorf("rabbitmq: consumer channel: %w", chErr)
+		}
+		defer consumerCh.Close() //nolint:errcheck
+		if qosErr := consumerCh.Qos(10, 0, false); qosErr != nil {
+			return fmt.Errorf("rabbitmq: consumer qos: %w", qosErr)
+		}
+		deliveries, consErr := consumerCh.Consume(queue.QueueName, "", false, false, false, false, nil)
+		if consErr != nil {
+			return fmt.Errorf("rabbitmq: consume %s: %w", queue.QueueName, consErr)
+		}
+
+		go func() {
+			for d := range deliveries {
+				if procErr := proc.ProcessDelivery(rootCtx, d); procErr != nil {
+					logger.Error("worker_processing", devCfg.Host, "", "delivery failed", procErr)
+				}
+			}
+		}()
+
+		logger.Info("worker_started", devCfg.Host, "", "consumer iniciado",
+			slog.Int("device_index", devCfg.Index),
+			slog.Int64("device_id", deviceID))
+	}
 
 	if cfg.RunScheduler {
 		go sched.Start(rootCtx)

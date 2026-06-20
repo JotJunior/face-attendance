@@ -2,6 +2,7 @@ package hikvision_test
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -21,17 +22,17 @@ func makeISAPIServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, 
 	return srv, cfg
 }
 
-// TestUpsertUser_Create tests creating a user (POST returns 201).
+// TestUpsertUser_Create tests creating a user via POST /Record (JSON, returns 200).
 func TestUpsertUser_Create(t *testing.T) {
-	var receivedXML string
-	var receivedMethod string
+	var receivedJSON string
+	var receivedMethod, receivedPath string
 
 	srv, cfg := makeISAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		receivedMethod = r.Method
-		buf := make([]byte, 512)
-		n, _ := r.Body.Read(buf)
-		receivedXML = string(buf[:n])
-		w.WriteHeader(http.StatusCreated) // 201
+		receivedPath = r.URL.Path
+		body, _ := io.ReadAll(r.Body)
+		receivedJSON = string(body)
+		w.WriteHeader(http.StatusOK)
 	})
 	defer srv.Close()
 
@@ -44,23 +45,30 @@ func TestUpsertUser_Create(t *testing.T) {
 	if receivedMethod != http.MethodPost {
 		t.Errorf("expected POST, got %s", receivedMethod)
 	}
-	if !strings.Contains(receivedXML, "<employeeNo>12345678901</employeeNo>") {
-		t.Errorf("XML missing employeeNo, got: %s", receivedXML)
+	if !strings.Contains(receivedPath, "/UserInfo/Record") {
+		t.Errorf("expected /UserInfo/Record, got %s", receivedPath)
 	}
-	if !strings.Contains(receivedXML, "<name>Test User</name>") {
-		t.Errorf("XML missing name, got: %s", receivedXML)
+	for _, want := range []string{`"employeeNo":"12345678901"`, `"name":"Test User"`, `"userType":"normal"`, `"Valid"`} {
+		if !strings.Contains(receivedJSON, want) {
+			t.Errorf("JSON missing %s, got: %s", want, receivedJSON)
+		}
 	}
 }
 
-// TestUpsertUser_Update tests that 409 on POST triggers a PUT.
+// TestUpsertUser_Update tests that POST 400/employeeNoAlreadyExist triggers a PUT /Modify.
 func TestUpsertUser_Update(t *testing.T) {
+	var postPath, putPath string
 	callCount := 0
 	srv, cfg := makeISAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
 		callCount++
-		if r.Method == http.MethodPost {
-			w.WriteHeader(http.StatusConflict) // 409 — user exists
-		} else if r.Method == http.MethodPut {
-			w.WriteHeader(http.StatusOK) // 200
+		switch r.Method {
+		case http.MethodPost:
+			postPath = r.URL.Path
+			w.WriteHeader(http.StatusBadRequest) // 400 + corpo indicando que já existe
+			w.Write([]byte(`{"statusCode":6,"subStatusCode":"employeeNoAlreadyExist"}`)) //nolint:errcheck
+		case http.MethodPut:
+			putPath = r.URL.Path
+			w.WriteHeader(http.StatusOK)
 		}
 	})
 	defer srv.Close()
@@ -72,6 +80,12 @@ func TestUpsertUser_Update(t *testing.T) {
 	}
 	if callCount != 2 {
 		t.Errorf("expected 2 calls (POST+PUT), got %d", callCount)
+	}
+	if !strings.Contains(postPath, "/UserInfo/Record") {
+		t.Errorf("create deve usar /Record, got %s", postPath)
+	}
+	if !strings.Contains(putPath, "/UserInfo/Modify") {
+		t.Errorf("update deve usar /Modify, got %s", putPath)
 	}
 }
 

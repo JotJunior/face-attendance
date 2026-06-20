@@ -14,9 +14,13 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/jpeg"
+	_ "image/png" // registra o decoder PNG para image.Decode
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"strings"
 	"time"
 
@@ -24,11 +28,57 @@ import (
 )
 
 const (
-	endpointUserModify = "/ISAPI/AccessControl/UserInfo/Modify"
+	// Criação de usuário: POST /Record; atualização: PUT /Modify (ambos JSON).
+	// Este firmware recusa POST em /Modify (methodNotAllowed) — contrato verificado
+	// contra o dispositivo real, não o legacy (que usava XML+POST em /Modify).
+	endpointUserCreate = "/ISAPI/AccessControl/UserInfo/Record?format=json"
+	endpointUserModify = "/ISAPI/AccessControl/UserInfo/Modify?format=json"
 	endpointFaceRecord = "/ISAPI/Intelligent/FDLib/faceDataRecord?format=json"
 	endpointHTTPHosts  = "/ISAPI/Event/notification/httpHosts"
 	defaultTimeout     = 30 * time.Second
 )
+
+// isapiStatus é o corpo JSON de status retornado pela ISAPI.
+type isapiStatus struct {
+	StatusCode    int    `json:"statusCode"`
+	SubStatusCode string `json:"subStatusCode"`
+	ErrorMsg      string `json:"errorMsg"`
+}
+
+// parseSubStatus extrai o subStatusCode de uma resposta ISAPI JSON ("" se não parsear).
+func parseSubStatus(body []byte) string {
+	var s isapiStatus
+	if err := json.Unmarshal(body, &s); err != nil {
+		return ""
+	}
+	return s.SubStatusCode
+}
+
+// buildUserJSON monta o corpo de criação/atualização de usuário.
+// userType e Valid são obrigatórios neste firmware (verificado contra o device).
+func buildUserJSON(employeeNo, name string) string {
+	payload := map[string]any{
+		"UserInfo": map[string]any{
+			"employeeNo": employeeNo,
+			"name":       name,
+			"userType":   "normal",
+			"Valid": map[string]any{
+				"enable":    true,
+				"beginTime": "2020-01-01T00:00:00",
+				"endTime":   "2037-12-31T23:59:59",
+				"timeType":  "local",
+			},
+			// Vincula o template de horário semanal (porta 1, plano 1 = 24/7).
+			// Sem planTemplateNo o leitor recusa o acesso com "Duração inválida".
+			// O firmware exige planTemplateNo como STRING (número é rejeitado).
+			"RightPlan": []map[string]any{
+				{"doorNo": 1, "planTemplateNo": "1"},
+			},
+		},
+	}
+	b, _ := json.Marshal(payload) //nolint:errcheck
+	return string(b)
+}
 
 // DeviceConfig holds credentials and addressing for one HikVision device.
 type DeviceConfig struct {
@@ -103,40 +153,35 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body io.Rea
 // Strategy: try POST (create); if 409 conflict (user already exists), retry with PUT.
 // XML fields: employeeNo (CPF digits) + name (contracts/hikvision-isapi.md §1).
 func (c *Client) UpsertUser(ctx context.Context, cpfDigits, name string) error {
-	xmlBody := fmt.Sprintf(
-		"<UserInfo><employeeNo>%s</employeeNo><name>%s</name></UserInfo>",
-		xmlEscape(cpfDigits),
-		xmlEscape(name),
-	)
+	body := buildUserJSON(cpfDigits, name)
 
-	// Try POST first (create)
-	_, status, err := c.doRequest(ctx, http.MethodPost, endpointUserModify,
-		strings.NewReader(xmlBody), "application/xml")
+	// 1) Cria via POST /Record
+	respBody, status, err := c.doRequest(ctx, http.MethodPost, endpointUserCreate,
+		strings.NewReader(body), "application/json")
 	if err != nil {
 		return fmt.Errorf("hikvision: UpsertUser POST: %w", err)
 	}
-
-	switch {
-	case status == 200 || status == 201:
+	if status == 200 || status == 201 {
 		return nil
-	case status == 409:
-		// User already exists — try PUT (update)
-		_, status2, err2 := c.doRequest(ctx, http.MethodPut, endpointUserModify,
-			strings.NewReader(xmlBody), "application/xml")
+	}
+
+	// 2) Já existe (HTTP 400 + employeeNoAlreadyExist) → atualiza via PUT /Modify
+	if status == 400 && parseSubStatus(respBody) == "employeeNoAlreadyExist" {
+		respBody2, status2, err2 := c.doRequest(ctx, http.MethodPut, endpointUserModify,
+			strings.NewReader(body), "application/json")
 		if err2 != nil {
 			return fmt.Errorf("hikvision: UpsertUser PUT: %w", err2)
 		}
 		if status2 == 200 || status2 == 204 {
 			return nil
 		}
-		return retriableOrNot("UpsertUser PUT", status2, nil)
-	case status >= 400 && status < 500:
-		// Non-retriable (e.g. 400 bad XML)
-		return &NonRetriableError{Op: "UpsertUser POST", Status: status}
-	default:
-		// 5xx and others are retriable
-		return fmt.Errorf("hikvision: UpsertUser POST: HTTP %d (retriable)", status)
+		return retriableOrNot("UpsertUser PUT "+parseSubStatus(respBody2), status2, respBody2)
 	}
+
+	if status >= 400 && status < 500 {
+		return &NonRetriableError{Op: "UpsertUser POST " + parseSubStatus(respBody), Status: status}
+	}
+	return fmt.Errorf("hikvision: UpsertUser POST: HTTP %d (retriable)", status)
 }
 
 // UploadFace downloads the image from imageURL and uploads it to the device
@@ -148,13 +193,29 @@ func (c *Client) UploadFace(ctx context.Context, cpfDigits, imageURL string) err
 		return fmt.Errorf("hikvision: UploadFace download %s: %w", imageURL, err)
 	}
 
-	// Validate MIME type (must be image/jpeg — contracts/hikvision-isapi.md §2, CHK031)
-	if !strings.HasPrefix(mimeType, "image/jpeg") {
+	// O dispositivo aceita JPEG e PNG (verificado); só rejeitamos não-imagem.
+	if !strings.HasPrefix(mimeType, "image/") {
 		return &NonRetriableError{
 			Op:  "UploadFace mime_invalid",
-			Msg: fmt.Sprintf("face image mime type %q is not image/jpeg; stage=face_upload_mime_invalid", mimeType),
+			Msg: fmt.Sprintf("conteúdo %q não é imagem; stage=face_upload_mime_invalid", mimeType),
 		}
 	}
+
+	// Transcodifica para JPEG: PNGs grandes do GOB (ex. 400x400 > 200KB) estouram
+	// o limite de tamanho do leitor (resposta badJsonContent/faceURL). JPEG q85
+	// reduz para dezenas de KB, dentro do limite. image.Decode cobre png/jpeg.
+	srcImg, _, decErr := image.Decode(bytes.NewReader(imageData))
+	if decErr != nil {
+		return &NonRetriableError{
+			Op:  "UploadFace decode",
+			Msg: fmt.Sprintf("imagem inválida (%s): %v; stage=face_upload_decode", mimeType, decErr),
+		}
+	}
+	var jpegBuf bytes.Buffer
+	if encErr := jpeg.Encode(&jpegBuf, srcImg, &jpeg.Options{Quality: 85}); encErr != nil {
+		return fmt.Errorf("hikvision: UploadFace jpeg encode: %w", encErr)
+	}
+	imageData = jpegBuf.Bytes()
 
 	// Build multipart body
 	var buf bytes.Buffer
@@ -162,12 +223,11 @@ func (c *Client) UploadFace(ctx context.Context, cpfDigits, imageURL string) err
 
 	// Part 1: FaceDataRecord (JSON)
 	faceDataRecord := map[string]string{
-		"type":        "concurrent",
 		"faceLibType": "blackFD",
 		"FDID":        "1",
 		"FPID":        cpfDigits,
 	}
-	faceDataJSON, _ := json.Marshal(faceDataRecord)
+	faceDataJSON, _ := json.Marshal(faceDataRecord) //nolint:errcheck
 
 	faceField, err := writer.CreateFormField("FaceDataRecord")
 	if err != nil {
@@ -177,8 +237,11 @@ func (c *Client) UploadFace(ctx context.Context, cpfDigits, imageURL string) err
 		return fmt.Errorf("hikvision: UploadFace write FaceDataRecord: %w", err)
 	}
 
-	// Part 2: FaceImage (jpeg file)
-	filePart, err := writer.CreateFormFile("FaceImage", cpfDigits+".jpg")
+	// Part 2: FaceImage (arquivo, com content-type real detectado)
+	header := make(textproto.MIMEHeader)
+	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="FaceImage"; filename="%s.jpg"`, cpfDigits))
+	header.Set("Content-Type", "image/jpeg")
+	filePart, err := writer.CreatePart(header)
 	if err != nil {
 		return fmt.Errorf("hikvision: UploadFace multipart FaceImage: %w", err)
 	}
@@ -190,16 +253,19 @@ func (c *Client) UploadFace(ctx context.Context, cpfDigits, imageURL string) err
 		return fmt.Errorf("hikvision: UploadFace multipart close: %w", err)
 	}
 
-	_, status, err := c.doRequest(ctx, http.MethodPost, endpointFaceRecord,
+	respBody, status, err := c.doRequest(ctx, http.MethodPost, endpointFaceRecord,
 		&buf, writer.FormDataContentType())
 	if err != nil {
 		return fmt.Errorf("hikvision: UploadFace POST: %w", err)
 	}
-	if status != 200 {
-		return retriableOrNot("UploadFace POST", status, nil)
+	if status == 200 || status == 201 {
+		return nil
 	}
-
-	return nil
+	// Face já cadastrada para o usuário → idempotente (sucesso)
+	if status == 400 && parseSubStatus(respBody) == "deviceUserAlreadyExistFace" {
+		return nil
+	}
+	return retriableOrNot("UploadFace POST "+parseSubStatus(respBody), status, respBody)
 }
 
 // ConfigureWebhook sets the HTTP notification host on the device.

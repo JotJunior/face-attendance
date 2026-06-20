@@ -33,6 +33,7 @@ type Processor struct {
 	maxRetryAttempts   int
 	initialBackoffMs   int
 	webhookURL         string // URL to configure on the device
+	configureWebhook   bool   // se false, não chama ConfigureWebhook (webhook gerido fora do worker)
 }
 
 // NewProcessor creates a Processor.
@@ -43,6 +44,7 @@ func NewProcessor(
 	deviceID int64,
 	maxRetryAttempts, initialBackoffMs int,
 	webhookURL string,
+	configureWebhook bool,
 ) *Processor {
 	return &Processor{
 		isapi:            isapi,
@@ -52,6 +54,7 @@ func NewProcessor(
 		maxRetryAttempts: maxRetryAttempts,
 		initialBackoffMs: initialBackoffMs,
 		webhookURL:       webhookURL,
+		configureWebhook: configureWebhook,
 	}
 }
 
@@ -101,7 +104,12 @@ func (p *Processor) ProcessDelivery(ctx context.Context, d amqp.Delivery) error 
 
 // processMessage executes the 3 ISAPI operations in order and updates the processing status.
 func (p *Processor) processMessage(ctx context.Context, msg domain.ProcessingMessage) error {
-	cpf := msg.FederalDocument
+	// employeeNo/FPID no device usam dígitos normalizados (o webhook também
+	// normaliza o employeeNoString recebido para correlacionar com o membro).
+	cpf, normErr := domain.NormalizeCPF(msg.FederalDocument)
+	if normErr != nil {
+		return &hikvision.NonRetriableError{Op: "normalize CPF", Msg: normErr.Error()}
+	}
 
 	// Step 1: UpsertUser
 	if err := p.isapi.UpsertUser(ctx, cpf, msg.Name); err != nil {
@@ -117,10 +125,13 @@ func (p *Processor) processMessage(ctx context.Context, msg domain.ProcessingMes
 	}
 	p.saveOutcome(ctx, msg, true, true, false, "face_upload", nil) //nolint:errcheck
 
-	// Step 3: ConfigureWebhook
-	if err := p.isapi.ConfigureWebhook(ctx, p.webhookURL); err != nil {
-		p.saveOutcome(ctx, msg, true, true, false, "webhook", err) //nolint:errcheck
-		return err
+	// Step 3: ConfigureWebhook (opcional — desligado quando o webhook é gerido
+	// fora do worker; evita reconfigurar o leitor a cada membro).
+	if p.configureWebhook {
+		if err := p.isapi.ConfigureWebhook(ctx, p.webhookURL); err != nil {
+			p.saveOutcome(ctx, msg, true, true, false, "webhook", err) //nolint:errcheck
+			return err
+		}
 	}
 	p.saveOutcome(ctx, msg, true, true, true, "done", nil) //nolint:errcheck
 
