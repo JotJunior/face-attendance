@@ -73,11 +73,11 @@ Ref: spec.md §FR-001, plan.md §Constitution V, dec-012/015, contracts/admin-ap
 
 Ref: checklists/performance.md CHK-P11, CHK-P12, plan.md §Project Structure (sem novas tabelas — dec-007, mas índices são permitidos)
 
-- [ ] 1.3.1 Verificar índices existentes nas tabelas `members` e `attendance_events` (`\d members`, `\d attendance_events` em dev)
-- [ ] 1.3.2 Criar migration `000005_add_admin_indexes.up.sql` com índice em `members(name, federal_document)` se ausente (busca `q=` por nome/CPF)
-- [ ] 1.3.3 Adicionar ao mesmo arquivo índice composto em `attendance_events(created_at DESC, id DESC)` se ausente (paginação keyset de eventos)
-- [ ] 1.3.4 Criar `000005_add_admin_indexes.down.sql` revertendo os índices criados
-- [ ] 1.3.5 Executar migration em ambiente de dev e validar `EXPLAIN ANALYZE` nas queries de `ListMembersPaged` e `ListEventsPaged`
+- [x] 1.3.1 Verificar índices existentes nas tabelas `members` e `attendance_events` (`\d members`, `\d attendance_events` em dev)
+- [x] 1.3.2 Criar migration `000005_add_admin_indexes.up.sql` com índice em `members(name, federal_document)` se ausente (busca `q=` por nome/CPF)
+- [x] 1.3.3 Adicionar ao mesmo arquivo índice composto em `attendance_events(created_at DESC, id DESC)` se ausente (paginação keyset de eventos)
+- [x] 1.3.4 Criar `000005_add_admin_indexes.down.sql` revertendo os índices criados
+- [x] 1.3.5 Executar migration em ambiente de dev e validar `EXPLAIN ANALYZE` nas queries de `ListMembersPaged` e `ListEventsPaged`
 
 ---
 
