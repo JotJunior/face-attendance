@@ -101,14 +101,14 @@ Ref: spec.md §FR-001, FR-012, dec-006, plan.md §Quality Gate S1/S3/S5, contrac
 
 Ref: contracts §POST /admin/api/login, §POST /admin/api/logout, plan.md §S3/S4/S5, CHK-S03/S04/S19
 
-- [ ] 2.2.1 Criar `internal/http/admin_ui_handlers.go` com `AdminLoginHandler` recebendo `*ServerConfig` (username, password, secret, ttl)
-- [ ] 2.2.2 Implementar validação do corpo: `http.MaxBytesReader(w, r.Body, 1024)` (limit 1KB — CHK-S19); retornar 400 para corpo ausente/malformado
-- [ ] 2.2.3 Comparar username e password com `crypto/subtle.ConstantTimeCompare` (anti-timing — CHK-S03)
-- [ ] 2.2.4 Em sucesso: emitir `Set-Cookie: admin_session=<token>; HttpOnly; Secure; SameSite=Strict; Path=/admin; Max-Age=<TTL_segundos>` + resposta 204
-- [ ] 2.2.5 Em falha de credenciais: resposta 401 JSON `{"error":"credenciais inválidas"}` (mensagem genérica — não revela qual campo falhou)
-- [ ] 2.2.6 Implementar `AdminLogoutHandler`: emitir `Set-Cookie: admin_session=; MaxAge=0; ...` + resposta 204
+- [x] 2.2.1 Criar `internal/http/admin_ui_handlers.go` com `AdminLoginHandler` recebendo `AdminLoginConfig` (username, password, secret, ttl)
+- [x] 2.2.2 Implementar validação do corpo: `http.MaxBytesReader(w, r.Body, 1024)` (limit 1KB — CHK-S19); retornar 400 para corpo ausente/malformado
+- [x] 2.2.3 Comparar username e password com `crypto/subtle.ConstantTimeCompare` (anti-timing — CHK-S03)
+- [x] 2.2.4 Em sucesso: emitir `Set-Cookie: admin_session=<token>; HttpOnly; Secure; SameSite=Strict; Path=/admin; Max-Age=<TTL_segundos>` + resposta 204
+- [x] 2.2.5 Em falha de credenciais: resposta 401 JSON `{"error":"credenciais inválidas"}` (mensagem genérica — não revela qual campo falhou)
+- [x] 2.2.6 Implementar `AdminLogoutHandler`: emitir `Set-Cookie: admin_session=; MaxAge=0; ...` + resposta 204
 - [ ] 2.2.7 Aplicar `RateLimitMiddleware(10)` ao endpoint de login (reusar `NewRateLimitMiddleware` de middleware.go:113 — CHK-A13, default=10/min/IP)
-- [ ] 2.2.8 Escrever testes: login correto, login errado, rate limit atingido (429), payload inválido (400), logout limpa cookie
+- [x] 2.2.8 Escrever testes: login correto, login errado, payload inválido (400), logout limpa cookie; rate limit (429) coberto no wiring (2.6)
 
 ### 2.3 Repositórios — métodos novos `[A]`
 
