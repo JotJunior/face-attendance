@@ -171,40 +171,40 @@ Ref: plan.md §Project Structure (server.go, main.go, internal/web/), spec.md §
 
 Ref: spec.md §FR-002, §FR-010, plan.md §Dependências de implementação, dec-030, dec-031
 
-- [ ] 3.1.1 Invocar skill `frontend-design` para produzir o design system dark: tokens CSS (cores, tipografia, espaçamento), componentes base (botão, tabela, badge de status, card de métrica, loading spinner, empty state, toast de feedback)
-- [ ] 3.1.2 Garantir que o design system inclui breakpoints para responsividade total: desktop (≥1024px), tablet (768–1023px), mobile (≤767px) — dec-030
-- [ ] 3.1.3 Garantir que o design system inclui regras de a11y básica: `:focus-visible` com outline visível, contraste mínimo texto/fundo ≥4.5:1 (dark mode), targets de toque ≥44×44px em mobile — dec-031
-- [ ] 3.1.4 Definir padrão de navegação global: sidebar fixa em desktop/tablet, menu hamburguer em mobile (drawer) com links para as 4 telas; sempre visível após login
-- [ ] 3.1.5 Salvar CSS em `internal/web/dist/assets/app.css`
+- [x] 3.1.1 Invocar skill `frontend-design` para produzir o design system dark: tokens CSS (cores, tipografia, espaçamento), componentes base (botão, tabela, badge de status, card de métrica, loading spinner, empty state, toast de feedback)
+- [x] 3.1.2 Garantir que o design system inclui breakpoints para responsividade total: desktop (≥1024px), tablet (768–1023px), mobile (≤767px) — dec-030
+- [x] 3.1.3 Garantir que o design system inclui regras de a11y básica: `:focus-visible` com outline visível, contraste mínimo texto/fundo ≥4.5:1 (dark mode), targets de toque ≥44×44px em mobile — dec-031
+- [x] 3.1.4 Definir padrão de navegação global: sidebar fixa em desktop/tablet, menu hamburguer em mobile (drawer) com links para as 4 telas; sempre visível após login
+- [x] 3.1.5 Salvar CSS em `internal/web/dist/assets/app.css`
 - [ ] 3.1.6 Validar visualmente as 5 telas em desktop, tablet e mobile (simulação de viewport no browser ou devtools)
 
 ### 3.2 Shell HTML — estrutura SPA-lite `[A]`
 
 Ref: plan.md §Project Structure (index.html), spec.md §FR-013, dec-030, dec-031
 
-- [ ] 3.2.1 Criar `internal/web/dist/index.html` como shell SPA-lite: `<head>` com meta viewport, CSS link, `<body>` com `<nav>` de sidebar + `<main id="app">` para injeção de telas
-- [ ] 3.2.2 Incluir tela de login como `<div id="screen-login">` (formulário com campos `username` + `password`, botão submit, área de mensagem de erro) — sem credenciais em markup
-- [ ] 3.2.3 Incluir estrutura das 4 telas como templates HTML comentados (`screen-dashboard`, `screen-devices`, `screen-members`, `screen-events`) injetados via JS
-- [ ] 3.2.4 Garantir que `<input>` do formulário de login tem `autocomplete="current-password"` e labels acessíveis (`<label for=...>`) — a11y básica (dec-031)
-- [ ] 3.2.5 Adicionar `<script type="module" src="/admin/assets/app.js"></script>` no final do `<body>`
+- [x] 3.2.1 Criar `internal/web/dist/index.html` como shell SPA-lite: `<head>` com meta viewport, CSS link, `<body>` com `<nav>` de sidebar + `<main id="app">` para injeção de telas
+- [x] 3.2.2 Incluir tela de login como `<div id="screen-login">` (formulário com campos `username` + `password`, botão submit, área de mensagem de erro) — sem credenciais em markup
+- [x] 3.2.3 Incluir estrutura das 4 telas como templates HTML comentados (`screen-dashboard`, `screen-devices`, `screen-members`, `screen-events`) injetados via JS
+- [x] 3.2.4 Garantir que `<input>` do formulário de login tem `autocomplete="current-password"` e labels acessíveis (`<label for=...>`) — a11y básica (dec-031)
+- [x] 3.2.5 Adicionar `<script type="module" src="/admin/assets/app.js"></script>` no final do `<body>`
 - [ ] 3.2.6 Validar que `index.html` é servido corretamente pelo `embed.FS` em `GET /admin/`
 
 ### 3.3 JavaScript — fetch, roteamento e render `[A]`
 
 Ref: spec.md §FR-007/008/009/011/012, contracts/admin-api.md, dec-030, dec-031, CHK-P20
 
-- [ ] 3.3.1 Criar `internal/web/dist/assets/app.js` como ES module com roteamento client-side baseado em `window.location.hash` (ex: `#dashboard`, `#devices`, `#members`, `#events`, `#login`)
-- [ ] 3.3.2 Implementar interceptor global de 401: em qualquer fetch, status 401 → redirecionar para `#login?redirect=<current-path>` preservando URL (FR-012)
-- [ ] 3.3.3 Implementar `AbortController` com timeout: 10s para chamadas de dados normais (stats, devices, members, events); 60s para sync manual (CHK-P20)
-- [ ] 3.3.4 Implementar tela de login: submit → `POST /admin/api/login` → sucesso redireciona para `#dashboard` (ou `?redirect=` se presente); erro exibe mensagem genérica
-- [ ] 3.3.5 Implementar tela de dashboard: `GET /admin/api/stats` → renderiza cards de métrica (membros com selfie, dispositivos ativos/inativos, presenças 24h, alerta de offline); empty state se `devices_active=0 && devices_inactive=0` (FR-009)
-- [ ] 3.3.6 Implementar tela de dispositivos: `GET /admin/api/devices` → tabela com identificador, IP, status badge (ativo/offline), webhook configurado; clique em linha → tela de detalhe via `GET /admin/api/devices/{id}`; empty state (FR-009)
-- [ ] 3.3.7 Implementar tela de membros: `GET /admin/api/members?q=&cursor=` → tabela com nome, CPF mascarado (campo `federal_document_masked` já vem do backend), status GOB, sync badge; campo de busca dispara nova request com `q=<input>` após debounce 300ms; paginação cursor (botão "Carregar mais"); empty state com texto diferenciado para "sem membros" vs "sem resultados para a busca" (CHK-U09)
-- [ ] 3.3.8 Implementar tela de eventos: `GET /admin/api/events?from=&to=&cursor=` → tabela cronológica decrescente com data/hora, dispositivo, membro, status badge; filtros de data (inputs `from`/`to`); paginação cursor; empty state (FR-009)
-- [ ] 3.3.9 Implementar botão de sync manual: `POST /admin/api/sync` → loading state imediato (< 2s — SC-004); botão desabilitado durante operação; toast de sucesso/erro ao concluir; 409 exibe "sincronização em andamento" (US6-AC4)
-- [ ] 3.3.10 Implementar loading state para todas as telas de listagem: spinner/skeleton enquanto API responde (CHK-U05)
-- [ ] 3.3.11 Garantir navegação por teclado: Tab entre campos de login, Enter para submit, Escape fecha modais/drawers, focus trap no drawer mobile (dec-031)
-- [ ] 3.3.12 Validar que nenhum campo CPF cru aparece no frontend (os campos `federal_document_masked` são os únicos expostos pela API — SC-006)
+- [x] 3.3.1 Criar `internal/web/dist/assets/app.js` como ES module com roteamento client-side baseado em `window.location.hash` (ex: `#dashboard`, `#devices`, `#members`, `#events`, `#login`)
+- [x] 3.3.2 Implementar interceptor global de 401: em qualquer fetch, status 401 → redirecionar para `#login?redirect=<current-path>` preservando URL (FR-012)
+- [x] 3.3.3 Implementar `AbortController` com timeout: 10s para chamadas de dados normais (stats, devices, members, events); 60s para sync manual (CHK-P20)
+- [x] 3.3.4 Implementar tela de login: submit → `POST /admin/api/login` → sucesso redireciona para `#dashboard` (ou `?redirect=` se presente); erro exibe mensagem genérica
+- [x] 3.3.5 Implementar tela de dashboard: `GET /admin/api/stats` → renderiza cards de métrica (membros com selfie, dispositivos ativos/inativos, presenças 24h, alerta de offline); empty state se `devices_active=0 && devices_inactive=0` (FR-009)
+- [x] 3.3.6 Implementar tela de dispositivos: `GET /admin/api/devices` → tabela com identificador, IP, status badge (ativo/offline), webhook configurado; clique em linha → tela de detalhe via `GET /admin/api/devices/{id}`; empty state (FR-009)
+- [x] 3.3.7 Implementar tela de membros: `GET /admin/api/members?q=&cursor=` → tabela com nome, CPF mascarado (campo `federal_document_masked` já vem do backend), status GOB, sync badge; campo de busca dispara nova request com `q=<input>` após debounce 300ms; paginação cursor (botão "Carregar mais"); empty state com texto diferenciado para "sem membros" vs "sem resultados para a busca" (CHK-U09)
+- [x] 3.3.8 Implementar tela de eventos: `GET /admin/api/events?from=&to=&cursor=` → tabela cronológica decrescente com data/hora, dispositivo, membro, status badge; filtros de data (inputs `from`/`to`); paginação cursor; empty state (FR-009)
+- [x] 3.3.9 Implementar botão de sync manual: `POST /admin/api/sync` → loading state imediato (< 2s — SC-004); botão desabilitado durante operação; toast de sucesso/erro ao concluir; 409 exibe "sincronização em andamento" (US6-AC4)
+- [x] 3.3.10 Implementar loading state para todas as telas de listagem: spinner/skeleton enquanto API responde (CHK-U05)
+- [x] 3.3.11 Garantir navegação por teclado: Tab entre campos de login, Enter para submit, Escape fecha modais/drawers, focus trap no drawer mobile (dec-031)
+- [x] 3.3.12 Validar que nenhum campo CPF cru aparece no frontend (os campos `federal_document_masked` são os únicos expostos pela API — SC-006)
 
 ---
 
