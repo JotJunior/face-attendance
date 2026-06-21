@@ -341,8 +341,10 @@ func (h *AdminSyncHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // --- helpers ---
 
 // extractEventJSON retorna o JSON do evento de um request HikVision.
-// HikVision posta multipart/form-data com a parte "event_log" (application/json);
-// algumas configs postam JSON puro. Retorna os bytes JSON para unmarshal/armazenamento.
+// HikVision posta multipart/form-data; o NOME da parte JSON varia conforme o
+// firmware do terminal ("event_log" em uns, "AccessControllerEvent" em outros),
+// e há partes de imagem junto. Algumas configs postam JSON puro. Retorna os bytes
+// JSON da primeira parte que for JSON (por nome conhecido, Content-Type ou conteúdo).
 func extractEventJSON(contentType string, body []byte) ([]byte, error) {
 	mediaType, params, err := mime.ParseMediaType(contentType)
 	if err != nil || !strings.HasPrefix(mediaType, "multipart/") {
@@ -362,11 +364,30 @@ func extractEventJSON(contentType string, body []byte) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		if part.FormName() == "event_log" {
-			return io.ReadAll(part)
+		data, readErr := io.ReadAll(part)
+		if readErr != nil {
+			return nil, readErr
+		}
+		if isEventJSONPart(part.FormName(), part.Header.Get("Content-Type"), data) {
+			return data, nil
 		}
 	}
-	return nil, fmt.Errorf("parte event_log ausente")
+	return nil, fmt.Errorf("nenhuma parte JSON de evento encontrada no multipart")
+}
+
+// isEventJSONPart decide se uma parte multipart é o JSON do evento — robusto ao
+// nome (que varia por firmware), aceitando também por Content-Type ou pelo
+// conteúdo começar com '{' (descarta partes de imagem/binárias).
+func isEventJSONPart(name, contentType string, data []byte) bool {
+	switch name {
+	case "event_log", "AccessControllerEvent", "EventNotificationAlert":
+		return true
+	}
+	if strings.Contains(strings.ToLower(contentType), "json") {
+		return true
+	}
+	t := bytes.TrimSpace(data)
+	return len(t) > 0 && t[0] == '{'
 }
 
 // accessGranted reporta se o evento representa um acesso concedido a ser marcado.
