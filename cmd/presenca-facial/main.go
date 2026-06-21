@@ -233,17 +233,23 @@ func run() error {
 				defer infoCancel()
 				client, id, resErr := resolver.Resolve(infoCtx)
 				if resErr != nil {
+					logger.Warn("worker_started", "", "", "deviceInfo: resolver falhou: "+resErr.Error())
 					return
 				}
 				hc, ok := client.(*hikvision.Client)
 				if !ok {
 					return
 				}
-				if info, infoErr := hc.FetchDeviceInfo(infoCtx); infoErr == nil && info != nil {
-					if setErr := deviceRepo.SetDeviceInfo(infoCtx, id, info.SerialNumber, info.Model, info.FirmwareVersion); setErr == nil {
-						logger.Info("worker_started", "", "", "deviceInfo (serial/model/firmware) atualizado via ISAPI")
-					}
+				info, infoErr := hc.FetchDeviceInfo(infoCtx)
+				if infoErr != nil {
+					logger.Warn("worker_started", "", "", "deviceInfo (best-effort) falhou: "+infoErr.Error())
+					return
 				}
+				if setErr := deviceRepo.SetDeviceInfo(infoCtx, id, info.SerialNumber, info.Model, info.FirmwareVersion); setErr != nil {
+					logger.Warn("worker_started", "", "", "deviceInfo: persistência falhou: "+setErr.Error())
+					return
+				}
+				logger.Info("worker_started", "", "", "deviceInfo atualizado via ISAPI: serial="+info.SerialNumber+" model="+info.Model)
 			}()
 		}
 

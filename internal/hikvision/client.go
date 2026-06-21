@@ -13,6 +13,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"image"
 	"image/jpeg"
@@ -35,7 +36,10 @@ const (
 	endpointUserModify = "/ISAPI/AccessControl/UserInfo/Modify?format=json"
 	endpointFaceRecord = "/ISAPI/Intelligent/FDLib/faceDataRecord?format=json"
 	endpointHTTPHosts  = "/ISAPI/Event/notification/httpHosts"
-	endpointDeviceInfo = "/ISAPI/System/deviceInfo?format=json"
+	// Sem ?format=json: este endpoint responde XML por padrão neste firmware
+	// (verificado no legacy DeviceService::parseDeviceInfo). FetchDeviceInfo
+	// aceita XML ou JSON para robustez.
+	endpointDeviceInfo = "/ISAPI/System/deviceInfo"
 	defaultTimeout     = 30 * time.Second
 )
 
@@ -49,33 +53,53 @@ type DeviceInfo struct {
 }
 
 // FetchDeviceInfo lê GET /ISAPI/System/deviceInfo e retorna serial/model/firmware.
-// Best-effort: o chamador trata erro (device offline) sem falhar o fluxo principal.
+// Aceita XML (padrão do firmware) ou JSON. Best-effort: o chamador trata erro
+// (device offline) sem falhar o fluxo principal.
 func (c *Client) FetchDeviceInfo(ctx context.Context) (*DeviceInfo, error) {
 	body, status, err := c.doRequest(ctx, http.MethodGet, endpointDeviceInfo, nil, "")
 	if err != nil {
 		return nil, err
 	}
 	if status != 200 {
-		return nil, fmt.Errorf("hikvision: deviceInfo HTTP %d", status)
+		return nil, fmt.Errorf("hikvision: deviceInfo HTTP %d (body: %.120s)", status, string(body))
 	}
-	var wrap struct {
-		DeviceInfo struct {
-			DeviceName      string `json:"deviceName"`
-			Model           string `json:"model"`
-			SerialNumber    string `json:"serialNumber"`
-			FirmwareVersion string `json:"firmwareVersion"`
-		} `json:"DeviceInfo"`
+
+	di := &DeviceInfo{}
+	if t := bytes.TrimSpace(body); len(t) > 0 && t[0] == '{' {
+		// JSON: {"DeviceInfo":{...}}
+		var w struct {
+			DeviceInfo struct {
+				DeviceName      string `json:"deviceName"`
+				Model           string `json:"model"`
+				SerialNumber    string `json:"serialNumber"`
+				FirmwareVersion string `json:"firmwareVersion"`
+			} `json:"DeviceInfo"`
+		}
+		if err := json.Unmarshal(body, &w); err != nil {
+			return nil, fmt.Errorf("hikvision: deviceInfo JSON parse: %w", err)
+		}
+		di.DeviceName, di.Model = w.DeviceInfo.DeviceName, w.DeviceInfo.Model
+		di.SerialNumber, di.FirmwareVersion = w.DeviceInfo.SerialNumber, w.DeviceInfo.FirmwareVersion
+	} else {
+		// XML: <DeviceInfo><serialNumber>…</serialNumber>…</DeviceInfo>
+		var w struct {
+			XMLName         xml.Name `xml:"DeviceInfo"`
+			DeviceName      string   `xml:"deviceName"`
+			Model           string   `xml:"model"`
+			SerialNumber    string   `xml:"serialNumber"`
+			FirmwareVersion string   `xml:"firmwareVersion"`
+		}
+		if err := xml.Unmarshal(body, &w); err != nil {
+			return nil, fmt.Errorf("hikvision: deviceInfo XML parse: %w", err)
+		}
+		di.DeviceName, di.Model = w.DeviceName, w.Model
+		di.SerialNumber, di.FirmwareVersion = w.SerialNumber, w.FirmwareVersion
 	}
-	if err := json.Unmarshal(body, &wrap); err != nil {
-		return nil, fmt.Errorf("hikvision: deviceInfo parse: %w", err)
+
+	if di.SerialNumber == "" && di.Model == "" && di.FirmwareVersion == "" {
+		return nil, fmt.Errorf("hikvision: deviceInfo vazio/sem campos reconhecidos")
 	}
-	di := wrap.DeviceInfo
-	return &DeviceInfo{
-		DeviceName:      di.DeviceName,
-		Model:           di.Model,
-		SerialNumber:    di.SerialNumber,
-		FirmwareVersion: di.FirmwareVersion,
-	}, nil
+	return di, nil
 }
 
 // isapiStatus é o corpo JSON de status retornado pela ISAPI.
