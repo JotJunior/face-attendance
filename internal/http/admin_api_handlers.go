@@ -11,6 +11,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -108,19 +109,26 @@ func AdminStatsHandler(cfg AdminAPIConfig) http.Handler {
 // deviceResponse é o item de resposta para um dispositivo no painel admin.
 // status é derivado de last_heartbeat_at vs threshold (não armazenado em banco — dec-007).
 type deviceResponse struct {
-	ID                          int64      `json:"id"`
-	DeviceIdentifier            string     `json:"device_identifier"`
-	IPAddress                   *string    `json:"ip_address,omitempty"`
-	MACAddress                  *string    `json:"mac_address,omitempty"`
-	LastHeartbeatAt             *time.Time `json:"last_heartbeat_at,omitempty"`
-	Status                      string     `json:"status"` // "active" | "offline"
-	WebhookConfigured           bool       `json:"webhook_configured"`
-	CreatedAt                   time.Time  `json:"created_at"`
+	ID                   int64      `json:"id"`
+	DeviceIdentifier     string     `json:"device_identifier"`
+	IPAddress            *string    `json:"ip_address,omitempty"`
+	MACAddress           *string    `json:"mac_address,omitempty"`
+	LastHeartbeatAt      *time.Time `json:"last_heartbeat_at,omitempty"`
+	Status               string     `json:"status"` // "active" | "offline"
+	WebhookConfigured    bool       `json:"webhook_configured"`
+	CreatedAt            time.Time  `json:"created_at"`
 	// Telemetria de hardware via ISAPI deviceInfo (nullable até a 1ª leitura).
 	// Credenciais ISAPI NÃO são expostas aqui (segurança).
-	SerialNumber                *string    `json:"serial_number,omitempty"`
-	Model                       *string    `json:"model,omitempty"`
-	FirmwareVersion             *string    `json:"firmware_version,omitempty"`
+	SerialNumber         *string    `json:"serial_number,omitempty"`
+	Model                *string    `json:"model,omitempty"`
+	FirmwareVersion      *string    `json:"firmware_version,omitempty"`
+	// Hardware capacity limits (nullable until first ISAPI GetCapabilities call).
+	// Ref: tasks.md §2.2.4, spec.md §FR-001/002.
+	MaxUsers             *int       `json:"max_users"`
+	MaxFaces             *int       `json:"max_faces"`
+	// Derived: true when ISAPI username is set and password_enc is non-nil.
+	// NEVER exposes the credentials themselves (FR-005, Constitution §V).
+	IsapiCredentialsSet  bool       `json:"isapi_credentials_set"`
 }
 
 // devicesListResponse é o payload de resposta de GET /admin/api/devices.
@@ -142,19 +150,25 @@ func deriveDeviceStatus(d domain.Device, thresholdHours int) string {
 }
 
 // toDeviceResponse converte domain.Device para deviceResponse com status derivado.
+// IsapiCredentialsSet é derivado de username não-vazio + password_enc não-nil (FR-005).
+// Ref: tasks.md §2.2.4.
 func toDeviceResponse(d domain.Device, thresholdHours int) deviceResponse {
+	credSet := d.ISAPIUsername != nil && *d.ISAPIUsername != "" && d.ISAPIPasswordEnc != nil
 	return deviceResponse{
-		ID:                id64(d.ID),
-		DeviceIdentifier:  d.DeviceIdentifier,
-		IPAddress:         d.IPAddress,
-		MACAddress:        d.MACAddress,
-		LastHeartbeatAt:   d.LastHeartbeatAt,
-		Status:            deriveDeviceStatus(d, thresholdHours),
-		WebhookConfigured: d.WebhookConfigured,
-		CreatedAt:         d.CreatedAt,
-		SerialNumber:      d.SerialNumber,
-		Model:             d.Model,
-		FirmwareVersion:   d.FirmwareVersion,
+		ID:                  id64(d.ID),
+		DeviceIdentifier:    d.DeviceIdentifier,
+		IPAddress:           d.IPAddress,
+		MACAddress:          d.MACAddress,
+		LastHeartbeatAt:     d.LastHeartbeatAt,
+		Status:              deriveDeviceStatus(d, thresholdHours),
+		WebhookConfigured:   d.WebhookConfigured,
+		CreatedAt:           d.CreatedAt,
+		SerialNumber:        d.SerialNumber,
+		Model:               d.Model,
+		FirmwareVersion:     d.FirmwareVersion,
+		MaxUsers:            d.MaxUsers,
+		MaxFaces:            d.MaxFaces,
+		IsapiCredentialsSet: credSet,
 	}
 }
 
@@ -381,6 +395,29 @@ func extractLastPathSegment(path string) string {
 		}
 	}
 	return path
+}
+
+// parseDoorID extrai e valida o door_id do segmento de path.
+// CHK048: door_id deve ser inteiro >= 1; retorna (0, false) se inválido.
+func parseDoorID(seg string) (int, bool) {
+	n, err := strconv.Atoi(seg)
+	if err != nil || n < 1 {
+		return 0, false
+	}
+	return n, true
+}
+
+// parseWebhookID valida o webhook_id do segmento de path.
+// CHK048: deve ser string não-vazia e sem caracteres de path traversal.
+func parseWebhookID(seg string) (string, bool) {
+	if seg == "" {
+		return "", false
+	}
+	// Rejeitar path traversal
+	if strings.Contains(seg, "/") || strings.Contains(seg, "..") {
+		return "", false
+	}
+	return seg, true
 }
 
 // id64 converte int64 para int64 (helper semântico para legibilidade).
