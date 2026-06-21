@@ -184,14 +184,20 @@ func run() error {
 			credCipher = c
 		}
 
-		// Resolve o deviceID pelo device ativo cujo IP == host configurado
-		// (o device se registra por MAC via heartbeat, não pelo host ISAPI).
+		// Resolve o device-alvo do provisionamento. Em deployment single-device
+		// (o caso real), é o ÚNICO device ativo — independente de IP, que é o ponto
+		// central do pedido: o device troca de IP e o alvo continua o mesmo. Com
+		// múltiplos devices, casa o host do .env com o IP corrente (melhor esforço).
 		var deviceID int64
 		if devices, listErr := deviceRepo.ListActive(context.Background()); listErr == nil {
-			for _, d := range devices {
-				if d.IPAddress != nil && *d.IPAddress == devCfg.Host {
-					deviceID = d.ID
-					break
+			if len(devices) == 1 {
+				deviceID = devices[0].ID
+			} else {
+				for _, d := range devices {
+					if d.IPAddress != nil && *d.IPAddress == devCfg.Host {
+						deviceID = d.ID
+						break
+					}
 				}
 			}
 		}
@@ -209,21 +215,6 @@ func run() error {
 			}
 		}
 
-		// Best-effort: busca serial/model/firmware via ISAPI deviceInfo e persiste
-		// (a identidade de hardware que o heartbeat não traz). Não bloqueia o boot.
-		if deviceID != 0 {
-			go func(id int64, dc config.ISAPIDeviceConfig) {
-				infoCtx, infoCancel := context.WithTimeout(context.Background(), 20*time.Second)
-				defer infoCancel()
-				infoClient := hikvision.New(hikvision.DeviceConfig{Host: dc.Host, Username: dc.Username, Password: dc.Password})
-				if info, infoErr := infoClient.FetchDeviceInfo(infoCtx); infoErr == nil && info != nil {
-					if setErr := deviceRepo.SetDeviceInfo(infoCtx, id, info.SerialNumber, info.Model, info.FirmwareVersion); setErr == nil {
-						logger.Info("worker_started", dc.Host, "", "deviceInfo (serial/model/firmware) atualizado via ISAPI")
-					}
-				}
-			}(deviceID, devCfg)
-		}
-
 		// Resolver per-message: usa IP + credenciais CORRENTES do banco (absorve
 		// troca de IP). Fallback para o .env enquanto não houver credenciais no banco.
 		resolver := &dbConnResolver{
@@ -231,6 +222,29 @@ func run() error {
 			cipher:   credCipher,
 			deviceID: deviceID,
 			fallback: hikvision.DeviceConfig{Host: devCfg.Host, Username: devCfg.Username, Password: devCfg.Password},
+		}
+
+		// Best-effort: busca serial/model/firmware via ISAPI deviceInfo e persiste
+		// (a identidade de hardware que o heartbeat não traz). Usa o resolver — ou
+		// seja, o IP CORRENTE do banco, não o host estático do .env. Não bloqueia o boot.
+		if deviceID != 0 {
+			go func() {
+				infoCtx, infoCancel := context.WithTimeout(context.Background(), 20*time.Second)
+				defer infoCancel()
+				client, id, resErr := resolver.Resolve(infoCtx)
+				if resErr != nil {
+					return
+				}
+				hc, ok := client.(*hikvision.Client)
+				if !ok {
+					return
+				}
+				if info, infoErr := hc.FetchDeviceInfo(infoCtx); infoErr == nil && info != nil {
+					if setErr := deviceRepo.SetDeviceInfo(infoCtx, id, info.SerialNumber, info.Model, info.FirmwareVersion); setErr == nil {
+						logger.Info("worker_started", "", "", "deviceInfo (serial/model/firmware) atualizado via ISAPI")
+					}
+				}
+			}()
 		}
 
 		// webhookURL vazio + configureWebhook=false: o worker NÃO reconfigura o
