@@ -116,6 +116,11 @@ type deviceResponse struct {
 	Status                      string     `json:"status"` // "active" | "offline"
 	WebhookConfigured           bool       `json:"webhook_configured"`
 	CreatedAt                   time.Time  `json:"created_at"`
+	// Telemetria de hardware via ISAPI deviceInfo (nullable até a 1ª leitura).
+	// Credenciais ISAPI NÃO são expostas aqui (segurança).
+	SerialNumber                *string    `json:"serial_number,omitempty"`
+	Model                       *string    `json:"model,omitempty"`
+	FirmwareVersion             *string    `json:"firmware_version,omitempty"`
 }
 
 // devicesListResponse é o payload de resposta de GET /admin/api/devices.
@@ -147,6 +152,9 @@ func toDeviceResponse(d domain.Device, thresholdHours int) deviceResponse {
 		Status:            deriveDeviceStatus(d, thresholdHours),
 		WebhookConfigured: d.WebhookConfigured,
 		CreatedAt:         d.CreatedAt,
+		SerialNumber:      d.SerialNumber,
+		Model:             d.Model,
+		FirmwareVersion:   d.FirmwareVersion,
 	}
 }
 

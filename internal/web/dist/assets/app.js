@@ -634,25 +634,26 @@ function renderCfgSection(dev, section) {
 }
 
 function cfgOverview(dev) {
-  // Apenas IP/MAC/status/heartbeat vêm do contrato atual (deviceResponse). Demais campos
-  // (modelo, série, firmware, uptime, capacidades) exigem o endpoint de telemetria (§7.1).
+  // serial/model/firmware vêm do deviceInfo (ISAPI) persistido no banco; IP/MAC/status/
+  // heartbeat do registro do device. Uptime e capacidades ainda dependem de endpoints
+  // de status/capabilities do device (§7.1) — por isso a nota abaixo.
   const kv = (k, v, mono) => `<div class="kv"><div class="k">${k}</div><div class="v ${mono?'mono':''}">${v}</div></div>`;
   return `
-    ${pendingNote('Telemetria completa do terminal (modelo, firmware, uptime, capacidades) será exibida quando o endpoint de status (§7.1) estiver disponível.')}
     <div class="card flush">
       <div class="card-head"><div class="h">Identificação & status</div></div>
       <div class="kv-grid">
         ${kv('Identificador', escHtml(dev.device_identifier), true)}
+        ${kv('Modelo', escHtml(dev.model || '—'))}
+        ${kv('Nº de série', escHtml(dev.serial_number || '—'), true)}
         ${kv('IP', escHtml(dev.ip_address || '—'), true)}
         ${kv('MAC', escHtml(dev.mac_address || '—'), true)}
+        ${kv('Firmware', escHtml(dev.firmware_version || '—'), true)}
         ${kv('Status', dev.status === 'active' ? 'Online' : 'Offline')}
         ${kv('Último heartbeat', escHtml(fmtDateTime(dev.last_heartbeat_at)), true)}
         ${kv('Webhook', dev.webhook_configured ? 'Configurado' : 'Ausente')}
-        ${kv('Modelo', '—')}
-        ${kv('Firmware', '—', true)}
-        ${kv('Uptime', '—', true)}
       </div>
-    </div>`;
+    </div>
+    ${pendingNote('Uptime, contadores de uso e capacidades (máx. de usuários/faces) virão dos endpoints de status/capabilities do device (§7.1).')}`;
 }
 
 function cfgSystem(dev) {
