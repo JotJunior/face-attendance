@@ -24,33 +24,50 @@ type ISAPIClient interface {
 	ConfigureWebhook(ctx context.Context, webhookURL string) error
 }
 
-// Processor handles AMQP deliveries, executes the 3 ISAPI operations, and manages retry/DLQ routing.
-type Processor struct {
-	isapi              ISAPIClient
-	outcomeRepo        *repository.ProcessingOutcomeRepository
-	publisher          *queue.Publisher // for re-publishing with incremented retry count
-	deviceID           int64
-	maxRetryAttempts   int
-	initialBackoffMs   int
-	webhookURL         string // URL to configure on the device
-	configureWebhook   bool   // se false, não chama ConfigureWebhook (webhook gerido fora do worker)
+// ConnResolver fornece um ISAPIClient pronto para o device-alvo usando o IP e as
+// credenciais CORRENTES (lidas do banco). É chamado por mensagem, então uma troca
+// de IP registrada via heartbeat é absorvida automaticamente — nunca se perde a
+// conexão (pedido do operador 2026-06-21).
+type ConnResolver interface {
+	Resolve(ctx context.Context) (client ISAPIClient, deviceID int64, err error)
 }
 
-// NewProcessor creates a Processor.
+// StaticResolver devolve sempre o mesmo client/deviceID (testes ou device fixo).
+type StaticResolver struct {
+	Client   ISAPIClient
+	DeviceID int64
+}
+
+// Resolve implements ConnResolver.
+func (s StaticResolver) Resolve(context.Context) (ISAPIClient, int64, error) {
+	return s.Client, s.DeviceID, nil
+}
+
+// Processor handles AMQP deliveries, executes the 3 ISAPI operations, and manages retry/DLQ routing.
+type Processor struct {
+	resolver         ConnResolver
+	outcomeRepo      *repository.ProcessingOutcomeRepository
+	publisher        *queue.Publisher // for re-publishing with incremented retry count
+	maxRetryAttempts int
+	initialBackoffMs int
+	webhookURL       string // URL to configure on the device
+	configureWebhook bool   // se false, não chama ConfigureWebhook (webhook gerido fora do worker)
+}
+
+// NewProcessor creates a Processor. O resolver decide qual device/credenciais usar
+// por mensagem (StaticResolver para device fixo/testes).
 func NewProcessor(
-	isapi ISAPIClient,
+	resolver ConnResolver,
 	outcomeRepo *repository.ProcessingOutcomeRepository,
 	publisher *queue.Publisher,
-	deviceID int64,
 	maxRetryAttempts, initialBackoffMs int,
 	webhookURL string,
 	configureWebhook bool,
 ) *Processor {
 	return &Processor{
-		isapi:            isapi,
+		resolver:         resolver,
 		outcomeRepo:      outcomeRepo,
 		publisher:        publisher,
-		deviceID:         deviceID,
 		maxRetryAttempts: maxRetryAttempts,
 		initialBackoffMs: initialBackoffMs,
 		webhookURL:       webhookURL,
@@ -111,38 +128,45 @@ func (p *Processor) processMessage(ctx context.Context, msg domain.ProcessingMes
 		return &hikvision.NonRetriableError{Op: "normalize CPF", Msg: normErr.Error()}
 	}
 
+	// Resolve o device-alvo (IP + credenciais correntes do banco). Falha aqui é
+	// retriable (ex.: device temporariamente sem credenciais ou IP desconhecido).
+	client, deviceID, resErr := p.resolver.Resolve(ctx)
+	if resErr != nil {
+		return fmt.Errorf("worker: resolve device connection: %w", resErr)
+	}
+
 	// Step 1: UpsertUser
-	if err := p.isapi.UpsertUser(ctx, cpf, msg.Name); err != nil {
-		p.saveOutcome(ctx, msg, false, false, false, "user_sync", err) //nolint:errcheck
+	if err := client.UpsertUser(ctx, cpf, msg.Name); err != nil {
+		p.saveOutcome(ctx, deviceID, msg, false, false, false, "user_sync", err) //nolint:errcheck
 		return err
 	}
-	p.saveOutcome(ctx, msg, true, false, false, "user_sync", nil) //nolint:errcheck
+	p.saveOutcome(ctx, deviceID, msg, true, false, false, "user_sync", nil) //nolint:errcheck
 
 	// Step 2: UploadFace
-	if err := p.isapi.UploadFace(ctx, cpf, msg.URLSelfie); err != nil {
-		p.saveOutcome(ctx, msg, true, false, false, "face_upload", err) //nolint:errcheck
+	if err := client.UploadFace(ctx, cpf, msg.URLSelfie); err != nil {
+		p.saveOutcome(ctx, deviceID, msg, true, false, false, "face_upload", err) //nolint:errcheck
 		return err
 	}
-	p.saveOutcome(ctx, msg, true, true, false, "face_upload", nil) //nolint:errcheck
+	p.saveOutcome(ctx, deviceID, msg, true, true, false, "face_upload", nil) //nolint:errcheck
 
 	// Step 3: ConfigureWebhook (opcional — desligado quando o webhook é gerido
 	// fora do worker; evita reconfigurar o leitor a cada membro).
 	if p.configureWebhook {
-		if err := p.isapi.ConfigureWebhook(ctx, p.webhookURL); err != nil {
-			p.saveOutcome(ctx, msg, true, true, false, "webhook", err) //nolint:errcheck
+		if err := client.ConfigureWebhook(ctx, p.webhookURL); err != nil {
+			p.saveOutcome(ctx, deviceID, msg, true, true, false, "webhook", err) //nolint:errcheck
 			return err
 		}
 	}
-	p.saveOutcome(ctx, msg, true, true, true, "done", nil) //nolint:errcheck
+	p.saveOutcome(ctx, deviceID, msg, true, true, true, "done", nil) //nolint:errcheck
 
 	return nil
 }
 
-func (p *Processor) saveOutcome(ctx context.Context, msg domain.ProcessingMessage,
+func (p *Processor) saveOutcome(ctx context.Context, deviceID int64, msg domain.ProcessingMessage,
 	userSynced, faceUploaded, webhookSet bool, stage string, lastErr error) error {
 	outcome := domain.ProcessingOutcome{
 		FederalDocument: msg.FederalDocument,
-		DeviceID:        p.deviceID,
+		DeviceID:        deviceID,
 		UserSynced:      userSynced,
 		FaceUploaded:    faceUploaded,
 		WebhookSet:      webhookSet,

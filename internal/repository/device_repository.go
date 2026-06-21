@@ -50,7 +50,8 @@ func (r *DeviceRepository) ListActive(ctx context.Context) ([]domain.Device, err
 	query := `
 		SELECT id, device_identifier, host(ip_address), mac_address,
 		       last_heartbeat_at, is_active, webhook_configured,
-		       created_at, updated_at
+		       created_at, updated_at,
+		       serial_number, model, firmware_version, isapi_username, isapi_port
 		FROM devices
 		WHERE is_active = true
 	`
@@ -68,7 +69,8 @@ func (r *DeviceRepository) FindByIdentifier(ctx context.Context, identifier stri
 	query := `
 		SELECT id, device_identifier, host(ip_address), mac_address,
 		       last_heartbeat_at, is_active, webhook_configured,
-		       created_at, updated_at
+		       created_at, updated_at,
+		       serial_number, model, firmware_version, isapi_username, isapi_port
 		FROM devices
 		WHERE device_identifier = $1
 		LIMIT 1
@@ -117,7 +119,8 @@ func (r *DeviceRepository) ListDevicesAll(ctx context.Context) ([]domain.Device,
 	query := `
 		SELECT id, device_identifier, host(ip_address), mac_address,
 		       last_heartbeat_at, is_active, webhook_configured,
-		       created_at, updated_at
+		       created_at, updated_at,
+		       serial_number, model, firmware_version, isapi_username, isapi_port
 		FROM devices
 		ORDER BY device_identifier
 	`
@@ -135,7 +138,8 @@ func (r *DeviceRepository) GetDeviceByID(ctx context.Context, id int64) (*domain
 	query := `
 		SELECT id, device_identifier, host(ip_address), mac_address,
 		       last_heartbeat_at, is_active, webhook_configured,
-		       created_at, updated_at
+		       created_at, updated_at,
+		       serial_number, model, firmware_version, isapi_username, isapi_port
 		FROM devices
 		WHERE id = $1
 	`
@@ -155,6 +159,98 @@ func (r *DeviceRepository) GetDeviceByID(ctx context.Context, id int64) (*domain
 	return &devices[0], nil
 }
 
+// FindByMAC finds a device by MAC address (or device_identifier == mac).
+// Identidade estável do device — sobrevive a troca de IP. Retorna (nil, nil) se não achar.
+func (r *DeviceRepository) FindByMAC(ctx context.Context, mac string) (*domain.Device, error) {
+	query := `
+		SELECT id, device_identifier, host(ip_address), mac_address,
+		       last_heartbeat_at, is_active, webhook_configured,
+		       created_at, updated_at,
+		       serial_number, model, firmware_version, isapi_username, isapi_port
+		FROM devices
+		WHERE mac_address = $1 OR device_identifier = $1
+		LIMIT 1
+	`
+	rows, err := r.pool.Query(ctx, query, mac)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	devices, err := scanDevices(rows)
+	if err != nil {
+		return nil, err
+	}
+	if len(devices) == 0 {
+		return nil, nil
+	}
+	return &devices[0], nil
+}
+
+// DeviceConn carrega os dados de conexão ISAPI de um device, incluindo a senha
+// cifrada (isapi_password_enc). Usado pelo worker para conectar com o IP corrente.
+type DeviceConn struct {
+	ID          int64
+	IP          *string
+	Username    string
+	PasswordEnc []byte
+	Port        int
+}
+
+// GetConn retorna os dados de conexão ISAPI de um device pelo ID (IP corrente +
+// credenciais cifradas). Retorna pgx.ErrNoRows se não encontrado.
+func (r *DeviceRepository) GetConn(ctx context.Context, id int64) (*DeviceConn, error) {
+	query := `
+		SELECT id, host(ip_address), COALESCE(isapi_username, ''), isapi_password_enc, isapi_port
+		FROM devices
+		WHERE id = $1
+	`
+	var c DeviceConn
+	err := r.pool.QueryRow(ctx, query, id).Scan(&c.ID, &c.IP, &c.Username, &c.PasswordEnc, &c.Port)
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+// SetCredentials persiste as credenciais ISAPI cifradas de um device.
+// passwordEnc é o blob AES-GCM (nonce||ciphertext) — nunca a senha em claro.
+func (r *DeviceRepository) SetCredentials(ctx context.Context, id int64, username string, passwordEnc []byte, port int) error {
+	if port <= 0 {
+		port = 80
+	}
+	query := `
+		UPDATE devices
+		SET isapi_username = $2, isapi_password_enc = $3, isapi_port = $4, updated_at = now()
+		WHERE id = $1
+	`
+	_, err := r.pool.Exec(ctx, query, id, username, passwordEnc, port)
+	return err
+}
+
+// HasCredentials reporta se o device já tem credenciais ISAPI persistidas (para
+// não re-semear do .env a cada boot).
+func (r *DeviceRepository) HasCredentials(ctx context.Context, id int64) (bool, error) {
+	var exists bool
+	err := r.pool.QueryRow(ctx,
+		`SELECT isapi_password_enc IS NOT NULL FROM devices WHERE id = $1`, id).Scan(&exists)
+	return exists, err
+}
+
+// SetDeviceInfo persiste serial/model/firmware obtidos via ISAPI deviceInfo.
+// Valores vazios viram NULL (não sobrescrevem com string vazia).
+func (r *DeviceRepository) SetDeviceInfo(ctx context.Context, id int64, serial, model, firmware string) error {
+	query := `
+		UPDATE devices
+		SET serial_number    = NULLIF($2, ''),
+		    model            = NULLIF($3, ''),
+		    firmware_version = NULLIF($4, ''),
+		    updated_at       = now()
+		WHERE id = $1
+	`
+	_, err := r.pool.Exec(ctx, query, id, serial, model, firmware)
+	return err
+}
+
 // scanDevices reads device rows.
 func scanDevices(rows pgx.Rows) ([]domain.Device, error) {
 	var devices []domain.Device
@@ -170,6 +266,11 @@ func scanDevices(rows pgx.Rows) ([]domain.Device, error) {
 			&d.WebhookConfigured,
 			&d.CreatedAt,
 			&d.UpdatedAt,
+			&d.SerialNumber,
+			&d.Model,
+			&d.FirmwareVersion,
+			&d.ISAPIUsername,
+			&d.ISAPIPort,
 		); err != nil {
 			return nil, err
 		}
