@@ -35,8 +35,48 @@ const (
 	endpointUserModify = "/ISAPI/AccessControl/UserInfo/Modify?format=json"
 	endpointFaceRecord = "/ISAPI/Intelligent/FDLib/faceDataRecord?format=json"
 	endpointHTTPHosts  = "/ISAPI/Event/notification/httpHosts"
+	endpointDeviceInfo = "/ISAPI/System/deviceInfo?format=json"
 	defaultTimeout     = 30 * time.Second
 )
+
+// DeviceInfo é o subconjunto de /ISAPI/System/deviceInfo que persistimos no banco
+// (a identidade de hardware estável — serial — que o heartbeat não carrega).
+type DeviceInfo struct {
+	DeviceName      string
+	Model           string
+	SerialNumber    string
+	FirmwareVersion string
+}
+
+// FetchDeviceInfo lê GET /ISAPI/System/deviceInfo e retorna serial/model/firmware.
+// Best-effort: o chamador trata erro (device offline) sem falhar o fluxo principal.
+func (c *Client) FetchDeviceInfo(ctx context.Context) (*DeviceInfo, error) {
+	body, status, err := c.doRequest(ctx, http.MethodGet, endpointDeviceInfo, nil, "")
+	if err != nil {
+		return nil, err
+	}
+	if status != 200 {
+		return nil, fmt.Errorf("hikvision: deviceInfo HTTP %d", status)
+	}
+	var wrap struct {
+		DeviceInfo struct {
+			DeviceName      string `json:"deviceName"`
+			Model           string `json:"model"`
+			SerialNumber    string `json:"serialNumber"`
+			FirmwareVersion string `json:"firmwareVersion"`
+		} `json:"DeviceInfo"`
+	}
+	if err := json.Unmarshal(body, &wrap); err != nil {
+		return nil, fmt.Errorf("hikvision: deviceInfo parse: %w", err)
+	}
+	di := wrap.DeviceInfo
+	return &DeviceInfo{
+		DeviceName:      di.DeviceName,
+		Model:           di.Model,
+		SerialNumber:    di.SerialNumber,
+		FirmwareVersion: di.FirmwareVersion,
+	}, nil
+}
 
 // isapiStatus é o corpo JSON de status retornado pela ISAPI.
 type isapiStatus struct {

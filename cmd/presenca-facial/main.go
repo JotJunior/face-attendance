@@ -22,6 +22,7 @@ import (
 	"github.com/jotjunior/face-attendance/internal/queue"
 	"github.com/jotjunior/face-attendance/internal/repository"
 	"github.com/jotjunior/face-attendance/internal/scheduler"
+	"github.com/jotjunior/face-attendance/internal/secrets"
 	"github.com/jotjunior/face-attendance/internal/web"
 	"github.com/jotjunior/face-attendance/internal/worker"
 )
@@ -172,11 +173,16 @@ func run() error {
 			logger.Info("worker_started", "", "", "múltiplos devices configurados; a fila única provisiona apenas o primeiro")
 		}
 
-		isapiClient := hikvision.New(hikvision.DeviceConfig{
-			Host:     devCfg.Host,
-			Username: devCfg.Username,
-			Password: devCfg.Password,
-		})
+		// Cifra das credenciais ISAPI (opcional). Sem ISAPI_CRED_KEY, mantém o
+		// comportamento legado: credenciais vêm do .env (sem persistir no banco).
+		var credCipher *secrets.Cipher
+		if len(cfg.ISAPICredKey) > 0 {
+			c, cipherErr := secrets.NewCipher(cfg.ISAPICredKey)
+			if cipherErr != nil {
+				return fmt.Errorf("isapi cred cipher: %w", cipherErr)
+			}
+			credCipher = c
+		}
 
 		// Resolve o deviceID pelo device ativo cujo IP == host configurado
 		// (o device se registra por MAC via heartbeat, não pelo host ISAPI).
@@ -190,13 +196,49 @@ func run() error {
 			}
 		}
 
+		// Bootstrap: semeia as credenciais do .env no banco (cifradas) uma única
+		// vez, quando a cifragem está ligada e o device ainda não tem credenciais.
+		// A partir daí a fonte de verdade da conexão é a tabela devices.
+		if credCipher != nil && deviceID != 0 {
+			if has, _ := deviceRepo.HasCredentials(context.Background(), deviceID); !has {
+				if enc, encErr := credCipher.Encrypt(devCfg.Password); encErr == nil {
+					if seedErr := deviceRepo.SetCredentials(context.Background(), deviceID, devCfg.Username, enc, 80); seedErr == nil {
+						logger.Info("worker_started", devCfg.Host, "", "credenciais ISAPI semeadas do .env para o banco (cifradas)")
+					}
+				}
+			}
+		}
+
+		// Best-effort: busca serial/model/firmware via ISAPI deviceInfo e persiste
+		// (a identidade de hardware que o heartbeat não traz). Não bloqueia o boot.
+		if deviceID != 0 {
+			go func(id int64, dc config.ISAPIDeviceConfig) {
+				infoCtx, infoCancel := context.WithTimeout(context.Background(), 20*time.Second)
+				defer infoCancel()
+				infoClient := hikvision.New(hikvision.DeviceConfig{Host: dc.Host, Username: dc.Username, Password: dc.Password})
+				if info, infoErr := infoClient.FetchDeviceInfo(infoCtx); infoErr == nil && info != nil {
+					if setErr := deviceRepo.SetDeviceInfo(infoCtx, id, info.SerialNumber, info.Model, info.FirmwareVersion); setErr == nil {
+						logger.Info("worker_started", dc.Host, "", "deviceInfo (serial/model/firmware) atualizado via ISAPI")
+					}
+				}
+			}(deviceID, devCfg)
+		}
+
+		// Resolver per-message: usa IP + credenciais CORRENTES do banco (absorve
+		// troca de IP). Fallback para o .env enquanto não houver credenciais no banco.
+		resolver := &dbConnResolver{
+			repo:     deviceRepo,
+			cipher:   credCipher,
+			deviceID: deviceID,
+			fallback: hikvision.DeviceConfig{Host: devCfg.Host, Username: devCfg.Username, Password: devCfg.Password},
+		}
+
 		// webhookURL vazio + configureWebhook=false: o worker NÃO reconfigura o
 		// webhook do leitor (configurado uma vez, fora do provisionamento).
 		proc := worker.NewProcessor(
-			isapiClient,
+			resolver,
 			outcomeRepo,
 			pub,
-			deviceID,
 			cfg.RetryMaxAttempts,
 			cfg.RetryInitialBackoffMs,
 			"",
@@ -249,6 +291,52 @@ func run() error {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer shutdownCancel()
 	return srv.Shutdown(shutdownCtx)
+}
+
+// dbConnResolver resolve a conexão ISAPI do device-alvo lendo o banco a cada
+// mensagem: pega o IP CORRENTE (atualizado pelo heartbeat) + as credenciais
+// cifradas. Assim, se o device troca de IP, o provisionamento segue o IP novo —
+// nunca se perde a conexão. Fallback para o .env enquanto o banco não tem credenciais.
+type dbConnResolver struct {
+	repo     *repository.DeviceRepository
+	cipher   *secrets.Cipher // nil = sem cifragem (usa fallback do .env)
+	deviceID int64
+	fallback hikvision.DeviceConfig
+}
+
+// Resolve implements worker.ConnResolver.
+func (r *dbConnResolver) Resolve(ctx context.Context) (worker.ISAPIClient, int64, error) {
+	host := r.fallback.Host
+	user := r.fallback.Username
+	pass := r.fallback.Password
+	devID := r.deviceID
+
+	if r.deviceID != 0 {
+		if conn, err := r.repo.GetConn(ctx, r.deviceID); err == nil && conn != nil {
+			devID = conn.ID
+			if conn.IP != nil && *conn.IP != "" {
+				host = *conn.IP
+				if conn.Port > 0 && conn.Port != 80 {
+					host = fmt.Sprintf("%s:%d", *conn.IP, conn.Port)
+				}
+			}
+			// Credenciais do banco (cifradas) têm precedência sobre o .env.
+			if r.cipher != nil && len(conn.PasswordEnc) > 0 {
+				dec, decErr := r.cipher.Decrypt(conn.PasswordEnc)
+				if decErr != nil {
+					return nil, 0, fmt.Errorf("decrypt device %d credentials: %w", conn.ID, decErr)
+				}
+				user = conn.Username
+				pass = dec
+			}
+		}
+	}
+
+	if host == "" {
+		return nil, 0, fmt.Errorf("no ISAPI host for device %d", devID)
+	}
+	client := hikvision.New(hikvision.DeviceConfig{Host: host, Username: user, Password: pass})
+	return client, devID, nil
 }
 
 // appHealthChecker implements httphandler.HealthChecker.

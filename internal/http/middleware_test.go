@@ -29,18 +29,36 @@ func TestIPAllowlistMiddleware_Allowed(t *testing.T) {
 	}
 }
 
-// TestIPAllowlistMiddleware_Forbidden tests that an unknown IP gets 403.
-func TestIPAllowlistMiddleware_Forbidden(t *testing.T) {
+// TestIPAllowlistMiddleware_ForbiddenPublic tests that an unknown PUBLIC IP gets 403.
+// (Allowlist auto-curável: só IPs públicos desconhecidos são barrados; ver abaixo.)
+func TestIPAllowlistMiddleware_ForbiddenPublic(t *testing.T) {
 	allowed := func() []string { return []string{"192.168.1.10"} }
 	handler := httphandler.IPAllowlistMiddleware(allowed, okHandler())
 
 	req := httptest.NewRequest(http.MethodPost, "/webhook/secret", nil)
-	req.RemoteAddr = "10.0.0.99:12345"
+	req.RemoteAddr = "203.0.113.50:12345" // TEST-NET-3: público, fora da allowlist
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 
 	if w.Code != http.StatusForbidden {
-		t.Errorf("expected 403, got %d", w.Code)
+		t.Errorf("expected 403 for unknown public IP, got %d", w.Code)
+	}
+}
+
+// TestIPAllowlistMiddleware_UnknownLANAllowed verifica a allowlist auto-curável:
+// um device novo / com IP trocado na LAN (RFC1918) é aceito para se registrar pelo
+// heartbeat — mesmo sem estar na allowlist do banco.
+func TestIPAllowlistMiddleware_UnknownLANAllowed(t *testing.T) {
+	allowed := func() []string { return []string{"192.168.1.10"} }
+	handler := httphandler.IPAllowlistMiddleware(allowed, okHandler())
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/secret", nil)
+	req.RemoteAddr = "10.0.0.99:12345" // privado, fora da allowlist → permitido p/ registro
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200 for unknown LAN IP (auto-register), got %d", w.Code)
 	}
 }
 

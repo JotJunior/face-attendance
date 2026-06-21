@@ -32,19 +32,38 @@ func IPAllowlistMiddleware(allowedIPs func() []string, next http.Handler) http.H
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		clientIP := extractClientIP(r)
 
-		// Check against the allowed list
-		allowed := allowedIPs()
-		for _, ip := range allowed {
-			if ip == clientIP {
-				// Inject the IP into context and proceed
-				ctx := context.WithValue(r.Context(), keyDeviceIP, clientIP)
-				next.ServeHTTP(w, r.WithContext(ctx))
-				return
-			}
+		if ipAllowed(clientIP, allowedIPs()) {
+			// Inject the IP into context and proceed
+			ctx := context.WithValue(r.Context(), keyDeviceIP, clientIP)
+			next.ServeHTTP(w, r.WithContext(ctx))
+			return
 		}
 
 		http.Error(w, "forbidden: IP not in allowlist", http.StatusForbidden)
 	})
+}
+
+// ipAllowed decide se o webhook aceita a requisição: device já conhecido (allowlist
+// do banco) OU IP de LAN privada. "Auto-curável" (pedido 2026-06-21): um device que
+// troca de IP — ou um device novo — na LAN consegue se registrar pelo heartbeat
+// (autenticado pelo path-secret do webhook); o handler grava/atualiza o IP por MAC,
+// que então entra na allowlist. IPs públicos continuam exigindo registro prévio.
+func ipAllowed(clientIP string, allowed []string) bool {
+	for _, ip := range allowed {
+		if ip == clientIP {
+			return true
+		}
+	}
+	return isLANIP(clientIP)
+}
+
+// isLANIP reporta se o IP é de uma rede local (RFC1918/ULA, loopback ou link-local).
+func isLANIP(s string) bool {
+	ip := net.ParseIP(s)
+	if ip == nil {
+		return false
+	}
+	return ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast()
 }
 
 // AdminAuthMiddleware validates the Authorization: Bearer {ADMIN_TOKEN} header.

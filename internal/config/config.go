@@ -8,6 +8,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/jotjunior/face-attendance/internal/secrets"
 )
 
 // Config holds all runtime configuration for the presenca-facial service.
@@ -52,8 +54,15 @@ type Config struct {
 	// RabbitMQ
 	RabbitMQURL string // RABBITMQ_URL (amqp DSN)
 
-	// Per-device ISAPI credentials (ISAPI_DEVICE_{N}_HOST, _USER, _PASSWORD)
+	// Per-device ISAPI credentials (ISAPI_DEVICE_{N}_HOST, _USER, _PASSWORD).
+	// Legado/bootstrap: usados apenas para semear as credenciais no banco na 1ª
+	// inicialização. A fonte de verdade da conexão passa a ser a tabela devices.
 	ISAPIDevices []ISAPIDeviceConfig
+
+	// Chave mestra (32 bytes) para cifrar credenciais ISAPI no banco (AES-256-GCM).
+	// Env: ISAPI_CRED_KEY (hex de 64 chars ou base64). Opcional: vazio mantém o
+	// comportamento legado (credenciais do .env, sem persistir/cifrar no banco).
+	ISAPICredKey []byte
 }
 
 // ISAPIDeviceConfig holds credentials for one HikVision device.
@@ -134,6 +143,17 @@ func Load() (*Config, error) {
 
 	// Load per-device ISAPI configs: ISAPI_DEVICE_1_HOST, ISAPI_DEVICE_2_HOST, ...
 	cfg.ISAPIDevices = loadISAPIDevices(optionalStr)
+
+	// Chave de cifragem das credenciais ISAPI (opcional). Se setada mas inválida,
+	// é um erro de configuração (não silenciamos um segredo malformado).
+	if raw := os.Getenv("ISAPI_CRED_KEY"); raw != "" {
+		key, keyErr := secrets.ParseKey(raw)
+		if keyErr != nil {
+			missing = append(missing, "ISAPI_CRED_KEY (inválida: "+keyErr.Error()+")")
+		} else {
+			cfg.ISAPICredKey = key
+		}
+	}
 
 	if len(missing) > 0 {
 		return nil, fmt.Errorf("missing required environment variables: %s", strings.Join(missing, ", "))
