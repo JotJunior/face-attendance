@@ -80,12 +80,14 @@ Resposta (200):
 ### `POST /admin/api/devices/{id}/actions/reboot` (FR-008)
 - ISAPI: `PUT /ISAPI/System/reboot` (SOURCED — hikvision-isapi.md §Reboot).
 - Resposta (200): `{ "result": "rebooting", "device_id": 42 }`.
+  **`device_id` SEMPRE presente** em responses de ação (CHK058 — implementado).
 - Log estruturado obrigatório: `device_id`, `stage`, ação, operador (FR-011, Constitution VI).
 
 ### `POST /admin/api/devices/{id}/actions/factory-reset` (FR-009)
 - ISAPI: `PUT /ISAPI/System/factoryReset` body `{mode:basic}` (SOURCED).
 - Pós-sucesso: `webhook_configured=false` no banco.
-- Resposta (200): `{ "result": "factory_reset_initiated", "webhook_configured": false }`.
+- Resposta (200): `{ "result": "factory_reset_initiated", "webhook_configured": false, "device_id": 42 }`.
+  **`device_id` SEMPRE presente** em responses de ação (CHK058 — implementado).
 - Log estruturado obrigatório (FR-011); ação registrada como irreversível.
 
 ### `GET /admin/api/devices/{id}/time` (FR-010)
@@ -95,8 +97,11 @@ Resposta (200):
 
 ### `PUT /admin/api/devices/{id}/time` (FR-010)
 - Request: `{ "time_mode": "manual"|"ntp", "local_time": "YYYY-MM-DDThh:mm:ss", "time_zone": "<offset>", "ntp_server": "<host>"? }`
-- ISAPI: `PUT /ISAPI/System/time` (manual SOURCED; **NTP `[PROPOSTA]`** — shape
-  do bloco NTP não verificado, research.md Decision 5 / hikvision-isapi.md).
+- **`time_mode`**: enum validado no handler; valores permitidos: `"manual"` ou `"ntp"`.
+  Qualquer outro valor retorna `400` com mensagem `"time_mode deve ser 'manual' ou 'ntp'"`.
+  Implementado em `PutDeviceTimeHandler` (CHK071 — validado, não é mais PROPOSTA).
+- ISAPI: `PUT /ISAPI/System/time` (manual SOURCED; **NTP `[PROPOSTA — requer device físico]`** — shape
+  do bloco NTP não verificado, research.md Decision 5 / hikvision-isapi.md — ver bloqueio bl-001).
 
 ---
 
@@ -124,6 +129,9 @@ Resposta (200):
 
 ### `GET /admin/api/devices/{id}/users?page=1&per_page=100` (FR-016)
 - ISAPI: `POST /ISAPI/AccessControl/UserInfo/Search` paginado (SOURCED, dec-005 score 3).
+- **Constraints de paginação (CHK073 — validado no handler)**:
+  - `per_page`: inteiro `1–1000`; default `100` se ausente. Retorna `400` se fora do range.
+  - `page`: inteiro `>= 1`; default `1` se ausente. Retorna `400` se `< 1`.
 - Resposta (200):
 ```json
 {
@@ -172,7 +180,10 @@ Resposta (200):
 | Shape base `deviceResponse` | SOURCED — admin_api_handlers.go:110-124 |
 | Mapa command→cmd (doors) | SOURCED — DoorService.php:39-47 |
 | Paths/shapes ISAPI | SOURCED — ver hikvision-isapi.md (legacy + Go) |
-| **Rotas `/admin/api/devices/{id}/...`** | **[PROPOSTA] — não existem; a criar** |
-| NTP set-time | **[PROPOSTA]** — bloco NTP não verificado |
-| Clear faces | **[PROPOSTA]** — endpoint não verificado |
+| **Rotas `/admin/api/devices/{id}/...`** | **IMPLEMENTADO** — 13 endpoints em admin_device_config_handlers.go |
+| `time_mode` enum validation | **IMPLEMENTADO** — `"manual"\|"ntp"` validado em PutDeviceTimeHandler (CHK071) |
+| `per_page` constraint 1–1000 | **IMPLEMENTADO** — validado em GetDeviceUsersHandler (CHK073) |
+| `device_id` em responses de ação | **IMPLEMENTADO** — CHK058, via ActionResponse struct |
+| NTP set-time body shape | **[PROPOSTA — requer device físico]** — bloqueio bl-001 |
+| Clear faces endpoint | **[PROPOSTA — requer device físico]** — stub ErrNotImplemented → 501; bloqueio bl-002 |
 | max_users/max_faces parser | **[PROPOSTA]** — shape ISAPI não verificado |

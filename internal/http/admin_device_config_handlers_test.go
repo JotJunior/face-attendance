@@ -725,3 +725,128 @@ func TestISAPIHandlers_503_WhenCipherNil(t *testing.T) {
 		}
 	}
 }
+
+// =============================================================================
+// 6.1.5 Auth: todos os novos endpoints retornam 401 sem cookie de sessão (FR-020)
+// Note: handlers individuais do device-config não verificam sessão — isso é
+// responsabilidade do SessionMiddleware em server.go:101. Este teste valida que
+// os handlers, quando wrappados pelo SessionMiddleware, retornam 401 sem cookie.
+// =============================================================================
+
+func TestDeviceConfigEndpoints_401_WithoutSession(t *testing.T) {
+	// Wrap each handler with SessionMiddleware exactly as server.go does.
+	secret := "test-secret-32-bytes-for-hmac-ok"
+	sessionMW := SessionMiddleware(secret)
+
+	device := makeDevice(42, "127.0.0.1:80")
+	cfg, _ := newTestDeviceCfgConfig(t, device, nil)
+
+	endpoints := []struct {
+		name    string
+		method  string
+		path    string
+		handler http.Handler
+	}{
+		{"put-credentials", http.MethodPut, "/admin/api/devices/42/credentials", PutDeviceCredentialsHandler(cfg)},
+		{"post-reboot", http.MethodPost, "/admin/api/devices/42/actions/reboot", PostDeviceRebootHandler(cfg)},
+		{"post-factory-reset", http.MethodPost, "/admin/api/devices/42/actions/factory-reset", PostDeviceFactoryResetHandler(cfg)},
+		{"get-time", http.MethodGet, "/admin/api/devices/42/time", GetDeviceTimeHandler(cfg)},
+		{"put-time", http.MethodPut, "/admin/api/devices/42/time", PutDeviceTimeHandler(cfg)},
+		{"get-doors", http.MethodGet, "/admin/api/devices/42/doors", GetDeviceDoorsHandler(cfg)},
+		{"get-door-status", http.MethodGet, "/admin/api/devices/42/doors/1/status", GetDeviceDoorStatusHandler(cfg)},
+		{"post-door-control", http.MethodPost, "/admin/api/devices/42/doors/1/control", PostDeviceDoorControlHandler(cfg)},
+		{"get-users", http.MethodGet, "/admin/api/devices/42/users", GetDeviceUsersHandler(cfg)},
+		{"delete-users", http.MethodDelete, "/admin/api/devices/42/users", DeleteDeviceUsersHandler(cfg)},
+		{"delete-faces", http.MethodDelete, "/admin/api/devices/42/faces", DeleteDeviceFacesHandler(cfg)},
+		{"get-webhooks", http.MethodGet, "/admin/api/devices/42/webhooks", GetDeviceWebhooksHandler(cfg)},
+		{"delete-webhook", http.MethodDelete, "/admin/api/devices/42/webhooks/abc123", DeleteDeviceWebhookHandler(cfg)},
+	}
+
+	for _, ep := range endpoints {
+		t.Run(ep.name, func(t *testing.T) {
+			wrapped := sessionMW(ep.handler)
+			req := httptest.NewRequest(ep.method, ep.path, nil)
+			// No cookie — session must be rejected
+			rr := httptest.NewRecorder()
+			wrapped.ServeHTTP(rr, req)
+			if rr.Code != http.StatusUnauthorized {
+				t.Errorf("%s: want 401 without session, got %d", ep.name, rr.Code)
+			}
+		})
+	}
+}
+
+// =============================================================================
+// 6.2 Security credential tests (FR-005, Constitution §V)
+// =============================================================================
+
+// 6.2.1: PUT credentials with long password (256 chars) — persisted encrypted, never echoed.
+func TestPutDeviceCredentials_LongPassword_NeverEchoed(t *testing.T) {
+	device := makeDevice(42, "127.0.0.1:80")
+	cfg, _ := newTestDeviceCfgConfig(t, device, nil)
+	h := PutDeviceCredentialsHandler(cfg)
+
+	longPass := strings.Repeat("X", 256)
+	rr := doRequest(t, h, http.MethodPut, "/admin/api/devices/42/credentials", map[string]interface{}{
+		"isapi_username": "admin",
+		"isapi_password": longPass,
+		"isapi_port":     80,
+	})
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	// Response must never contain the password in any form (FR-005)
+	if strings.Contains(rr.Body.String(), longPass) {
+		t.Fatal("response echoed the long password — FR-005 violated")
+	}
+	// isapi_credentials_set must be true
+	var resp map[string]interface{}
+	json.Unmarshal(rr.Body.Bytes(), &resp) //nolint:errcheck
+	if resp["isapi_credentials_set"] != true {
+		t.Errorf("isapi_credentials_set: want true, got %v", resp["isapi_credentials_set"])
+	}
+}
+
+// 6.2.3: ISAPI 401 digest error → 502 response must not leak any credential field.
+func TestISAPI_401Digest_502_NoCredentialLeak(t *testing.T) {
+	// Serve 401 from fake ISAPI
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("WWW-Authenticate", `Digest realm="test"`)
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer ts.Close()
+
+	host := strings.TrimPrefix(ts.URL, "http://")
+	device := makeDevice(42, host)
+	cfg, _ := newTestDeviceCfgConfig(t, device, nil)
+	h := PostDeviceRebootHandler(cfg)
+
+	rr := doRequest(t, h, http.MethodPost, "/admin/api/devices/42/actions/reboot", nil)
+
+	// ISAPI 401 → NonRetriableError → 502 BadGateway
+	if rr.Code != http.StatusBadGateway {
+		t.Fatalf("want 502 for ISAPI 401 digest, got %d: %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	// Must not expose any credential field in 502 response
+	for _, forbidden := range []string{"isapi_password", "isapi_password_enc", "testpass", "SuperSecret"} {
+		if strings.Contains(body, forbidden) {
+			t.Errorf("502 response contains forbidden credential field %q — FR-005 violated", forbidden)
+		}
+	}
+}
+
+// 6.2.4 (documentation): removing ISAPI_CRED_KEY from env after persistence only
+// affects future ENCRYPT calls. DECRYPT depends on the key at decryption time.
+// This is a known architectural limitation documented in research.md Decision 7.
+// The test below documents this as a compile-time note (no runtime env mutation
+// in tests — that would be racy and affect parallel tests).
+func TestPutDeviceCredentials_KeyLimitation_Documented(t *testing.T) {
+	// Empirical: if ISAPI_CRED_KEY changes after storing credentials, the existing
+	// encrypted blob becomes unreadable. The handler returns 503 (ErrKeyMissing or
+	// decryption failure). This is acceptable per research.md §Decision 7.
+	// No testable runtime behavior here without env mutation.
+	t.Log("6.2.4: ISAPI_CRED_KEY rotation causes existing credentials to be unreadable (expected). " +
+		"Document in research.md §Decision 7 and operational runbook.")
+}

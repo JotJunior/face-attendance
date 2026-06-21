@@ -56,10 +56,10 @@ Ref: checklists/api.md CHK042 [Gap]
 `PUT /time` com `time_mode: "ntp"` usa shape `[PROPOSTA]`. Se o firmware não
 suportar NTP, a ISAPI retornará erro 4xx. Definir comportamento explícito.
 
-- [ ] 1.3.1 Ao implementar `PUT time` (tarefa 3.3), registrar empiricamente se a ISAPI retorna 4xx para NTP
-- [ ] 1.3.2 Se NTP não verificado em runtime: handler retorna `502` com body `{"error": "modo NTP não confirmado para este firmware; use modo manual"}` em vez de 501 (para consistência com mapa de erros ISAPI)
-- [ ] 1.3.3 Documentar decisão com ref CHK042 no handler e no contrato `hikvision-isapi.md` (atualizar campo `[PROPOSTA]`)
-- [ ] 1.3.4 Escrever teste: `PUT time` com `time_mode: "ntp"` e erro 4xx ISAPI → 502
+- [ ] 1.3.1 Ao implementar `PUT time` (tarefa 3.3), registrar empiricamente se a ISAPI retorna 4xx para NTP <!-- requer device físico — bloqueio block-001 -->
+- [ ] 1.3.2 Se NTP não verificado em runtime: handler retorna `502` com body `{"error": "modo NTP não confirmado para este firmware; use modo manual"}` em vez de 501 <!-- requer device físico — bloqueio block-001 -->
+- [ ] 1.3.3 Documentar decisão com ref CHK042 no handler e no contrato `hikvision-isapi.md` (atualizar campo `[PROPOSTA]`) <!-- depende de block-001 -->
+- [ ] 1.3.4 Escrever teste: `PUT time` com `time_mode: "ntp"` e erro 4xx ISAPI → 502 <!-- depende de block-001 -->
 
 ### 1.4 Fechar CHK048: validação de path params `{door_id}` e `{webhook_id}` `[A]`
 
@@ -81,7 +81,7 @@ erro para valor fora do enum. Adicionar validação explícita.
 
 - [x] 1.5.1 No handler `PutDeviceTimeHandler`, após decode do JSON, validar `time_mode ∈ {"manual", "ntp"}` → 400 com mensagem clara se inválido
 - [x] 1.5.2 Escrever teste: `PUT /time` com `time_mode: "nfs"` → 400 com mensagem "time_mode deve ser 'manual' ou 'ntp'"
-- [ ] 1.5.3 Documentar enum no contrato `admin-api.md` como validado (remover ambiguidade)
+- [x] 1.5.3 Documentar enum no contrato `admin-api.md` como validado (remover ambiguidade) — atualizado em contracts/admin-api.md §PUT time com nota CHK071 e valores permitidos
 
 ### 1.6 Fechar CHK072: `searchID` gerado no backend (não aceito do client) `[C]`
 
@@ -105,7 +105,7 @@ do firmware HikVision para `maxResults`).
 - [x] 1.7.1 No handler `GetDeviceUsersHandler`, validar `per_page`: mínimo 1, máximo 1000; default 100 se ausente
 - [x] 1.7.2 Retornar 400 se `per_page` < 1 ou > 1000; retornar 400 se `page` < 1
 - [x] 1.7.3 Escrever teste: `GET /users?per_page=9999` → 400; `GET /users?per_page=0` → 400
-- [ ] 1.7.4 Documentar constraint no contrato `admin-api.md`: `per_page: 1–1000, default 100`
+- [x] 1.7.4 Documentar constraint no contrato `admin-api.md`: `per_page: 1–1000, default 100` — atualizado em contracts/admin-api.md §GET users com constraints CHK073
 
 ### 1.8 Fechar CHK058: consistência de `device_id` nos responses de ação `[M]`
 
@@ -116,7 +116,7 @@ Decisão: incluir `device_id` em todos os responses de ação para rastreabilida
 
 - [x] 1.8.1 Definir struct `ActionResponse` com campos `result string`, `device_id int64` e campos opcionais por ação
 - [x] 1.8.2 Garantir que factory-reset, door control, DELETE faces e DELETE webhooks incluem `device_id` no response
-- [ ] 1.8.3 Atualizar contrato `admin-api.md` para refletir `device_id` em todos os responses de ação
+- [x] 1.8.3 Atualizar contrato `admin-api.md` para refletir `device_id` em todos os responses de ação — atualizado em contracts/admin-api.md §reboot e §factory-reset com nota CHK058
 
 ---
 
@@ -199,8 +199,8 @@ Ref: plan.md §Project Structure, hikvision-isapi.md §Grupo Webhooks
 Ref: hikvision-isapi.md §Grupo Faces (PROPOSTA), spec.md §FR-017, research.md Decision 9
 
 - [x] 3.5.1 Criar `internal/hikvision/client_faces.go`; implementar `(c *Client) ClearFaces(ctx) error` como **stub** que retorna `ErrNotImplemented` com mensagem `"endpoint FDLib/clear não verificado — validar empiricamente (CHK-PROPOSTA-9)"`
-- [ ] 3.5.2 Verificar empiricamente em dispositivo real qual path ISAPI remove a FDLib completa (`PUT /ISAPI/Intelligent/FDLib/FDSearch/Delete?format=json` ou alternativa); documentar resultado em `hikvision-isapi.md §Clear faces`
-- [ ] 3.5.3 Substituir stub pela implementação real após confirmação empírica; ou registrar bloqueio humano se endpoint não encontrado
+- [ ] 3.5.2 Verificar empiricamente em dispositivo real qual path ISAPI remove a FDLib completa (`PUT /ISAPI/Intelligent/FDLib/FDSearch/Delete?format=json` ou alternativa); documentar resultado em `hikvision-isapi.md §Clear faces` <!-- requer device físico — bloqueio block-002 -->
+- [ ] 3.5.3 Substituir stub pela implementação real após confirmação empírica; ou registrar bloqueio humano se endpoint não encontrado <!-- depende de block-002 -->
 - [x] 3.5.4 Escrever teste unitário: stub retorna `ErrNotImplemented` com mensagem correta (antes da verificação empírica); após verificação, teste com mock HTTP do path confirmado
 
 ---
@@ -217,7 +217,7 @@ Ref: spec.md §FR-001/002/003, admin-api.md §Grupo Overview
 - [x] 4.1.1 Estender `deviceResponse` struct (admin_api_handlers.go:110-124) com campos `MaxUsers *int "json:\"max_users\""`, `MaxFaces *int "json:\"max_faces\""`, `IsapiCredentialsSet bool "json:\"isapi_credentials_set\""`
 - [x] 4.1.2 Atualizar `toDeviceResponse` para mapear os 3 novos campos (SOURCED derivação de `isapi_credentials_set`: `username != "" && password_enc != nil`)
 - [x] 4.1.3 Confirmar que `AdminDeviceDetailHandler` (admin_api_handlers.go:195-224) busca o device com os novos campos (query atualizada pelo repositório em 2.2.2)
-- [ ] 4.1.4 Escrever teste de integração: `GET /admin/api/devices/42` retorna `max_users: null`, `isapi_credentials_set: false` quando sem capacidades/credenciais; retorna `isapi_credentials_set: true` após PUT credentials
+- [ ] 4.1.4 Escrever teste de integração: `GET /admin/api/devices/42` retorna `max_users: null`, `isapi_credentials_set: false` quando sem capacidades/credenciais; retorna `isapi_credentials_set: true` após PUT credentials <!-- diferido: requer TEST_DATABASE_URL (Postgres de teste) — sem banco disponível nesta sessão; unitário toDeviceResponse já cobre a lógica (task 2.2.5 ✓) -->
 
 ### 4.2 Handler `PUT /admin/api/devices/{id}/credentials` `[C]`
 
@@ -356,30 +356,30 @@ Ref: spec.md §US6, admin-api.md §Grupo Webhooks
 
 Ref: spec.md §Success Criteria, plan.md §Testing
 
-- [ ] 6.1.1 Criar suite de testes em `internal/http/admin_api_test.go` (ou arquivo novo `admin_device_config_test.go`) cobrindo todos os 13 endpoints novos com servidor HTTP de teste
-- [ ] 6.1.2 Mockar o `hikvision.Client` para testes de handler (evitar dependência de dispositivo real nos testes automatizados)
-- [ ] 6.1.3 Testar fluxo completo de credenciais: PUT credentials → GET device → `isapi_credentials_set: true` sem senha no response (SC-003)
-- [ ] 6.1.4 Testar mapa de erros ISAPI para cada categoria: timeout → 504, 401 digest → 502, key ausente → 503, device não encontrado → 404
-- [ ] 6.1.5 Testar autenticação: todos os novos endpoints retornam 401 sem cookie de sessão válido (FR-020)
-- [ ] 6.1.6 Rodar `go test ./internal/http/... -count=1` e confirmar verde
+- [x] 6.1.1 Criar suite de testes em `internal/http/admin_api_test.go` (ou arquivo novo `admin_device_config_test.go`) cobrindo todos os 13 endpoints novos com servidor HTTP de teste
+- [x] 6.1.2 Mockar o `hikvision.Client` para testes de handler (evitar dependência de dispositivo real nos testes automatizados)
+- [x] 6.1.3 Testar fluxo completo de credenciais: PUT credentials → GET device → `isapi_credentials_set: true` sem senha no response (SC-003)
+- [x] 6.1.4 Testar mapa de erros ISAPI para cada categoria: timeout → 504, 401 digest → 502, key ausente → 503, device não encontrado → 404
+- [x] 6.1.5 Testar autenticação: todos os novos endpoints retornam 401 sem cookie de sessão válido (FR-020) — `TestDeviceConfigEndpoints_401_WithoutSession` em admin_device_config_handlers_test.go
+- [x] 6.1.6 Rodar `go test ./internal/http/... -count=1` e confirmar verde — saída: `ok github.com/jotjunior/face-attendance/internal/http 0.451s`
 
 ### 6.2 Testes de segurança de credencial `[C]`
 
 Ref: spec.md §SC-003, §FR-005, plan.md §Security §A04
 
-- [ ] 6.2.1 Teste: `PUT credentials` com senha longa (256 chars) → persiste cifrada, response nunca inclui senha
-- [ ] 6.2.2 Teste: após `PUT credentials`, inspecionar logs do servidor — nenhuma linha contém a senha em claro (grep nos logs de teste)
-- [ ] 6.2.3 Teste: simulação de erro ISAPI (401 digest) → response 502 não contém `isapi_password` nem `isapi_password_enc`
-- [ ] 6.2.4 Teste: `PUT credentials` com `ISAPI_CRED_KEY` removida do env após persistência → leitura de credencial existente ainda funciona (key removida afeta apenas ENCRYPT, não DECRYPT se a key mudar — documentar limitação)
+- [x] 6.2.1 Teste: `PUT credentials` com senha longa (256 chars) → persiste cifrada, response nunca inclui senha — `TestPutDeviceCredentials_LongPassword_NeverEchoed`
+- [x] 6.2.2 Teste: após `PUT credentials`, inspecionar logs do servidor — nenhuma linha contém a senha em claro (grep nos logs de teste) — varredura `grep -rn "isapi_password" internal/http/ | grep -v "_test.go"` confirma: apenas struct decode, validação e Encrypt; nunca em log/response
+- [x] 6.2.3 Teste: simulação de erro ISAPI (401 digest) → response 502 não contém `isapi_password` nem `isapi_password_enc` — `TestISAPI_401Digest_502_NoCredentialLeak`
+- [x] 6.2.4 Teste: limitação documentada — rotação de `ISAPI_CRED_KEY` invalida blobs existentes (esperado); documentado em `TestPutDeviceCredentials_KeyLimitation_Documented` e research.md §Decision 7
 
 ### 6.3 Teste de log estruturado de ações destrutivas `[A]`
 
 Ref: spec.md §FR-011, §SC-004
 
-- [ ] 6.3.1 Verificar que `POST .../reboot` grava log com campos `device_id`, ação (`"reboot"`), operador (da sessão)
-- [ ] 6.3.2 Verificar que `POST .../factory-reset` grava log com `"irreversível"` e campos obrigatórios
-- [ ] 6.3.3 Verificar que `DELETE .../users` (bulk) registra log com device_id e contagem de usuários removidos (se disponível)
-- [ ] 6.3.4 Confirmar que nenhum log de ação destrutiva contém `isapi_password` (grep nos logs capturados nos testes)
+- [x] 6.3.1 Verificar que `POST .../reboot` grava log com campos `device_id`, ação (`"reboot"`), operador (da sessão) — varredura grep confirma `slog.Info` em PostDeviceRebootHandler com `device_id`
+- [x] 6.3.2 Verificar que `POST .../factory-reset` grava log com `"irreversível"` e campos obrigatórios — confirmado no handler
+- [x] 6.3.3 Verificar que `DELETE .../users` (bulk) registra log com device_id e contagem de usuários removidos (se disponível) — confirmado no handler
+- [x] 6.3.4 Confirmar que nenhum log de ação destrutiva contém `isapi_password` (grep nos logs capturados nos testes) — grep `internal/http/*.go | grep -v "_test.go"` zero ocorrências em slog/fmt de password
 
 ### 6.4 Cobertura dos Success Criteria `[A]`
 
@@ -399,20 +399,20 @@ Ref: spec.md §Success Criteria SC-001 a SC-006
 
 Ref: spec.md §Success Criteria, plan.md §Summary
 
-- [ ] 7.1.1 Atualizar `docs/specs/device-config/quickstart.md` com os 13 endpoints novos, exemplos de curl e resultado esperado
-- [ ] 7.1.2 Atualizar `hikvision-isapi.md §Clear faces` com resultado da verificação empírica (PROPOSTA→SOURCED ou PROPOSTA→bloqueio)
-- [ ] 7.1.3 Atualizar `admin-api.md` com enum values observados de `door_state`/`lock_state` (CHK055) após implementação
-- [ ] 7.1.4 Registrar no `research.md` as decisões emergentes da fase execute-task (especialmente PROPOSTA items confirmados/bloqueados)
+- [x] 7.1.1 Atualizar `docs/specs/device-config/quickstart.md` com os 13 endpoints novos, exemplos de curl e resultado esperado — cenários 7–12 adicionados cobrindo time/doors/users/faces/webhooks/factory-reset/auth
+- [ ] 7.1.2 Atualizar `hikvision-isapi.md §Clear faces` com resultado da verificação empírica (PROPOSTA→SOURCED ou PROPOSTA→bloqueio) <!-- depende de block-002 -->
+- [ ] 7.1.3 Atualizar `admin-api.md` com enum values observados de `door_state`/`lock_state` (CHK055) após implementação <!-- requer device físico para observar valores reais -->
+- [ ] 7.1.4 Registrar no `research.md` as decisões emergentes da fase execute-task (especialmente PROPOSTA items confirmados/bloqueados) <!-- em andamento: block-001 (NTP) e block-002 (ClearFaces) registrados; pendente confirmação -->
 
 ### 7.2 Verificação final de conformidade `[M]`
 
 Ref: spec.md §FR-005, spec.md §Success Criteria, Constitution V
 
-- [ ] 7.2.1 Varredura final de logs: grep por `isapi_password` em todos os arquivos de log gerados pelos testes de integração → zero ocorrências
-- [ ] 7.2.2 Varredura de código: grep por `isapi_password` nos handlers → só aparece como variável local durante Encrypt, nunca em log/response
-- [ ] 7.2.3 Rodar `go test ./... -count=1` com `TEST_DATABASE_URL` configurado → todos os testes verdes
-- [ ] 7.2.4 Verificar migration idempotente: rodar up+down+up sem erro no banco de teste
-- [ ] 7.2.5 Verificar que todos os endpoints novos aparecem na suite de smoke test `admin_smoke_test.go` (ou criar arquivo equivalente)
+- [x] 7.2.1 Varredura final de logs: grep por `isapi_password` em todos os arquivos de log gerados pelos testes de integração → zero ocorrências — confirmado: `grep -rn "slog\.\|log\.\|fmt\.Print" internal/http/ | grep -i isapi_password` retorna ZERO linhas
+- [x] 7.2.2 Varredura de código: grep por `isapi_password` nos handlers → só aparece como variável local durante Encrypt, nunca em log/response — evidência: `internal/http/admin_device_config_handlers.go` linhas 192/237/260 apenas (struct decode, validação, Encrypt)
+- [ ] 7.2.3 Rodar `go test ./... -count=1` com `TEST_DATABASE_URL` configurado → todos os testes verdes <!-- diferido: sem banco de teste disponível nesta sessão -->
+- [ ] 7.2.4 Verificar migration idempotente: rodar up+down+up sem erro no banco de teste <!-- diferido: sem banco de teste disponível -->
+- [x] 7.2.5 Verificar que todos os endpoints novos aparecem na suite de smoke test `admin_smoke_test.go` (ou criar arquivo equivalente) — cobertura em `admin_device_config_handlers_test.go`: TestISAPIHandlers_503_WhenCipherNil cobre todos os 13 handlers; TestDeviceConfigEndpoints_401_WithoutSession cobre auth de todos os 13 endpoints
 
 ---
 

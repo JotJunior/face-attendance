@@ -116,11 +116,120 @@ válida (cookie `admin_session`), `ISAPI_CRED_KEY` exportada (32 bytes hex/base6
 
 ---
 
-## Cenário 7 — Segurança de sessão (FR-006/020)
+## Cenário 7 — Configurar hora do dispositivo (US3, FR-010/CHK071)
+
+```bash
+# Ler hora atual
+curl -s -b cookies.txt http://localhost:8080/admin/api/devices/42/time | jq .
+# Expected: {"local_time":"2026-06-21T14:30:00","time_zone":"CST-8:00:00","time_mode":"manual"}
+
+# Ajustar hora (modo manual)
+curl -s -b cookies.txt -X PUT -H 'Content-Type: application/json' \
+  -d '{"time_mode":"manual","local_time":"2026-06-21T10:00:00","time_zone":"BRT-3:00:00"}' \
+  http://localhost:8080/admin/api/devices/42/time
+# Expected 200: {"result":"ok"}
+
+# Enum inválido (CHK071)
+curl -s -b cookies.txt -X PUT -H 'Content-Type: application/json' \
+  -d '{"time_mode":"nfs"}' http://localhost:8080/admin/api/devices/42/time
+# Expected 400: {"error":"time_mode deve ser 'manual' ou 'ntp'"}
+```
+
+**NTP**: modo `time_mode:"ntp"` é aceito pelo handler mas comportamento no
+firmware não foi verificado empiricamente (bloqueio block-001 — ver tasks 1.3.x).
+
+---
+
+## Cenário 8 — Listar portas e controle (US4, FR-012/013/014)
+
+```bash
+# Listar portas
+curl -s -b cookies.txt http://localhost:8080/admin/api/devices/42/doors | jq .
+# Expected: {"doors":[{"door_id":1,"door_name":"Main Door","reader_count":1}],"total":1}
+
+# Status de uma porta
+curl -s -b cookies.txt http://localhost:8080/admin/api/devices/42/doors/1/status | jq .
+# Expected: {"door_id":1,"door_state":"...","lock_state":"...","open_duration":5}
+
+# Controlar porta (abrir)
+curl -s -b cookies.txt -X POST -H 'Content-Type: application/json' \
+  -d '{"command":"open"}' http://localhost:8080/admin/api/devices/42/doors/1/control
+# Expected 200: {"result":"ok","command":"open","device_id":42}
+
+# Comando inválido → 400
+curl -s -b cookies.txt -X POST -H 'Content-Type: application/json' \
+  -d '{"command":"fly_open"}' http://localhost:8080/admin/api/devices/42/doors/1/control
+# Expected 400
+
+# door_id inválido → 400 (CHK048)
+curl -s -b cookies.txt http://localhost:8080/admin/api/devices/42/doors/0/status
+# Expected 400
+```
+
+---
+
+## Cenário 9 — Usuários: paginação e clear (US5, FR-016/016b)
+
+```bash
+# Paginação (per_page 1-1000, default 100)
+curl -s -b cookies.txt 'http://localhost:8080/admin/api/devices/42/users?page=1&per_page=20' | jq .
+# Expected: {"users":[...],"total":N,"page":1,"per_page":20}
+
+# per_page fora do range → 400 (CHK073)
+curl -s -b cookies.txt 'http://localhost:8080/admin/api/devices/42/users?per_page=9999'
+# Expected 400
+
+# Limpar todos os usuários (ação destrutiva — confirmar na UI antes)
+curl -s -b cookies.txt -X DELETE http://localhost:8080/admin/api/devices/42/users
+# Expected 200: {"result":"cleared","device_id":42}
+# Nota: operação atômica no ISAPI; timeout retorna 504 com campo "action" orientativo.
+
+# Limpar biblioteca de faces — STUB até verificação empírica
+curl -s -b cookies.txt -X DELETE http://localhost:8080/admin/api/devices/42/faces
+# Expected 501: stub ativo (bloqueio block-002)
+```
+
+---
+
+## Cenário 10 — Webhooks: listar e remover (US6, FR-018/019)
+
+```bash
+# Listar webhooks configurados no device
+curl -s -b cookies.txt http://localhost:8080/admin/api/devices/42/webhooks | jq .
+# Expected: {"webhooks":[{"id":"<hash>","url":"http://...","protocol":"HTTP"}],"total":1}
+
+# Remover webhook secundário (não afeta webhook_configured no banco)
+curl -s -b cookies.txt -X DELETE http://localhost:8080/admin/api/devices/42/webhooks/secondary-id
+# Expected 200: {"result":"removed","webhook_configured":true,"device_id":42}
+
+# Remover webhook principal (deterministicHostID — atualiza webhook_configured=false)
+MAIN_ID=$(curl -s -b cookies.txt http://localhost:8080/admin/api/devices/42/webhooks | jq -r '.webhooks[0].id')
+curl -s -b cookies.txt -X DELETE "http://localhost:8080/admin/api/devices/42/webhooks/$MAIN_ID"
+# Expected 200: {"result":"removed","webhook_configured":false,"device_id":42}
+```
+
+---
+
+## Cenário 11 — Factory reset (US3, FR-009)
+
+```bash
+# Factory reset (ação irreversível — confirmar digitando identificador na UI)
+curl -s -b cookies.txt -X POST http://localhost:8080/admin/api/devices/42/actions/factory-reset
+# Expected 200: {"result":"factory_reset_initiated","webhook_configured":false,"device_id":42}
+# Pós-sucesso: webhook_configured=false no banco (device precisará ser reconfigurado)
+```
+
+---
+
+## Cenário 12 — Segurança de sessão (FR-006/020)
 
 1. `PUT /admin/api/devices/42/credentials` SEM cookie `admin_session`.
 2. **Expected**: `401` JSON + header `X-Redirect-To` (padrão SOURCED
    session.go); nenhuma escrita no banco; nenhuma chamada ISAPI.
+
+Todos os 13 endpoints novos passam pelo `SessionMiddleware` via
+`adminDevicesRouter` (server.go:101) — comportamento idêntico ao dos
+4 endpoints admin já existentes.
 
 ---
 
@@ -130,8 +239,14 @@ válida (cookie `admin_session`), `ISAPI_CRED_KEY` exportada (32 bytes hex/base6
 |---------|-------|
 | 1, 1b | FR-001, FR-002, FR-003, SC-001, US1 |
 | 2, 2b | FR-004, FR-005, FR-007, SC-002, SC-003 |
-| 3, 3b | FR-008, FR-011, SC-004, US3 |
+| 3, 3b | FR-008, FR-011, SC-004, US3 (reboot) |
 | 4, 4b | FR-014, FR-015, FR-021/022, SC-005, SC-006 |
 | 5 | FR-016, US5 |
 | 6, 6b | FR-001/003, FR-023, **borda backend↔frontend (anti-drift)** |
+| 7 | FR-010, CHK071 (time_mode enum) |
+| 8 | FR-012, FR-013, FR-014, CHK048 (door_id validation) |
+| 9 | FR-016, FR-016b, CHK073 (per_page range), CHK009 (timeout ação bulk) |
+| 10 | FR-018, FR-019 (webhook principal vs secundário) |
+| 11 | FR-009 (factory-reset irreversível), pós-webhook_configured=false |
+| 12 | FR-006, FR-020 (401 todos os 13 endpoints) |
 | 7 | FR-006, FR-020 |
