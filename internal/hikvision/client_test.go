@@ -22,6 +22,48 @@ func makeISAPIServer(t *testing.T, handler http.HandlerFunc) (*httptest.Server, 
 	return srv, cfg
 }
 
+// TestFetchDeviceInfo_XML verifica o parse do deviceInfo em XML (formato padrão do firmware).
+func TestFetchDeviceInfo_XML(t *testing.T) {
+	srv, cfg := makeISAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "/System/deviceInfo") {
+			t.Errorf("path inesperado: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/xml")
+		w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>` + //nolint:errcheck
+			`<DeviceInfo><deviceName>Access Controller</deviceName><model>DS-K1T671</model>` +
+			`<serialNumber>DS-K1T671ABC123</serialNumber><firmwareVersion>V3.2.1</firmwareVersion></DeviceInfo>`))
+	})
+	defer srv.Close()
+
+	info, err := hikvision.NewWithHTTPClient(cfg, srv.Client()).FetchDeviceInfo(context.Background())
+	if err != nil {
+		t.Fatalf("FetchDeviceInfo: %v", err)
+	}
+	if info.SerialNumber != "DS-K1T671ABC123" {
+		t.Errorf("serial: got %q", info.SerialNumber)
+	}
+	if info.Model != "DS-K1T671" || info.FirmwareVersion != "V3.2.1" {
+		t.Errorf("model/firmware: got %q / %q", info.Model, info.FirmwareVersion)
+	}
+}
+
+// TestFetchDeviceInfo_JSON verifica o fallback de parse em JSON.
+func TestFetchDeviceInfo_JSON(t *testing.T) {
+	srv, cfg := makeISAPIServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"DeviceInfo":{"deviceName":"AC","model":"M1","serialNumber":"SN999","firmwareVersion":"V1"}}`)) //nolint:errcheck
+	})
+	defer srv.Close()
+
+	info, err := hikvision.NewWithHTTPClient(cfg, srv.Client()).FetchDeviceInfo(context.Background())
+	if err != nil {
+		t.Fatalf("FetchDeviceInfo: %v", err)
+	}
+	if info.SerialNumber != "SN999" || info.Model != "M1" {
+		t.Errorf("got serial=%q model=%q", info.SerialNumber, info.Model)
+	}
+}
+
 // TestUpsertUser_Create tests creating a user via POST /Record (JSON, returns 200).
 func TestUpsertUser_Create(t *testing.T) {
 	var receivedJSON string
