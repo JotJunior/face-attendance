@@ -10,12 +10,16 @@ import (
 func setRequiredVars(t *testing.T) func() {
 	t.Helper()
 	vars := map[string]string{
-		"GOB_STATE_URL":     "https://gob.example.com",
-		"GOB_STATE_TOKEN":   "tok_test_secret",
-		"ADMIN_TOKEN":       "admin_test_secret",
+		"GOB_STATE_URL":       "https://gob.example.com",
+		"GOB_STATE_TOKEN":     "tok_test_secret",
+		"ADMIN_TOKEN":         "admin_test_secret",
 		"WEBHOOK_PATH_SECRET": "abc123secret",
-		"DATABASE_URL":      "postgres://presenca:presenca_dev@localhost:5432/presenca_facial",
-		"RABBITMQ_URL":      "amqp://guest:guest@localhost:5672/",
+		"DATABASE_URL":        "postgres://presenca:presenca_dev@localhost:5432/presenca_facial",
+		"RABBITMQ_URL":        "amqp://guest:guest@localhost:5672/",
+		// Admin UI authentication (FASE 2 — required, no default)
+		"ADMIN_USERNAME":       "admin",
+		"ADMIN_PASSWORD":       "senha_teste_segura",
+		"ADMIN_SESSION_SECRET": "segredo_hmac_32_bytes_minimo_aqui",
 	}
 	for k, v := range vars {
 		os.Setenv(k, v) //nolint:errcheck
@@ -52,7 +56,11 @@ func TestLoad_AllPresent(t *testing.T) {
 
 func TestLoad_MissingRequired(t *testing.T) {
 	// Ensure no relevant env vars are set
-	vars := []string{"GOB_STATE_URL", "GOB_STATE_TOKEN", "ADMIN_TOKEN", "WEBHOOK_PATH_SECRET", "DATABASE_URL", "RABBITMQ_URL"}
+	vars := []string{
+		"GOB_STATE_URL", "GOB_STATE_TOKEN", "ADMIN_TOKEN", "WEBHOOK_PATH_SECRET",
+		"DATABASE_URL", "RABBITMQ_URL",
+		"ADMIN_USERNAME", "ADMIN_PASSWORD", "ADMIN_SESSION_SECRET",
+	}
 	for _, v := range vars {
 		os.Unsetenv(v) //nolint:errcheck
 	}
@@ -63,6 +71,82 @@ func TestLoad_MissingRequired(t *testing.T) {
 	}
 
 	for _, name := range vars {
+		if !contains(err.Error(), name) {
+			t.Errorf("error should mention missing var %s; got: %v", name, err)
+		}
+	}
+}
+
+func TestLoad_AdminUIVars(t *testing.T) {
+	cleanup := setRequiredVars(t)
+	defer cleanup()
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+
+	// Verify admin UI required vars are loaded
+	if cfg.AdminUsername != "admin" {
+		t.Errorf("AdminUsername = %q, want %q", cfg.AdminUsername, "admin")
+	}
+	if cfg.AdminPassword != "senha_teste_segura" {
+		t.Errorf("AdminPassword = %q, want %q", cfg.AdminPassword, "senha_teste_segura")
+	}
+	if cfg.AdminSessionSecret != "segredo_hmac_32_bytes_minimo_aqui" {
+		t.Errorf("AdminSessionSecret = %q, want %q", cfg.AdminSessionSecret, "segredo_hmac_32_bytes_minimo_aqui")
+	}
+
+	// Verify optional vars use defaults
+	if cfg.AdminSessionTTLHours != 8 {
+		t.Errorf("AdminSessionTTLHours default = %d, want 8", cfg.AdminSessionTTLHours)
+	}
+	if cfg.DeviceOfflineThresholdHours != 24 {
+		t.Errorf("DeviceOfflineThresholdHours default = %d, want 24", cfg.DeviceOfflineThresholdHours)
+	}
+}
+
+func TestLoad_AdminUIOptionalOverrides(t *testing.T) {
+	cleanup := setRequiredVars(t)
+	defer cleanup()
+
+	os.Setenv("ADMIN_SESSION_TTL_HOURS", "12")
+	os.Setenv("DEVICE_OFFLINE_THRESHOLD_HOURS", "48")
+	defer func() {
+		os.Unsetenv("ADMIN_SESSION_TTL_HOURS")
+		os.Unsetenv("DEVICE_OFFLINE_THRESHOLD_HOURS")
+	}()
+
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load() unexpected error: %v", err)
+	}
+
+	if cfg.AdminSessionTTLHours != 12 {
+		t.Errorf("AdminSessionTTLHours = %d, want 12", cfg.AdminSessionTTLHours)
+	}
+	if cfg.DeviceOfflineThresholdHours != 48 {
+		t.Errorf("DeviceOfflineThresholdHours = %d, want 48", cfg.DeviceOfflineThresholdHours)
+	}
+}
+
+func TestLoad_MissingAdminUIRequired(t *testing.T) {
+	// Set all vars except admin UI ones
+	cleanup := setRequiredVars(t)
+	defer cleanup()
+
+	// Unset the new required vars one by one
+	adminVars := []string{"ADMIN_USERNAME", "ADMIN_PASSWORD", "ADMIN_SESSION_SECRET"}
+	for _, v := range adminVars {
+		os.Unsetenv(v) //nolint:errcheck
+	}
+
+	_, err := config.Load()
+	if err == nil {
+		t.Fatal("Load() expected error for missing admin UI vars, got nil")
+	}
+
+	for _, name := range adminVars {
 		if !contains(err.Error(), name) {
 			t.Errorf("error should mention missing var %s; got: %v", name, err)
 		}

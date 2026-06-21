@@ -22,6 +22,7 @@ import (
 	"github.com/jotjunior/face-attendance/internal/queue"
 	"github.com/jotjunior/face-attendance/internal/repository"
 	"github.com/jotjunior/face-attendance/internal/scheduler"
+	"github.com/jotjunior/face-attendance/internal/web"
 	"github.com/jotjunior/face-attendance/internal/worker"
 )
 
@@ -59,9 +60,13 @@ func run() error {
 	gobClient := gob.New(cfg.GobStateURL, cfg.GobStateToken)
 
 	// --- RabbitMQ ---
+	// O publisher também é necessário quando o painel admin está ligado: o reenvio
+	// individual de membro (POST /admin/api/members/{id}/resync) publica na fila,
+	// não só o scheduler/workers.
+	adminUIEnabled := cfg.AdminUsername != "" && cfg.AdminSessionSecret != ""
 	var pub *queue.Publisher
 	var amqpConn *amqp.Connection
-	if cfg.RunScheduler || cfg.RunWorkers {
+	if cfg.RunScheduler || cfg.RunWorkers || adminUIEnabled {
 		conn, ch, amqpErr := queue.Connect(cfg.RabbitMQURL)
 		if amqpErr != nil {
 			return fmt.Errorf("rabbitmq: %w", amqpErr)
@@ -115,6 +120,22 @@ func run() error {
 		return ips
 	}
 
+	// Admin UI config (painel de administração web — FASE 2/3)
+	adminLoginCfg := httphandler.AdminLoginConfig{
+		Username:      cfg.AdminUsername,
+		Password:      cfg.AdminPassword,
+		SessionSecret: cfg.AdminSessionSecret,
+		SessionTTL:    time.Duration(cfg.AdminSessionTTLHours) * time.Hour,
+		CookieSecure:  cfg.AdminCookieSecure,
+	}
+	adminAPICfg := httphandler.AdminAPIConfig{
+		MemberRepo:             memberRepo,
+		DeviceRepo:             deviceRepo,
+		AttendanceRepo:         eventRepo,
+		DeviceOfflineThreshold: cfg.DeviceOfflineThresholdHours,
+		Logger:                 logger,
+	}
+
 	srv := httphandler.NewServer(httphandler.ServerConfig{
 		Addr:                    ":8080",
 		WebhookPathSecret:       cfg.WebhookPathSecret,
@@ -125,6 +146,16 @@ func run() error {
 		HealthHandler:           healthHandler,
 		AdminHandler:            adminHandler,
 		AllowedWebhookIPs:       allowedIPs,
+		// Admin UI — habilitado quando as env vars obrigatórias estão presentes
+		AdminUIEnabled: adminUIEnabled,
+		AdminLoginCfg:  adminLoginCfg,
+		AdminAPICfg:    adminAPICfg,
+		AdminResyncCfg: httphandler.AdminResyncConfig{
+			MemberFinder: memberRepo,
+			Publisher:    pub, // não-nil quando adminUIEnabled (ver bloco RabbitMQ)
+			Logger:       logger,
+		},
+		AdminAssets: http.FS(web.Assets), // embed.FS — assets populados na FASE 3
 	})
 
 	// --- Orchestration context (definido antes dos workers p/ o consumer usar) ---
