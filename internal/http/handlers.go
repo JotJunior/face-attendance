@@ -19,9 +19,11 @@ import (
 	"github.com/jotjunior/face-attendance/internal/repository"
 )
 
-// DeviceRegistrar is the interface the heartbeat handler uses to register devices.
+// DeviceRegistrar is the interface the heartbeat handler uses to register devices
+// and resolver o id do device (para vincular ao evento de presença).
 type DeviceRegistrar interface {
 	Upsert(ctx context.Context, d domain.Device) error
+	FindByMAC(ctx context.Context, mac string) (*domain.Device, error)
 }
 
 // MemberFinder is the interface the webhook handler uses to look up members by CPF.
@@ -131,6 +133,7 @@ func (h *EventHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Register/update device (liveness) — FR-001/FR-002
+	var deviceDBID *int64
 	if payload.MACAddress != "" || payload.IPAddress != "" {
 		identifier := payload.MACAddress
 		if identifier == "" {
@@ -147,6 +150,11 @@ func (h *EventHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			h.logger.Error("heartbeat_received", identifier, "", "device upsert failed", upsertErr)
 		} else {
 			h.logger.Info("heartbeat_received", identifier, "", "device registered/updated")
+		}
+		// Resolve o id do device (registrado por MAC) para vincular ao evento de
+		// presença — assim a coluna "Dispositivo" mostra de qual leitor veio o acesso.
+		if dev, findErr := h.deviceRepo.FindByMAC(ctx, identifier); findErr == nil && dev != nil {
+			deviceDBID = &dev.ID
 		}
 	}
 
@@ -212,6 +220,7 @@ func (h *EventHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		EmployeeNoString: employeeNoString,
 		FederalDocument:  federalDoc,
 		MemberID:         memberID,
+		DeviceID:         deviceDBID,
 		AttendanceStatus: strPtr(attendanceStatus),
 		EventDatetime:    eventDatetime,
 		RawPayload:       rawPayload,
