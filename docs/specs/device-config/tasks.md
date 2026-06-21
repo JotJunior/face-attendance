@@ -33,10 +33,10 @@ carregamento de `DeviceConfig`.
 
 - [x] 1.1.1 Verificar em `internal/hikvision/client.go` como `DeviceConfig` é montado antes de chamar `doRequest` (onde a descriptografia ocorre)
 - [x] 1.1.2 Definir que `loadDeviceConfig(device)` retorna erro específico quando `ISAPI_CRED_KEY` ausente ou descriptografia falha
-- [ ] 1.1.3 Garantir que todos os handlers de ação ISAPI mapeiam esse erro para `503` com mensagem orientativa (mesmo mecanismo de FR-007)
+- [x] 1.1.3 Garantir que todos os handlers de ação ISAPI mapeiam esse erro para `503` com mensagem orientativa (mesmo mecanismo de FR-007)
 - [x] 1.1.4 Documentar decisão inline no handler helper (comentário com ref CHK007)
 - [x] 1.1.5 Escrever teste unitário: `loadDeviceConfig` retorna `ErrKeyMissing` quando env `ISAPI_CRED_KEY` não está configurada
-- [ ] 1.1.6 Escrever teste unitário: handler de reboot retorna 503 quando `ErrKeyMissing`
+- [x] 1.1.6 Escrever teste unitário: handler de reboot retorna 503 quando `ErrKeyMissing`
 
 ### 1.2 Fechar CHK009: comportamento de falha parcial em `DELETE /users` `[A]`
 
@@ -46,9 +46,9 @@ Case §4 documenta o comportamento esperado mas não está no FR. Decisão: o
 handler retorna o erro ISAPI diretamente com mensagem orientativa; não há
 tentativa de rollback (a operação ISAPI é atômica no dispositivo).
 
-- [ ] 1.2.1 Adicionar ao handler `DeleteDeviceUsersHandler` documentação inline: "operação atômica no ISAPI; timeout retorna 504 com orientação para verificar manualmente"
-- [ ] 1.2.2 Garantir que timeout em `UserInfo/Clear` retorna 504 com body `{"error": "...", "action": "verificar dispositivo manualmente"}`
-- [ ] 1.2.3 Escrever teste: `DELETE /users` com timeout ISAPI → 504 com campo `action` no body
+- [x] 1.2.1 Adicionar ao handler `DeleteDeviceUsersHandler` documentação inline: "operação atômica no ISAPI; timeout retorna 504 com orientação para verificar manualmente"
+- [x] 1.2.2 Garantir que timeout em `UserInfo/Clear` retorna 504 com body `{"error": "...", "action": "verificar dispositivo manualmente"}`
+- [x] 1.2.3 Escrever teste: `DELETE /users` com timeout ISAPI → 504 com campo `action` no body
 
 ### 1.3 Fechar CHK042: fallback para NTP não suportado pelo firmware `[A]`
 
@@ -70,8 +70,8 @@ FR-023 valida `{id}` do device (404), mas não especifica validação de
 
 - [x] 1.4.1 No helper `extractLastPathSegment`, identificar onde `door_id` é extraído e adicionar validação `>= 1` (400 para valor inválido)
 - [x] 1.4.2 Para `{webhook_id}` em `DELETE /webhooks/{id}`: validar string não-vazia e sem caracteres de path traversal (`/`, `..`)
-- [ ] 1.4.3 Escrever teste: `GET /doors/0/status` → 400; `GET /doors/-1/status` → 400
-- [ ] 1.4.4 Escrever teste: `DELETE /webhooks/` (id vazio) → 400 ou 404
+- [x] 1.4.3 Escrever teste: `GET /doors/0/status` → 400; `GET /doors/-1/status` → 400
+- [x] 1.4.4 Escrever teste: `DELETE /webhooks/` (id vazio) → 400 ou 404
 
 ### 1.5 Fechar CHK071: validação de `time_mode` enum no `PUT /time` `[A]`
 
@@ -79,8 +79,8 @@ Ref: checklists/security.md CHK071 [Gap]
 `time_mode` aceita apenas `"manual"` ou `"ntp"` mas o handler não especifica
 erro para valor fora do enum. Adicionar validação explícita.
 
-- [ ] 1.5.1 No handler `PutDeviceTimeHandler`, após decode do JSON, validar `time_mode ∈ {"manual", "ntp"}` → 400 com mensagem clara se inválido
-- [ ] 1.5.2 Escrever teste: `PUT /time` com `time_mode: "nfs"` → 400 com mensagem "time_mode deve ser 'manual' ou 'ntp'"
+- [x] 1.5.1 No handler `PutDeviceTimeHandler`, após decode do JSON, validar `time_mode ∈ {"manual", "ntp"}` → 400 com mensagem clara se inválido
+- [x] 1.5.2 Escrever teste: `PUT /time` com `time_mode: "nfs"` → 400 com mensagem "time_mode deve ser 'manual' ou 'ntp'"
 - [ ] 1.5.3 Documentar enum no contrato `admin-api.md` como validado (remover ambiguidade)
 
 ### 1.6 Fechar CHK072: `searchID` gerado no backend (não aceito do client) `[C]`
@@ -91,7 +91,7 @@ query param, há risco de ISAPI injection. Definir: backend gera `searchID`
 internamente via UUID.
 
 - [x] 1.6.1 No método `ListUsers` do client Go, gerar `searchID` via `uuid.New().String()` — nunca aceitar do request HTTP
-- [ ] 1.6.2 Garantir que o handler `GetDeviceUsersHandler` não expõe nem aceita `searchID` como query param
+- [x] 1.6.2 Garantir que o handler `GetDeviceUsersHandler` não expõe nem aceita `searchID` como query param
 - [x] 1.6.3 Escrever teste unitário: chamada ao client com `page=1` gera `searchID` diferente a cada chamada (UUID não-determinístico)
 - [x] 1.6.4 Adicionar comentário de segurança no método: "searchID gerado internamente (CHK072 — sem injeção ISAPI)"
 
@@ -102,9 +102,9 @@ Ref: checklists/security.md CHK073 [Gap]
 rejeitar valores altos ou retornar erro inesperado. Cap: 1000 (limite prático
 do firmware HikVision para `maxResults`).
 
-- [ ] 1.7.1 No handler `GetDeviceUsersHandler`, validar `per_page`: mínimo 1, máximo 1000; default 100 se ausente
-- [ ] 1.7.2 Retornar 400 se `per_page` < 1 ou > 1000; retornar 400 se `page` < 1
-- [ ] 1.7.3 Escrever teste: `GET /users?per_page=9999` → 400; `GET /users?per_page=0` → 400
+- [x] 1.7.1 No handler `GetDeviceUsersHandler`, validar `per_page`: mínimo 1, máximo 1000; default 100 se ausente
+- [x] 1.7.2 Retornar 400 se `per_page` < 1 ou > 1000; retornar 400 se `page` < 1
+- [x] 1.7.3 Escrever teste: `GET /users?per_page=9999` → 400; `GET /users?per_page=0` → 400
 - [ ] 1.7.4 Documentar constraint no contrato `admin-api.md`: `per_page: 1–1000, default 100`
 
 ### 1.8 Fechar CHK058: consistência de `device_id` nos responses de ação `[M]`
@@ -115,7 +115,7 @@ Inconsistência menor: `reboot` e `DELETE users` retornam `device_id`, mas
 Decisão: incluir `device_id` em todos os responses de ação para rastreabilidade.
 
 - [x] 1.8.1 Definir struct `ActionResponse` com campos `result string`, `device_id int64` e campos opcionais por ação
-- [ ] 1.8.2 Garantir que factory-reset, door control, DELETE faces e DELETE webhooks incluem `device_id` no response
+- [x] 1.8.2 Garantir que factory-reset, door control, DELETE faces e DELETE webhooks incluem `device_id` no response
 - [ ] 1.8.3 Atualizar contrato `admin-api.md` para refletir `device_id` em todos os responses de ação
 
 ---
@@ -214,65 +214,65 @@ Ref: hikvision-isapi.md §Grupo Faces (PROPOSTA), spec.md §FR-017, research.md 
 
 Ref: spec.md §FR-001/002/003, admin-api.md §Grupo Overview
 
-- [ ] 4.1.1 Estender `deviceResponse` struct (admin_api_handlers.go:110-124) com campos `MaxUsers *int "json:\"max_users\""`, `MaxFaces *int "json:\"max_faces\""`, `IsapiCredentialsSet bool "json:\"isapi_credentials_set\""`
-- [ ] 4.1.2 Atualizar `toDeviceResponse` para mapear os 3 novos campos (SOURCED derivação de `isapi_credentials_set`: `username != "" && password_enc != nil`)
-- [ ] 4.1.3 Confirmar que `AdminDeviceDetailHandler` (admin_api_handlers.go:195-224) busca o device com os novos campos (query atualizada pelo repositório em 2.2.2)
+- [x] 4.1.1 Estender `deviceResponse` struct (admin_api_handlers.go:110-124) com campos `MaxUsers *int "json:\"max_users\""`, `MaxFaces *int "json:\"max_faces\""`, `IsapiCredentialsSet bool "json:\"isapi_credentials_set\""`
+- [x] 4.1.2 Atualizar `toDeviceResponse` para mapear os 3 novos campos (SOURCED derivação de `isapi_credentials_set`: `username != "" && password_enc != nil`)
+- [x] 4.1.3 Confirmar que `AdminDeviceDetailHandler` (admin_api_handlers.go:195-224) busca o device com os novos campos (query atualizada pelo repositório em 2.2.2)
 - [ ] 4.1.4 Escrever teste de integração: `GET /admin/api/devices/42` retorna `max_users: null`, `isapi_credentials_set: false` quando sem capacidades/credenciais; retorna `isapi_credentials_set: true` após PUT credentials
 
 ### 4.2 Handler `PUT /admin/api/devices/{id}/credentials` `[C]`
 
 Ref: spec.md §FR-004/005/006/007, admin-api.md §Grupo Credentials, plan.md §Security §A04
 
-- [ ] 4.2.1 Criar `PutDeviceCredentialsHandler` em `admin_device_config_handlers.go`
-- [ ] 4.2.2 Decode do request body: `{isapi_username, isapi_password, isapi_port}`; retornar 400 se campos obrigatórios ausentes ou `isapi_port` fora de 1–65535
-- [ ] 4.2.3 Verificar `ISAPI_CRED_KEY` presente → `secrets.Cipher.Encrypt(password)` (SOURCED aesgcm.go:62-82) → 503 se key ausente (FR-007)
-- [ ] 4.2.4 Persistir via `DeviceRepository.SetCredentials` (SOURCED device_repository.go:241-254)
-- [ ] 4.2.5 Resposta: `{isapi_credentials_set: true, isapi_port: N}` — NUNCA incluir `isapi_password` (FR-005)
-- [ ] 4.2.6 Log estruturado: NUNCA incluir corpo de request de credenciais (plan.md §Recomendações)
-- [ ] 4.2.7 Registrar rota `PUT /admin/api/devices/{id}/credentials` em `server.go` sob `adminDevicesRouter`
-- [ ] 4.2.8 Escrever testes: 503 sem `ISAPI_CRED_KEY`; 400 com porta inválida; 200 com credenciais válidas sem ecoar senha; 404 device inexistente
+- [x] 4.2.1 Criar `PutDeviceCredentialsHandler` em `admin_device_config_handlers.go`
+- [x] 4.2.2 Decode do request body: `{isapi_username, isapi_password, isapi_port}`; retornar 400 se campos obrigatórios ausentes ou `isapi_port` fora de 1–65535
+- [x] 4.2.3 Verificar `ISAPI_CRED_KEY` presente → `secrets.Cipher.Encrypt(password)` (SOURCED aesgcm.go:62-82) → 503 se key ausente (FR-007)
+- [x] 4.2.4 Persistir via `DeviceRepository.SetCredentials` (SOURCED device_repository.go:241-254)
+- [x] 4.2.5 Resposta: `{isapi_credentials_set: true, isapi_port: N}` — NUNCA incluir `isapi_password` (FR-005)
+- [x] 4.2.6 Log estruturado: NUNCA incluir corpo de request de credenciais (plan.md §Recomendações)
+- [x] 4.2.7 Registrar rota `PUT /admin/api/devices/{id}/credentials` em `server.go` sob `adminDevicesRouter`
+- [x] 4.2.8 Escrever testes: 503 sem `ISAPI_CRED_KEY`; 400 com porta inválida; 200 com credenciais válidas sem ecoar senha; 404 device inexistente
 
 ### 4.3 Handlers Sistema: reboot, factory-reset, time `[A]`
 
 Ref: spec.md §FR-008/009/010/011, admin-api.md §Grupo System
 
-- [ ] 4.3.1 Criar `PostDeviceRebootHandler`: valida device, chama `client.Reboot(ctx)`, responde `{result:"rebooting", device_id:N}`; log estruturado obrigatório (FR-011) com `device_id`, `stage`, ação, `operator` da sessão
-- [ ] 4.3.2 Criar `PostDeviceFactoryResetHandler`: valida device, chama `client.FactoryReset(ctx)`, pós-sucesso atualiza `webhook_configured=false` no banco, responde `{result:"factory_reset_initiated", webhook_configured:false, device_id:N}`; log com ação marcada como `"irreversível"` (US3-AS3)
-- [ ] 4.3.3 Criar `GetDeviceTimeHandler`: chama `client.GetTime(ctx)`, mapeia `TimeData` para snake_case `{local_time, time_zone, time_mode}`
-- [ ] 4.3.4 Criar `PutDeviceTimeHandler`: valida `time_mode ∈ {"manual","ntp"}` (CHK071), chama `client.SetTime(ctx, req)`, responde `{result:"ok"}`
-- [ ] 4.3.5 Registrar 4 rotas em `server.go`: `POST .../reboot`, `POST .../factory-reset`, `GET .../time`, `PUT .../time`
-- [ ] 4.3.6 Mapear erros ISAPI: `NonRetriableError` (401 digest) → 502; timeout → 504; `ErrKeyMissing` → 503; device não encontrado → 404
-- [ ] 4.3.7 Escrever testes: reboot retorna 200 com log registrado; factory-reset atualiza `webhook_configured=false` no banco; `PUT time` com `time_mode: "nfs"` → 400; timeout ISAPI → 504
+- [x] 4.3.1 Criar `PostDeviceRebootHandler`: valida device, chama `client.Reboot(ctx)`, responde `{result:"rebooting", device_id:N}`; log estruturado obrigatório (FR-011) com `device_id`, `stage`, ação, `operator` da sessão
+- [x] 4.3.2 Criar `PostDeviceFactoryResetHandler`: valida device, chama `client.FactoryReset(ctx)`, pós-sucesso atualiza `webhook_configured=false` no banco, responde `{result:"factory_reset_initiated", webhook_configured:false, device_id:N}`; log com ação marcada como `"irreversível"` (US3-AS3)
+- [x] 4.3.3 Criar `GetDeviceTimeHandler`: chama `client.GetTime(ctx)`, mapeia `TimeData` para snake_case `{local_time, time_zone, time_mode}`
+- [x] 4.3.4 Criar `PutDeviceTimeHandler`: valida `time_mode ∈ {"manual","ntp"}` (CHK071), chama `client.SetTime(ctx, req)`, responde `{result:"ok"}`
+- [x] 4.3.5 Registrar 4 rotas em `server.go`: `POST .../reboot`, `POST .../factory-reset`, `GET .../time`, `PUT .../time`
+- [x] 4.3.6 Mapear erros ISAPI: `NonRetriableError` (401 digest) → 502; timeout → 504; `ErrKeyMissing` → 503; device não encontrado → 404
+- [x] 4.3.7 Escrever testes: reboot retorna 200 com log registrado; factory-reset atualiza `webhook_configured=false` no banco; `PUT time` com `time_mode: "nfs"` → 400; timeout ISAPI → 504
 
 ### 4.4 Handlers Portas: capabilities, status, control `[A]`
 
 Ref: spec.md §FR-012/013/014/015, admin-api.md §Grupo Doors
 
-- [ ] 4.4.1 Criar `GetDeviceDoorsHandler`: chama `client.GetDoorCapabilities(ctx)`, mapeia para `{doors:[{door_id,door_name,reader_count}], total:N}`
-- [ ] 4.4.2 Criar `GetDeviceDoorStatusHandler`: extrai `door_id` do path (validar ≥ 1 — CHK048), chama `client.GetDoorStatus(ctx, doorID)`, mapeia para `{door_id, door_state, lock_state, open_duration}`
-- [ ] 4.4.3 Criar `PostDeviceDoorControlHandler`: extrai `door_id`, decode `{command}`, valida `command ∈ enum` (FR-014), chama `client.ControlDoor(ctx, doorID, command)`, responde `{result:"ok", command:..., device_id:N}` (CHK058)
-- [ ] 4.4.4 Registrar 3 rotas: `GET .../doors`, `GET .../doors/{door_id}/status`, `POST .../doors/{door_id}/control`
-- [ ] 4.4.5 Distinguir erros de conectividade (504) de erros de lógica do dispositivo (502) — FR-015; o `ErrUnknownCommand` do client → 400
-- [ ] 4.4.6 Escrever testes: capabilities retorna lista com total; `door_id=0` → 400; `command` inválido → 400; timeout → 504; distinção 504 vs 502 para erro de lógica
+- [x] 4.4.1 Criar `GetDeviceDoorsHandler`: chama `client.GetDoorCapabilities(ctx)`, mapeia para `{doors:[{door_id,door_name,reader_count}], total:N}`
+- [x] 4.4.2 Criar `GetDeviceDoorStatusHandler`: extrai `door_id` do path (validar ≥ 1 — CHK048), chama `client.GetDoorStatus(ctx, doorID)`, mapeia para `{door_id, door_state, lock_state, open_duration}`
+- [x] 4.4.3 Criar `PostDeviceDoorControlHandler`: extrai `door_id`, decode `{command}`, valida `command ∈ enum` (FR-014), chama `client.ControlDoor(ctx, doorID, command)`, responde `{result:"ok", command:..., device_id:N}` (CHK058)
+- [x] 4.4.4 Registrar 3 rotas: `GET .../doors`, `GET .../doors/{door_id}/status`, `POST .../doors/{door_id}/control`
+- [x] 4.4.5 Distinguir erros de conectividade (504) de erros de lógica do dispositivo (502) — FR-015; o `ErrUnknownCommand` do client → 400
+- [x] 4.4.6 Escrever testes: capabilities retorna lista com total; `door_id=0` → 400; `command` inválido → 400; timeout → 504; distinção 504 vs 502 para erro de lógica
 
 ### 4.5 Handlers Usuários: list paginado, clear users, clear faces `[A]`
 
 Ref: spec.md §FR-016/016b/017, admin-api.md §Grupo Users
 
-- [ ] 4.5.1 Criar `GetDeviceUsersHandler`: parse `page` e `per_page` (validar 1–1000 — CHK073, default 100); chama `client.ListUsers(ctx, page, perPage)`; responde `{users:[{employeeNo,name,...}], total, page, per_page}` preservando camelCase dos campos ISAPI no array
-- [ ] 4.5.2 Criar `DeleteDeviceUsersHandler`: chama `client.ClearUsers(ctx)`, responde `{result:"cleared", device_id:N}`; comportamento de falha parcial documentado inline (CHK009: operação atômica, orientar verificação manual em timeout)
-- [ ] 4.5.3 Criar `DeleteDeviceFacesHandler`: chama `client.ClearFaces(ctx)`, responde `{result:"faces_cleared", device_id:N}`; quando stub → 501 com mensagem orientativa até validação empírica (3.5)
-- [ ] 4.5.4 Registrar 3 rotas: `GET .../users`, `DELETE .../users`, `DELETE .../faces`
-- [ ] 4.5.5 Escrever testes: paginação correta (`per_page=50, page=2` → `searchResultPosition=50`); `per_page=9999` → 400; clear users timeout → 504 com campo `action`; clear faces enquanto stub → 501
+- [x] 4.5.1 Criar `GetDeviceUsersHandler`: parse `page` e `per_page` (validar 1–1000 — CHK073, default 100); chama `client.ListUsers(ctx, page, perPage)`; responde `{users:[{employeeNo,name,...}], total, page, per_page}` preservando camelCase dos campos ISAPI no array
+- [x] 4.5.2 Criar `DeleteDeviceUsersHandler`: chama `client.ClearUsers(ctx)`, responde `{result:"cleared", device_id:N}`; comportamento de falha parcial documentado inline (CHK009: operação atômica, orientar verificação manual em timeout)
+- [x] 4.5.3 Criar `DeleteDeviceFacesHandler`: chama `client.ClearFaces(ctx)`, responde `{result:"faces_cleared", device_id:N}`; quando stub → 501 com mensagem orientativa até validação empírica (3.5)
+- [x] 4.5.4 Registrar 3 rotas: `GET .../users`, `DELETE .../users`, `DELETE .../faces`
+- [x] 4.5.5 Escrever testes: paginação correta (`per_page=50, page=2` → `searchResultPosition=50`); `per_page=9999` → 400; clear users timeout → 504 com campo `action`; clear faces enquanto stub → 501
 
 ### 4.6 Handlers Webhooks: list e delete `[A]`
 
 Ref: spec.md §FR-018/019, admin-api.md §Grupo Webhooks
 
-- [ ] 4.6.1 Criar `GetDeviceWebhooksHandler`: chama `client.ListWebhooks(ctx)`, mapeia para `{webhooks:[{id,url,protocol}], total:N}`
-- [ ] 4.6.2 Criar `DeleteDeviceWebhookHandler`: extrai `webhook_id` do path (validar não-vazio, sem `/` nem `..` — CHK048); chama `client.DeleteWebhook(ctx, id)`; se `webhook_id == deterministicHostID(device.Host)` → `webhook_configured=false` no banco (FR-019); responde `{result:"removed", webhook_configured:bool, device_id:N}`
-- [ ] 4.6.3 Registrar 2 rotas: `GET .../webhooks`, `DELETE .../webhooks/{webhook_id}`
-- [ ] 4.6.4 Escrever testes: list retorna webhooks com total; delete webhook principal → `webhook_configured=false` no banco; delete webhook secundário → `webhook_configured` inalterado; `webhook_id` vazio → 400
+- [x] 4.6.1 Criar `GetDeviceWebhooksHandler`: chama `client.ListWebhooks(ctx)`, mapeia para `{webhooks:[{id,url,protocol}], total:N}`
+- [x] 4.6.2 Criar `DeleteDeviceWebhookHandler`: extrai `webhook_id` do path (validar não-vazio, sem `/` nem `..` — CHK048); chama `client.DeleteWebhook(ctx, id)`; se `webhook_id == deterministicHostID(device.Host)` → `webhook_configured=false` no banco (FR-019); responde `{result:"removed", webhook_configured:bool, device_id:N}`
+- [x] 4.6.3 Registrar 2 rotas: `GET .../webhooks`, `DELETE .../webhooks/{webhook_id}`
+- [x] 4.6.4 Escrever testes: list retorna webhooks com total; delete webhook principal → `webhook_configured=false` no banco; delete webhook secundário → `webhook_configured` inalterado; `webhook_id` vazio → 400
 
 ---
 

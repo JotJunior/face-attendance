@@ -100,6 +100,14 @@ func (r *DeviceRepository) SetWebhookConfigured(ctx context.Context, identifier 
 	return err
 }
 
+// SetWebhookConfiguredByID marks a device as having its webhook URL configured, by primary key.
+// Used by admin handlers (factory-reset, delete-webhook) that operate on device ID, not identifier.
+func (r *DeviceRepository) SetWebhookConfiguredByID(ctx context.Context, id int64, configured bool) error {
+	query := `UPDATE devices SET webhook_configured = $1, updated_at = now() WHERE id = $2`
+	_, err := r.pool.Exec(ctx, query, configured, id)
+	return err
+}
+
 // CountDevicesByActivity conta dispositivos ativos e inativos conforme thresholdHours.
 // Um dispositivo é considerado ativo se last_heartbeat_at >= now() - thresholdHours.
 // Usa uma única query com CASE para evitar N+1 (CHK-P12).

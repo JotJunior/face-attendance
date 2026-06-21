@@ -410,6 +410,13 @@ func deterministicHostID(host string) string {
 	return fmt.Sprintf("%x", h[:8]) // 16 hex chars
 }
 
+// DeterministicWebhookID returns the stable webhook host ID for the given device host string.
+// Used by admin handlers to detect when the primary system webhook is being removed (FR-019).
+// host must be in "ip:port" format (same as DeviceConfig.Host built by LoadDeviceConfig).
+func DeterministicWebhookID(host string) string {
+	return deterministicHostID(host)
+}
+
 // parseWebhookURL splits a URL into host, port, path.
 // Minimal parser sufficient for known patterns (no complex URL escaping needed).
 func parseWebhookURL(rawURL string) (host, port, path string) {
