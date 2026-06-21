@@ -212,6 +212,32 @@ func (r *DeviceRepository) GetConn(ctx context.Context, id int64) (*DeviceConn, 
 	return &c, nil
 }
 
+// ListActiveConns retorna os dados de conexão ISAPI de TODOS os devices ativos
+// (IP corrente + credenciais cifradas). Usado pelo worker para provisionar um
+// membro em todos os leitores (multi-device).
+func (r *DeviceRepository) ListActiveConns(ctx context.Context) ([]DeviceConn, error) {
+	query := `
+		SELECT id, host(ip_address), COALESCE(isapi_username, ''), isapi_password_enc, isapi_port
+		FROM devices
+		WHERE is_active = true
+		ORDER BY id
+	`
+	rows, err := r.pool.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var conns []DeviceConn
+	for rows.Next() {
+		var c DeviceConn
+		if err := rows.Scan(&c.ID, &c.IP, &c.Username, &c.PasswordEnc, &c.Port); err != nil {
+			return nil, err
+		}
+		conns = append(conns, c)
+	}
+	return conns, rows.Err()
+}
+
 // SetCredentials persiste as credenciais ISAPI cifradas de um device.
 // passwordEnc é o blob AES-GCM (nonce||ciphertext) — nunca a senha em claro.
 func (r *DeviceRepository) SetCredentials(ctx context.Context, id int64, username string, passwordEnc []byte, port int) error {

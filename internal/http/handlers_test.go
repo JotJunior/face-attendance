@@ -24,6 +24,10 @@ func (s *stubDeviceRepo) Upsert(_ context.Context, _ domain.Device) error {
 	return nil
 }
 
+func (s *stubDeviceRepo) FindByMAC(_ context.Context, _ string) (*domain.Device, error) {
+	return nil, nil
+}
+
 type stubMemberRepo struct{ member *domain.Member }
 
 func (s *stubMemberRepo) FindByCPF(_ context.Context, _ string) (*domain.Member, error) {

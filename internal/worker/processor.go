@@ -24,23 +24,28 @@ type ISAPIClient interface {
 	ConfigureWebhook(ctx context.Context, webhookURL string) error
 }
 
-// ConnResolver fornece um ISAPIClient pronto para o device-alvo usando o IP e as
-// credenciais CORRENTES (lidas do banco). É chamado por mensagem, então uma troca
-// de IP registrada via heartbeat é absorvida automaticamente — nunca se perde a
-// conexão (pedido do operador 2026-06-21).
-type ConnResolver interface {
-	Resolve(ctx context.Context) (client ISAPIClient, deviceID int64, err error)
-}
-
-// StaticResolver devolve sempre o mesmo client/deviceID (testes ou device fixo).
-type StaticResolver struct {
+// Target é um device-alvo de provisionamento: o client ISAPI (já com IP e
+// credenciais CORRENTES do banco) e o id do device para registrar o outcome.
+type Target struct {
 	Client   ISAPIClient
 	DeviceID int64
 }
 
+// ConnResolver resolve TODOS os devices-alvo ativos (multi-device): cada um com o
+// IP e as credenciais CORRENTES do banco. Chamado por mensagem, então troca de IP é
+// absorvida e novos devices entram no provisionamento automaticamente.
+type ConnResolver interface {
+	Resolve(ctx context.Context) ([]Target, error)
+}
+
+// StaticResolver devolve sempre os mesmos alvos (testes ou device fixo).
+type StaticResolver struct {
+	Targets []Target
+}
+
 // Resolve implements ConnResolver.
-func (s StaticResolver) Resolve(context.Context) (ISAPIClient, int64, error) {
-	return s.Client, s.DeviceID, nil
+func (s StaticResolver) Resolve(context.Context) ([]Target, error) {
+	return s.Targets, nil
 }
 
 // Processor handles AMQP deliveries, executes the 3 ISAPI operations, and manages retry/DLQ routing.
@@ -119,7 +124,7 @@ func (p *Processor) ProcessDelivery(ctx context.Context, d amqp.Delivery) error 
 	return nil
 }
 
-// processMessage executes the 3 ISAPI operations in order and updates the processing status.
+// processMessage provisiona o membro em TODOS os devices-alvo ativos (multi-device).
 func (p *Processor) processMessage(ctx context.Context, msg domain.ProcessingMessage) error {
 	// employeeNo/FPID no device usam dígitos normalizados (o webhook também
 	// normaliza o employeeNoString recebido para correlacionar com o membro).
@@ -128,13 +133,31 @@ func (p *Processor) processMessage(ctx context.Context, msg domain.ProcessingMes
 		return &hikvision.NonRetriableError{Op: "normalize CPF", Msg: normErr.Error()}
 	}
 
-	// Resolve o device-alvo (IP + credenciais correntes do banco). Falha aqui é
-	// retriable (ex.: device temporariamente sem credenciais ou IP desconhecido).
-	client, deviceID, resErr := p.resolver.Resolve(ctx)
+	targets, resErr := p.resolver.Resolve(ctx)
 	if resErr != nil {
-		return fmt.Errorf("worker: resolve device connection: %w", resErr)
+		return fmt.Errorf("worker: resolve device targets: %w", resErr)
+	}
+	if len(targets) == 0 {
+		return fmt.Errorf("worker: nenhum device-alvo ativo para provisionar")
 	}
 
+	// Provisiona em cada leitor ativo (o membro deve ser reconhecido em qualquer um).
+	// Uma falha NÃO-retriável num device (ex.: selfie sem rosto) é registrada por
+	// device e não bloqueia os demais nem re-enfileira. Qualquer falha RETRIÁVEL
+	// re-enfileira a mensagem — re-provisionar é idempotente nos devices já concluídos
+	// (employeeNoAlreadyExist→PUT, deviceUserAlreadyExistFace→ok).
+	var firstRetriable error
+	for _, tgt := range targets {
+		if err := p.enrollOne(ctx, tgt.Client, tgt.DeviceID, cpf, msg); err != nil && !hikvision.IsNonRetriable(err) && firstRetriable == nil {
+			firstRetriable = err
+		}
+	}
+	return firstRetriable
+}
+
+// enrollOne executa as operações ISAPI de um membro em UM device, registrando o
+// outcome por device (member_processing_status) em cada etapa.
+func (p *Processor) enrollOne(ctx context.Context, client ISAPIClient, deviceID int64, cpf string, msg domain.ProcessingMessage) error {
 	// Step 1: UpsertUser
 	if err := client.UpsertUser(ctx, cpf, msg.Name); err != nil {
 		p.saveOutcome(ctx, deviceID, msg, false, false, false, "user_sync", err) //nolint:errcheck
@@ -164,6 +187,9 @@ func (p *Processor) processMessage(ctx context.Context, msg domain.ProcessingMes
 
 func (p *Processor) saveOutcome(ctx context.Context, deviceID int64, msg domain.ProcessingMessage,
 	userSynced, faceUploaded, webhookSet bool, stage string, lastErr error) error {
+	if p.outcomeRepo == nil {
+		return nil // test mode (sem persistência de outcome)
+	}
 	outcome := domain.ProcessingOutcome{
 		FederalDocument: msg.FederalDocument,
 		DeviceID:        deviceID,
