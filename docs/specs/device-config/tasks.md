@@ -286,64 +286,64 @@ Ref: spec.md §FR-018/019, admin-api.md §Grupo Webhooks
 
 Ref: spec.md §US1, admin-api.md §Grupo Overview
 
-- [ ] 5.1.1 Localizar na SPA o componente/seção de overview (`/admin/#device-config?id=N`) e identificar onde os dados são consumidos
-- [ ] 5.1.2 Conectar campos `max_users`, `max_faces`, `isapi_credentials_set` ao response do `GET /admin/api/devices/{id}` (já existente, agora estendido)
-- [ ] 5.1.3 Exibir `isapi_credentials_set: false` como aviso orientativo (US1-AS3: "seções dependentes de ISAPI ficam desabilitadas") — verificar se SPA já tem placeholder para este estado
-- [ ] 5.1.4 Exibir `max_users`/`max_faces` como `—` quando `null` (não exibir zero nem estimativa — FR-002)
-- [ ] 5.1.5 Teste smoke: abrir tela em dispositivo sem credenciais → aviso visível e seções desabilitadas; com credenciais → seções habilitadas
+- [x] 5.1.1 Localizar na SPA o componente/seção de overview (`/admin/#device-config?id=N`) e identificar onde os dados são consumidos
+- [x] 5.1.2 Conectar campos `max_users`, `max_faces`, `isapi_credentials_set` ao response do `GET /admin/api/devices/{id}` (já existente, agora estendido)
+- [x] 5.1.3 Exibir `isapi_credentials_set: false` como aviso orientativo (US1-AS3: "seções dependentes de ISAPI ficam desabilitadas") — verificar se SPA já tem placeholder para este estado
+- [x] 5.1.4 Exibir `max_users`/`max_faces` como `—` quando `null` (não exibir zero nem estimativa — FR-002)
+- [x] 5.1.5 Teste smoke: abrir tela em dispositivo sem credenciais → aviso visível e seções desabilitadas; com credenciais → seções habilitadas
 
 ### 5.2 Ativar seção Credenciais ISAPI `[C]`
 
 Ref: spec.md §US2, admin-api.md §PUT credentials
 
-- [ ] 5.2.1 Localizar formulário de credenciais na SPA; verificar que campo de senha usa `type="password"` e não ecoa o valor
-- [ ] 5.2.2 Conectar submit do formulário ao `PUT /admin/api/devices/{id}/credentials`
-- [ ] 5.2.3 Exibir feedback de sucesso (US2-AS1: "confirma sucesso") sem revelar a senha na UI
-- [ ] 5.2.4 Tratar 503 (key ausente) com mensagem orientativa distinta de 400/404
-- [ ] 5.2.5 Verificar paridade de nomes de campos com contrato: `isapi_username`, `isapi_password`, `isapi_port` no request; `isapi_credentials_set`, `isapi_port` no response
-- [ ] 5.2.6 Teste smoke: submeter credenciais válidas → sucesso sem exibir senha; submeter porta 0 → erro de validação frontend (pré-submit) ou mensagem do backend 400
+- [x] 5.2.1 Localizar formulário de credenciais na SPA; verificar que campo de senha usa `type="password"` e não ecoa o valor
+- [x] 5.2.2 Conectar submit do formulário ao `PUT /admin/api/devices/{id}/credentials`
+- [x] 5.2.3 Exibir feedback de sucesso (US2-AS1: "confirma sucesso") sem revelar a senha na UI
+- [x] 5.2.4 Tratar 503 (key ausente) com mensagem orientativa distinta de 400/404
+- [x] 5.2.5 Verificar paridade de nomes de campos com contrato: `isapi_username`, `isapi_password`, `isapi_port` no request; `isapi_credentials_set`, `isapi_port` no response
+- [x] 5.2.6 Teste smoke: submeter credenciais válidas → sucesso sem exibir senha; submeter porta 0 → erro de validação frontend (pré-submit) ou mensagem do backend 400
 
 ### 5.3 Ativar seção Sistema (time, reboot, factory-reset) `[A]`
 
 Ref: spec.md §US3, admin-api.md §Grupo System
 
-- [ ] 5.3.1 Conectar `GET /admin/api/devices/{id}/time` ao display de data/hora atual na seção
-- [ ] 5.3.2 Conectar submit de `PUT /admin/api/devices/{id}/time` com campos `time_mode`, `local_time`, `time_zone` (e `ntp_server` opcional)
-- [ ] 5.3.3 Conectar botão de reboot ao `POST .../actions/reboot` com modal de confirmação (US3-AS2)
-- [ ] 5.3.4 Conectar botão de factory-reset ao `POST .../actions/factory-reset` com modal de confirmação forte (US3-AS3: digitar identificador)
-- [ ] 5.3.5 Exibir resultado de factory-reset e atualizar status de webhook na UI (US3-AS3: `webhook_configured` → false)
-- [ ] 5.3.6 Teste smoke: clicar "cancelar" no modal de reboot → nenhuma requisição enviada; confirmar reboot → dispositivo vai offline
+- [x] 5.3.1 Conectar `GET /admin/api/devices/{id}/time` ao display de data/hora atual na seção
+- [x] 5.3.2 Conectar submit de `PUT /admin/api/devices/{id}/time` com campos `time_mode`, `local_time`, `time_zone` (e `ntp_server` opcional)
+- [x] 5.3.3 Conectar botão de reboot ao `POST .../actions/reboot` com modal de confirmação (US3-AS2)
+- [x] 5.3.4 Conectar botão de factory-reset ao `POST .../actions/factory-reset` com modal de confirmação forte (US3-AS3: digitar identificador)
+- [x] 5.3.5 Exibir resultado de factory-reset e atualizar status de webhook na UI (US3-AS3: `webhook_configured` → false)
+- [x] 5.3.6 Teste smoke: clicar "cancelar" no modal de reboot → nenhuma requisição enviada; confirmar reboot → dispositivo vai offline
 
 ### 5.4 Ativar seção Portas `[A]`
 
 Ref: spec.md §US4, admin-api.md §Grupo Doors
 
-- [ ] 5.4.1 Conectar `GET /admin/api/devices/{id}/doors` para listar portas disponíveis
-- [ ] 5.4.2 Conectar `GET .../doors/{door_id}/status` para exibir estado atual de cada porta
-- [ ] 5.4.3 Conectar `POST .../doors/{door_id}/control` com `{command:"open"}` ao botão "Destravar"; exibir feedback visual de sucesso (US4-AS1)
-- [ ] 5.4.4 Documentar na UI os enum values observados de `door_state`/`lock_state` ao implementar o display (CHK055 — não presumir, ler da resposta real)
-- [ ] 5.4.5 Tratar erro de dispositivo offline (504) com mensagem clara (US4-AS3)
-- [ ] 5.4.6 Teste smoke: com dispositivo online, acionar "Destravar 5s" → resposta de sucesso < 5s (SC-005)
+- [x] 5.4.1 Conectar `GET /admin/api/devices/{id}/doors` para listar portas disponíveis
+- [x] 5.4.2 Conectar `GET .../doors/{door_id}/status` para exibir estado atual de cada porta
+- [x] 5.4.3 Conectar `POST .../doors/{door_id}/control` com `{command:"open"}` ao botão "Destravar"; exibir feedback visual de sucesso (US4-AS1)
+- [x] 5.4.4 Documentar na UI os enum values observados de `door_state`/`lock_state` ao implementar o display (CHK055 — não presumir, ler da resposta real)
+- [x] 5.4.5 Tratar erro de dispositivo offline (504) com mensagem clara (US4-AS3)
+- [x] 5.4.6 Teste smoke: com dispositivo online, acionar "Destravar 5s" → resposta de sucesso < 5s (SC-005)
 
 ### 5.5 Ativar seções Usuários e Faces `[A]`
 
 Ref: spec.md §US5, admin-api.md §Grupo Users
 
-- [ ] 5.5.1 Conectar `GET /admin/api/devices/{id}/users` à lista de usuários com paginação (exibir `total` e controles de página)
-- [ ] 5.5.2 Conectar `DELETE .../users` ao botão "Limpar todos" com modal de confirmação forte (US5-AS2: digitar confirmação)
-- [ ] 5.5.3 Conectar `DELETE .../faces` ao botão "Limpar biblioteca" com confirmação forte (US5-AS3)
-- [ ] 5.5.4 Exibir campos `employeeNo`, `name`, `numOfFace` na lista (camelCase do ISAPI preservado no payload; SPA usa diretamente)
-- [ ] 5.5.5 Enquanto `DELETE faces` é stub (501): desabilitar botão na UI com tooltip "funcionalidade em verificação de firmware"
-- [ ] 5.5.6 Teste smoke: com 3 usuários no dispositivo → lista exibe 3; "Limpar todos" + confirmação → lista vazia
+- [x] 5.5.1 Conectar `GET /admin/api/devices/{id}/users` à lista de usuários com paginação (exibir `total` e controles de página)
+- [x] 5.5.2 Conectar `DELETE .../users` ao botão "Limpar todos" com modal de confirmação forte (US5-AS2: digitar confirmação)
+- [x] 5.5.3 Conectar `DELETE .../faces` ao botão "Limpar biblioteca" com confirmação forte (US5-AS3)
+- [x] 5.5.4 Exibir campos `employeeNo`, `name`, `numOfFace` na lista (camelCase do ISAPI preservado no payload; SPA usa diretamente)
+- [x] 5.5.5 Enquanto `DELETE faces` é stub (501): desabilitar botão na UI com tooltip "funcionalidade em verificação de firmware"
+- [x] 5.5.6 Teste smoke: com 3 usuários no dispositivo → lista exibe 3; "Limpar todos" + confirmação → lista vazia
 
 ### 5.6 Ativar seção Webhooks `[A]`
 
 Ref: spec.md §US6, admin-api.md §Grupo Webhooks
 
-- [ ] 5.6.1 Conectar `GET /admin/api/devices/{id}/webhooks` à lista de destinos de notificação
-- [ ] 5.6.2 Conectar `DELETE .../webhooks/{id}` com confirmação; atualizar `webhook_configured` na UI após remoção do principal (FR-019)
-- [ ] 5.6.3 Identificar visualmente o webhook principal do sistema na lista (baseado em `deterministicHostID`) com aviso sobre impacto de remoção
-- [ ] 5.6.4 Teste smoke: após worker configurar webhook, lista exibe o destino; remover webhook secundário → `webhook_configured` inalterado; remover principal → aviso + `webhook_configured: false`
+- [x] 5.6.1 Conectar `GET /admin/api/devices/{id}/webhooks` à lista de destinos de notificação
+- [x] 5.6.2 Conectar `DELETE .../webhooks/{id}` com confirmação; atualizar `webhook_configured` na UI após remoção do principal (FR-019)
+- [x] 5.6.3 Identificar visualmente o webhook principal do sistema na lista (baseado em `deterministicHostID`) com aviso sobre impacto de remoção
+- [x] 5.6.4 Teste smoke: após worker configurar webhook, lista exibe o destino; remover webhook secundário → `webhook_configured` inalterado; remover principal → aviso + `webhook_configured: false`
 
 ---
 
