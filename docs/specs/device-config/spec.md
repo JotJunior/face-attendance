@@ -309,16 +309,22 @@ um destino secundário via painel e confirmar que o dispositivo o registra.
 
 **Grupo 5: Usuários no Dispositivo (seção users)**
 
-- **FR-016**: O sistema DEVE expor endpoint `DELETE /admin/api/devices/{id}/users`
-  (bulk delete) que limpa todos os usuários do dispositivo via ISAPI e retorna
-  confirmação ou erro detalhado.
+- **FR-016**: O sistema DEVE expor endpoint `GET /admin/api/devices/{id}/users`
+  que lista os usuários cadastrados no dispositivo via ISAPI
+  (`POST /ISAPI/AccessControl/UserInfo/Search` com corpo `UserInfoSearchCond`
+  contendo `searchID`, `searchResultPosition` e `maxResults`), com suporte a
+  paginação. A resposta retorna array de itens com campos `employeeNo`, `name`,
+  `userType`, `numOfFace`, `valid`, `beginTime`, `endTime` e contagem total.
+  _(Fonte verificada: `legacy/hik-api/app/Service/HikVision/User/UserService.php`
+  linha 30 — `ENDPOINT_USER_LIST = '/ISAPI/AccessControl/UserInfo/Search'`;
+  método `list()` com paginação via `searchResultPosition`.)_
+- **FR-016b**: O sistema DEVE expor endpoint `DELETE /admin/api/devices/{id}/users`
+  (bulk delete) que limpa todos os usuários do dispositivo via ISAPI
+  (`PUT /ISAPI/AccessControl/UserInfo/Clear`) e retorna confirmação ou erro
+  detalhado.
 - **FR-017**: O sistema DEVE expor endpoint `DELETE /admin/api/devices/{id}/faces`
   (bulk delete) que limpa a biblioteca de faces do dispositivo via ISAPI e retorna
   confirmação ou erro detalhado.
-  [NEEDS CLARIFICATION: O endpoint de listagem de usuários do dispositivo via ISAPI
-  `GET /ISAPI/AccessControl/UserInfo/Search` existe no legacy? Verificar se
-  `UserService.php` expõe uma chamada de listagem paginada — se sim, implementar
-  `GET /admin/api/devices/{id}/users`; se não, a seção fica somente com as ações bulk.]
 
 **Grupo 6: Webhooks e Notificações (seção events)**
 
@@ -380,12 +386,18 @@ um destino secundário via painel e confirmar que o dispositivo o registra.
 
 ## Clarifications
 
-### [NEEDS CLARIFICATION: FR-016]
-O endpoint de listagem de usuários no dispositivo via ISAPI existe no legacy
-(`UserService.php`)? Se a operação `GET /ISAPI/AccessControl/UserInfo/Search`
-foi verificada como funcional no firmware DS-K1T671, implementar listagem paginada
-em `GET /admin/api/devices/{id}/users`. Caso contrário, a seção "Usuários no terminal"
-fica somente com as ações bulk (limpar todos).
+### Clarification FR-016 — RESOLVIDA (dec-005, score 3)
+
+O endpoint `POST /ISAPI/AccessControl/UserInfo/Search` **existe e é funcional**
+no legacy. Verificado em `legacy/hik-api/app/Service/HikVision/User/UserService.php`:
+
+- `ENDPOINT_USER_LIST = '/ISAPI/AccessControl/UserInfo/Search'` (linha 30)
+- Método `list(int $page, int $perPage)` usa paginação via `searchResultPosition = ($page - 1) * $perPage`
+- Request body: `UserInfoSearchCond` com `searchID`, `searchResultPosition`, `maxResults`
+- Response shape (por `parseUserList`): `{items: [{employeeNo, name, userType, numOfFace, valid, beginTime, endTime}], total}`
+
+**Decisão**: implementar `GET /admin/api/devices/{id}/users` com paginação (FR-016
+atualizado) além do `DELETE` bulk existente (renomeado FR-016b).
 
 ---
 
