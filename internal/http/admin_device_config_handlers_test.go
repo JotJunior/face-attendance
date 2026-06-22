@@ -540,9 +540,10 @@ func TestDeleteDeviceUsers_504_WithActionGuidance(t *testing.T) {
 	}
 }
 
-func TestDeleteDeviceFaces_501_Stub(t *testing.T) {
-	// tasks §3.5: ClearFaces is a stub → 501 until empirical verification
-	ts := testHikServer(t, 200, "") // server responds 200 but client.ClearFaces returns ErrNotImplemented
+func TestDeleteDeviceFaces_200_ReturnsOK(t *testing.T) {
+	// tasks §3.5.2/3.5.3: ClearFaces now real (SOURCED FaceService.php:38/283).
+	// ISAPI: PUT /ISAPI/AccessControl/ClearPictureCfg?format=json → 200.
+	ts := testHikServer(t, 200, "") // device responds 200 to ClearPictureCfg
 	defer ts.Close()
 
 	host := strings.TrimPrefix(ts.URL, "http://")
@@ -552,9 +553,29 @@ func TestDeleteDeviceFaces_501_Stub(t *testing.T) {
 
 	rr := doRequest(t, h, http.MethodDelete, "/admin/api/devices/42/faces", nil)
 
-	// ClearFaces always returns ErrNotImplemented (stub) → 501
-	if rr.Code != http.StatusNotImplemented {
-		t.Fatalf("want 501, got %d: %s", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	// Response must include device_id (CHK058)
+	if !strings.Contains(rr.Body.String(), `"device_id"`) {
+		t.Errorf("response missing device_id: %s", rr.Body.String())
+	}
+}
+
+func TestDeleteDeviceFaces_401_ReturnsError(t *testing.T) {
+	// ISAPI returns 401 → handler returns 502 (auth failure).
+	ts := testHikServer(t, 401, "")
+	defer ts.Close()
+
+	host := strings.TrimPrefix(ts.URL, "http://")
+	device := makeDevice(42, host)
+	cfg, _ := newTestDeviceCfgConfig(t, device, nil)
+	h := DeleteDeviceFacesHandler(cfg)
+
+	rr := doRequest(t, h, http.MethodDelete, "/admin/api/devices/42/faces", nil)
+
+	if rr.Code != http.StatusBadGateway {
+		t.Fatalf("want 502, got %d: %s", rr.Code, rr.Body.String())
 	}
 }
 

@@ -37,14 +37,38 @@ Legenda de proveniência:
 - **Proveniência**: SOURCED-LEGACY `DeviceService.php:40` (`ENDPOINT_TIME`),
   `DeviceService.php:248-276` (`getTime()`), `parseTimeData` (L395-406).
 
-### Set time
-- **Verbo/Path**: `PUT /ISAPI/System/time`
-- **Body**: `{"Time": {"timeMode": "manual"|"NTP", "localTime": "YYYY-MM-DDThh:mm:ss", "timeZone": "<offset>"}}`
+### Set time (manual)
+- **Verbo/Path**: `PUT /ISAPI/System/time?format=json`
+- **Body JSON**: `{"Time": {"timeMode": "manual", "localTime": "YYYY-MM-DDThh:mm:ss", "timeZone": "<offset>"}}`
 - **Proveniência**: SOURCED-LEGACY `DeviceService.php:278-320` (`setTime()`),
-  body em L284-290 (`timeMode=manual`, `localTime`, `timeZone`).
-- **NTP**: o legacy só implementa `manual`. Modo NTP (US3-AS1 "servidor NTP
-  informado") usa `timeMode: "NTP"` + bloco NTPServer — **[PROPOSTA — shape do
-  bloco NTP a validar; o legacy não o implementa]**.
+  body em L284-290.
+
+### Set time (NTP mode)
+- **Verbo/Path**: `PUT /ISAPI/System/time`
+- **Content-Type**: `application/xml`
+- **Body XML**: `<Time><timeMode>NTP</timeMode><timeZone>{tz}</timeZone></Time>`
+  (timeZone formato HikVision, ex.: `CST-3:00:00`)
+- **Proveniência**: SOURCED-DEVICE-TEST `192.168.68.107` 2026-06-21, HTTP 200.
+  Nota: firmware do DS-K1T673DWX aceita NTP via XML; requisição JSON retornou
+  erro no modo NTP no dispositivo testado.
+
+### Set NTP server
+- **Verbo/Path**: `PUT /ISAPI/System/time/ntpServers/{id}` (id = 1 para slot primário)
+- **Content-Type**: `application/xml`
+- **Body XML**:
+  ```xml
+  <NTPServer>
+    <id>{id}</id>
+    <addressingFormatType>hostname|ipaddress</addressingFormatType>
+    <hostName>{host}</hostName>
+    <portNo>{port}</portNo>
+    <synchronizeInterval>{minutes}</synchronizeInterval>
+  </NTPServer>
+  ```
+  - `portNo` default 123; `synchronizeInterval` em minutos (ex.: 60)
+  - `addressingFormatType` = `hostname` ou `ipaddress`
+- **Proveniência**: SOURCED-DEVICE-TEST `192.168.68.107` 2026-06-21, HTTP 200.
+  NOT `/ISAPI/System/Network/NTPServers` (path diferente, retornou 404 neste firmware).
 
 ### Get device info (já em uso)
 - **Verbo/Path**: `GET /ISAPI/System/deviceInfo`
@@ -126,14 +150,16 @@ Legenda de proveniência:
 
 ## Grupo: Faces (US5 — FR-017)
 
-### Clear faces library — PROPOSTA
-- **Biblioteca-alvo**: FDLib `faceLibType="blackFD"`, `FDID="1"` — SOURCED-GO
-  `client.go:289-293` (mesma usada em `UploadFace`).
-- **Verbo/Path de clear**: `[PROPOSTA]` — NÃO há endpoint de clear da FDLib
-  verificado no legacy nem no Go. Hipótese a validar:
-  `PUT /ISAPI/Intelligent/FDLib/FDSearch/Delete?format=json` com `FDID=1`, OU
-  delete por FPID em batch. A implementação DEVE confirmar (doc ISAPI/chamada
-  observada) ou registrar bloqueio humano. Ver research.md Decision 9.
+### Clear faces library
+- **Verbo/Path**: `PUT /ISAPI/AccessControl/ClearPictureCfg?format=json`
+- **Body JSON**: `{"ClearPictureCfg":{"ClearFlags":{"facePicture":true,"capOrVerifyPicture":true}}}`
+- **Sucesso**: HTTP 200
+- **Proveniência**: SOURCED-LEGACY `FaceService.php:38` (const `ENDPOINT_FACE_CLEAR` =
+  `/ISAPI/AccessControl/ClearPictureCfg`), `FaceService.php:283` (método `clear()`,
+  `ClearFlags.facePicture=true` + `ClearFlags.capOrVerifyPicture=true`).
+- **Nota**: NÃO usar `/ISAPI/Intelligent/FDLib/FDSearch/Delete` — esse endpoint
+  apaga UMA face por FPID (ENDPOINT_FACE_DELETE, FaceService.php:34), não limpa a
+  biblioteca inteira.
 
 ---
 

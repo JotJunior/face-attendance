@@ -1182,20 +1182,40 @@ function cfgFaces(dev) {
           <div style="font-size:12.5px; font-weight:500; color:var(--red);">Limpar biblioteca de faces</div>
           <div style="font-size:11px; color:var(--text-3);">Remove todas as faces — usuários permanecem sem reconhecimento até reenvio.</div>
         </div>
-        <button class="btn btn-danger sm" id="faces-clear-btn" title="Funcionalidade em verificação de firmware — endpoint não confirmado" disabled>Limpar faces</button>
+        <button class="btn btn-danger sm" id="faces-clear-btn">Limpar faces</button>
       </div>
-      <div style="margin-top:6px; font-size:11px; color:var(--text-3);">${ICON.info} Funcionalidade em verificação de firmware. Será habilitada após confirmação do endpoint ISAPI.</div>
     </div>`;
 }
 
 function wireCfgFaces(dev) {
-  // A lista de faces não tem endpoint dedicado de listagem; apenas DELETE stub (501).
-  // Exibir estado vazio informativo.
+  // A lista de faces não tem endpoint dedicado de listagem; exibir estado informativo.
   const listEl = $('faces-list');
   if (listEl) {
     listEl.innerHTML = emptyState(ICON.members, 'Visualização não disponível', 'A listagem de faces individuais não é exposta pela ISAPI. Use a seção Usuários para verificar o campo "Faces" por usuário.');
   }
-  // botão já está disabled no HTML (stub)
+  // Botão "Limpar faces" — SOURCED: FaceService.php:38/283 (ENDPOINT_FACE_CLEAR)
+  const clearBtn = $('faces-clear-btn');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      openConfirm({
+        ...CFG_MODALS.clearFaces,
+        target: cfgTargetOf(dev),
+        onConfirm: async () => {
+          try {
+            const res = await apiDelete(`devices/${dev.id}/faces`);
+            if (res.status === 401) return;
+            if (res.ok) { showToast('success', 'Faces removidas do terminal.'); }
+            else {
+              let msg = `Erro (status ${res.status}).`;
+              if (res.status === 504) msg = 'Dispositivo offline.';
+              else { try { const d = await res.json(); if (d.error) msg = d.error; } catch {} }
+              showToast('error', msg);
+            }
+          } catch (err) { netError(err); }
+        },
+      });
+    });
+  }
 }
 
 // ─── 5.6 WEBHOOKS ─────────────────────────────────────────────

@@ -96,12 +96,27 @@ Resposta (200):
   (snake_case do envelope admin; valores do parse SOURCED `parseTimeData`).
 
 ### `PUT /admin/api/devices/{id}/time` (FR-010)
-- Request: `{ "time_mode": "manual"|"ntp", "local_time": "YYYY-MM-DDThh:mm:ss", "time_zone": "<offset>", "ntp_server": "<host>"? }`
+- Request:
+  ```json
+  {
+    "time_mode": "manual"|"ntp",
+    "local_time": "YYYY-MM-DDThh:mm:ss",
+    "time_zone": "<offset>",
+    "ntp_server": "<host>",
+    "ntp_port": 123,
+    "ntp_sync_interval": 60,
+    "ntp_addressing_type": "hostname"|"ipaddress"
+  }
+  ```
+  - `ntp_server`, `ntp_port`, `ntp_sync_interval`, `ntp_addressing_type` são opcionais para modo NTP.
+  - `local_time` é obrigatório para modo manual; ignorado em modo NTP.
 - **`time_mode`**: enum validado no handler; valores permitidos: `"manual"` ou `"ntp"`.
   Qualquer outro valor retorna `400` com mensagem `"time_mode deve ser 'manual' ou 'ntp'"`.
-  Implementado em `PutDeviceTimeHandler` (CHK071 — validado, não é mais PROPOSTA).
-- ISAPI: `PUT /ISAPI/System/time` (manual SOURCED; **NTP `[PROPOSTA — requer device físico]`** — shape
-  do bloco NTP não verificado, research.md Decision 5 / hikvision-isapi.md — ver bloqueio bl-001).
+  Implementado em `PutDeviceTimeHandler` (CHK071).
+- ISAPI NTP: SOURCED-DEVICE-TEST `192.168.68.107` 2026-06-21, HTTP 200:
+  1. `PUT /ISAPI/System/time` (XML, `timeMode=NTP + timeZone`)
+  2. Se `ntp_server` presente: `PUT /ISAPI/System/time/ntpServers/1` (XML, NTPServer shape).
+  Ver `hikvision-isapi.md §Set time (NTP mode)` e `§Set NTP server`.
 
 ---
 

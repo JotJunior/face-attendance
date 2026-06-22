@@ -429,16 +429,26 @@ func GetDeviceTimeHandler(cfg DeviceConfigConfig) http.Handler {
 }
 
 // putTimeRequest is the request body for PUT /time.
+// NTP server fields SOURCED from device test (192.168.68.107, 2026-06-21, HTTP 200):
+//   ntp_server: hostname or IP of NTP server
+//   ntp_port: UDP port, default 123
+//   ntp_sync_interval: sync interval in minutes, default 60
+//   ntp_addressing_type: "hostname" or "ipaddress", default "hostname"
 type putTimeRequest struct {
-	TimeMode  string `json:"time_mode"`  // "manual" | "ntp" (CHK071: validated)
-	LocalTime string `json:"local_time"` // required for manual mode
-	TimeZone  string `json:"time_zone"`  // optional
-	NTPServer string `json:"ntp_server"` // optional; [PROPOSTA] — firmware may reject
+	TimeMode           string `json:"time_mode"`            // "manual" | "ntp" (CHK071: validated)
+	LocalTime          string `json:"local_time"`           // required for manual mode
+	TimeZone           string `json:"time_zone"`            // optional
+	NTPServer          string `json:"ntp_server"`           // NTP hostname/IP (for ntp mode)
+	NTPPort            int    `json:"ntp_port"`             // UDP port, default 123
+	NTPSyncInterval    int    `json:"ntp_sync_interval"`    // sync interval minutes, default 60
+	NTPAddressingType  string `json:"ntp_addressing_type"`  // "hostname" | "ipaddress", default "hostname"
 }
 
 // PutDeviceTimeHandler serves PUT /admin/api/devices/{id}/time.
 // FR-010: set device time via ISAPI. CHK071: time_mode enum validated.
-// CHK042: NTP mode is [PROPOSTA] — 4xx from ISAPI → 502 with orientative message.
+// NTP mode: SOURCED from device test (192.168.68.107, 2026-06-21):
+//   1. PUT /ISAPI/System/time (XML, timeMode=NTP + timeZone) → 200
+//   2. If ntp_server provided: PUT /ISAPI/System/time/ntpServers/1 (XML) → 200
 func PutDeviceTimeHandler(cfg DeviceConfigConfig) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPut {
@@ -479,13 +489,25 @@ func PutDeviceTimeHandler(cfg DeviceConfigConfig) http.Handler {
 		}
 
 		if err := client.SetTime(ctx, setReq); err != nil {
-			// CHK042: NTP mode may fail with 4xx on unsupported firmware → 502
 			st, msg := mapISAPIError(err)
-			if req.TimeMode == "ntp" && st == http.StatusBadGateway {
-				msg = "modo NTP não confirmado para este firmware; use modo manual (CHK042)"
-			}
 			adminJSONError(w, st, msg)
 			return
+		}
+
+		// NTP mode: optionally configure NTP server (SOURCED: device test 2026-06-21).
+		if req.TimeMode == "ntp" && req.NTPServer != "" {
+			ntpReq := hikvision.NTPServerRequest{
+				ID:                   1,
+				AddressingFormatType: req.NTPAddressingType,
+				HostName:             req.NTPServer,
+				PortNo:               req.NTPPort,
+				SynchronizeInterval:  req.NTPSyncInterval,
+			}
+			if err := client.SetNTPServer(ctx, ntpReq); err != nil {
+				st, msg := mapISAPIError(err)
+				adminJSONError(w, st, "erro ao configurar servidor NTP: "+msg)
+				return
+			}
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -797,7 +819,8 @@ func DeleteDeviceUsersHandler(cfg DeviceConfigConfig) http.Handler {
 
 // DeleteDeviceFacesHandler serves DELETE /admin/api/devices/{id}/faces.
 // FR-017: clear face library from ISAPI.
-// While ClearFaces is a stub (tasks §3.5): returns 501 with orientative message.
+// SOURCED: FaceService.php:38 (ENDPOINT_FACE_CLEAR) + FaceService.php:283 (clear() method):
+//   PUT /ISAPI/AccessControl/ClearPictureCfg?format=json with ClearFlags facePicture+capOrVerifyPicture.
 func DeleteDeviceFacesHandler(cfg DeviceConfigConfig) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodDelete {

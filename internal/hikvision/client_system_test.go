@@ -99,3 +99,101 @@ func TestSetTime_ManualMode_SendsCorrectBody(t *testing.T) {
 		t.Errorf("body missing localTime: %q", capturedBody)
 	}
 }
+
+// TestSetTime_NTPMode_SendsXML verifies SetTime sends XML with timeMode=NTP for NTP mode.
+// SOURCED from device test (192.168.68.107, 2026-06-21, HTTP 200): XML body accepted for NTP.
+func TestSetTime_NTPMode_SendsXML(t *testing.T) {
+	var capturedBody, capturedContentType string
+	srv, cfg := makeISAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		capturedContentType = r.Header.Get("Content-Type")
+		b := make([]byte, 512)
+		n, _ := r.Body.Read(b)
+		capturedBody = string(b[:n])
+		w.WriteHeader(http.StatusOK)
+	})
+	defer srv.Close()
+
+	err := hikvision.NewWithHTTPClient(cfg, srv.Client()).SetTime(context.Background(), hikvision.TimeSetRequest{
+		TimeZone: "CST-3:00:00",
+		TimeMode: "ntp",
+	})
+	if err != nil {
+		t.Fatalf("SetTime NTP: %v", err)
+	}
+	// Body must be XML containing NTP timeMode
+	if !strings.Contains(capturedBody, "NTP") {
+		t.Errorf("body missing NTP timeMode: %q", capturedBody)
+	}
+	if !strings.Contains(capturedBody, "CST-3:00:00") {
+		t.Errorf("body missing timeZone: %q", capturedBody)
+	}
+	if !strings.Contains(capturedContentType, "xml") {
+		t.Errorf("Content-Type should be xml, got: %q", capturedContentType)
+	}
+}
+
+// TestSetNTPServer_SendsXMLToCorrectPath verifies SetNTPServer uses the correct ISAPI path and XML shape.
+// SOURCED from device test (192.168.68.107, 2026-06-21, HTTP 200):
+//   PUT /ISAPI/System/time/ntpServers/{id} with XML NTPServer body.
+func TestSetNTPServer_SendsXMLToCorrectPath(t *testing.T) {
+	var capturedPath, capturedBody string
+	srv, cfg := makeISAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		capturedPath = r.URL.Path
+		b := make([]byte, 512)
+		n, _ := r.Body.Read(b)
+		capturedBody = string(b[:n])
+		w.WriteHeader(http.StatusOK)
+	})
+	defer srv.Close()
+
+	err := hikvision.NewWithHTTPClient(cfg, srv.Client()).SetNTPServer(context.Background(), hikvision.NTPServerRequest{
+		ID:                  1,
+		AddressingFormatType: "hostname",
+		HostName:            "pool.ntp.org",
+		PortNo:              123,
+		SynchronizeInterval: 60,
+	})
+	if err != nil {
+		t.Fatalf("SetNTPServer: %v", err)
+	}
+	// Verify endpoint path (SOURCED: /ISAPI/System/time/ntpServers/{id})
+	if !strings.Contains(capturedPath, "/ISAPI/System/time/ntpServers/") {
+		t.Errorf("unexpected path: %q — expected /ISAPI/System/time/ntpServers/{id}", capturedPath)
+	}
+	// Verify body contains hostname and sync interval
+	if !strings.Contains(capturedBody, "pool.ntp.org") {
+		t.Errorf("body missing hostName: %q", capturedBody)
+	}
+	if !strings.Contains(capturedBody, "hostname") {
+		t.Errorf("body missing addressingFormatType: %q", capturedBody)
+	}
+}
+
+// TestSetNTPServer_DefaultsPortAndInterval verifies SetNTPServer applies default port=123 and interval=60
+// when not specified.
+func TestSetNTPServer_DefaultsPortAndInterval(t *testing.T) {
+	var capturedBody string
+	srv, cfg := makeISAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		b := make([]byte, 512)
+		n, _ := r.Body.Read(b)
+		capturedBody = string(b[:n])
+		w.WriteHeader(http.StatusOK)
+	})
+	defer srv.Close()
+
+	err := hikvision.NewWithHTTPClient(cfg, srv.Client()).SetNTPServer(context.Background(), hikvision.NTPServerRequest{
+		HostName: "time.cloudflare.com",
+		// portNo=0 → should default to 123
+		// synchronizeInterval=0 → should default to 60
+	})
+	if err != nil {
+		t.Fatalf("SetNTPServer defaults: %v", err)
+	}
+	// Body must contain defaults
+	if !strings.Contains(capturedBody, "123") {
+		t.Errorf("body missing default portNo=123: %q", capturedBody)
+	}
+	if !strings.Contains(capturedBody, "60") {
+		t.Errorf("body missing default synchronizeInterval=60: %q", capturedBody)
+	}
+}

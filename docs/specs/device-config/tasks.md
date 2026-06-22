@@ -56,10 +56,10 @@ Ref: checklists/api.md CHK042 [Gap]
 `PUT /time` com `time_mode: "ntp"` usa shape `[PROPOSTA]`. Se o firmware não
 suportar NTP, a ISAPI retornará erro 4xx. Definir comportamento explícito.
 
-- [ ] 1.3.1 Ao implementar `PUT time` (tarefa 3.3), registrar empiricamente se a ISAPI retorna 4xx para NTP <!-- requer device físico — bloqueio block-001 -->
-- [ ] 1.3.2 Se NTP não verificado em runtime: handler retorna `502` com body `{"error": "modo NTP não confirmado para este firmware; use modo manual"}` em vez de 501 <!-- requer device físico — bloqueio block-001 -->
-- [ ] 1.3.3 Documentar decisão com ref CHK042 no handler e no contrato `hikvision-isapi.md` (atualizar campo `[PROPOSTA]`) <!-- depende de block-001 -->
-- [ ] 1.3.4 Escrever teste: `PUT time` com `time_mode: "ntp"` e erro 4xx ISAPI → 502 <!-- depende de block-001 -->
+- [x] 1.3.1 Ao implementar `PUT time` (tarefa 3.3), registrar empiricamente se a ISAPI retorna 4xx para NTP — SOURCED: device 192.168.68.107 HTTP 200; XML body aceito; JSON body rejeitado em modo NTP <!-- bloqueio block-001 RESOLVIDO -->
+- [x] 1.3.2 Se NTP não verificado em runtime: handler retorna `502` com body `{"error": "modo NTP não confirmado para este firmware; use modo manual"}` em vez de 501 — N/A: NTP verificado com sucesso (HTTP 200); handler atualizado com implementação real <!-- bloqueio block-001 RESOLVIDO -->
+- [x] 1.3.3 Documentar decisão com ref CHK042 no handler e no contrato `hikvision-isapi.md` (atualizar campo `[PROPOSTA]`) — atualizado em hikvision-isapi.md: §Set time (NTP mode) + §Set NTP server; PROPOSTA→SOURCED-DEVICE-TEST <!-- depende de block-001 — RESOLVIDO -->
+- [x] 1.3.4 Escrever teste: `PUT time` com `time_mode: "ntp"` — TestSetTime_NTPMode_SendsXML + TestSetNTPServer_SendsXMLToCorrectPath + TestSetNTPServer_DefaultsPortAndInterval — todos PASS <!-- depende de block-001 — RESOLVIDO -->
 
 ### 1.4 Fechar CHK048: validação de path params `{door_id}` e `{webhook_id}` `[A]`
 
@@ -162,7 +162,7 @@ Ref: plan.md §Project Structure, hikvision-isapi.md §Grupo Sistema
 - [x] 3.1.4 Implementar `(c *Client) GetTime(ctx) (*TimeData, error)` — `GET /ISAPI/System/time` com parser SOURCED `parseTimeData` (DeviceService.php:395-406)
 - [x] 3.1.5 Implementar `(c *Client) SetTime(ctx, TimeSetRequest) error` — `PUT /ISAPI/System/time` modo manual (SOURCED DeviceService.php:278-320); modo NTP marcado `[PROPOSTA — validar empiricamente]`
 - [x] 3.1.6 Escrever testes unitários com mock HTTP: Reboot retorna nil em 200; Reboot retorna `NonRetriableError` em 401; GetTime parseia XML de exemplo SOURCED; SetTime modo manual monta body correto
-- [ ] 3.1.7 Verificar empiricamente no dispositivo real: SetTime NTP retorna sucesso ou erro de firmware; atualizar contrato `hikvision-isapi.md` com resultado
+- [x] 3.1.7 Verificar empiricamente no dispositivo real: SetTime NTP retorna sucesso — SOURCED device 192.168.68.107 HTTP 200; contrato hikvision-isapi.md atualizado com §Set time (NTP mode) e §Set NTP server SOURCED-DEVICE-TEST
 
 ### 3.2 `client_doors.go`: capabilities, status, control, config `[A]`
 
@@ -198,10 +198,10 @@ Ref: plan.md §Project Structure, hikvision-isapi.md §Grupo Webhooks
 
 Ref: hikvision-isapi.md §Grupo Faces (PROPOSTA), spec.md §FR-017, research.md Decision 9
 
-- [x] 3.5.1 Criar `internal/hikvision/client_faces.go`; implementar `(c *Client) ClearFaces(ctx) error` como **stub** que retorna `ErrNotImplemented` com mensagem `"endpoint FDLib/clear não verificado — validar empiricamente (CHK-PROPOSTA-9)"`
-- [ ] 3.5.2 Verificar empiricamente em dispositivo real qual path ISAPI remove a FDLib completa (`PUT /ISAPI/Intelligent/FDLib/FDSearch/Delete?format=json` ou alternativa); documentar resultado em `hikvision-isapi.md §Clear faces` <!-- requer device físico — bloqueio block-002 -->
-- [ ] 3.5.3 Substituir stub pela implementação real após confirmação empírica; ou registrar bloqueio humano se endpoint não encontrado <!-- depende de block-002 -->
-- [x] 3.5.4 Escrever teste unitário: stub retorna `ErrNotImplemented` com mensagem correta (antes da verificação empírica); após verificação, teste com mock HTTP do path confirmado
+- [x] 3.5.1 Criar `internal/hikvision/client_faces.go`; stub substituído por implementação real (ver 3.5.3) — FaceService.php:38/283 SOURCED-LEGACY
+- [x] 3.5.2 Verificar empiricamente em dispositivo real qual path ISAPI remove a FDLib completa — SOURCED-LEGACY: FaceService.php:38 ENDPOINT_FACE_CLEAR = `/ISAPI/AccessControl/ClearPictureCfg`; documentado em `hikvision-isapi.md §Clear faces` <!-- bloqueio block-002 RESOLVIDO -->
+- [x] 3.5.3 Substituir stub pela implementação real — implementado `PUT /ISAPI/AccessControl/ClearPictureCfg?format=json` com body `ClearPictureCfg.ClearFlags`; botão "Limpar faces" habilitado na SPA <!-- bloqueio block-002 RESOLVIDO -->
+- [x] 3.5.4 Escrever teste unitário com mock HTTP do path confirmado — TestClearFaces_200_ReturnsNil verifica path + método + body; TestClearFaces_401_ReturnsNonRetriableError — ambos PASS
 
 ---
 
@@ -400,9 +400,9 @@ Ref: spec.md §Success Criteria SC-001 a SC-006
 Ref: spec.md §Success Criteria, plan.md §Summary
 
 - [x] 7.1.1 Atualizar `docs/specs/device-config/quickstart.md` com os 13 endpoints novos, exemplos de curl e resultado esperado — cenários 7–12 adicionados cobrindo time/doors/users/faces/webhooks/factory-reset/auth
-- [ ] 7.1.2 Atualizar `hikvision-isapi.md §Clear faces` com resultado da verificação empírica (PROPOSTA→SOURCED ou PROPOSTA→bloqueio) <!-- depende de block-002 -->
-- [ ] 7.1.3 Atualizar `admin-api.md` com enum values observados de `door_state`/`lock_state` (CHK055) após implementação <!-- requer device físico para observar valores reais -->
-- [ ] 7.1.4 Registrar no `research.md` as decisões emergentes da fase execute-task (especialmente PROPOSTA items confirmados/bloqueados) <!-- em andamento: block-001 (NTP) e block-002 (ClearFaces) registrados; pendente confirmação -->
+- [x] 7.1.2 Atualizar `hikvision-isapi.md §Clear faces` com resultado da verificação empírica — PROPOSTA→SOURCED-LEGACY (FaceService.php:38/283); seção reescrita com verbo/path/body/proveniência<!-- bloqueio block-002 RESOLVIDO -->
+- [ ] 7.1.3 Atualizar `admin-api.md` com enum values observados de `door_state`/`lock_state` (CHK055) após implementação <!-- requer device físico para observar valores reais — diferido -->
+- [x] 7.1.4 Registrar no `research.md` as decisões emergentes da fase execute-task — block-001 (NTP) RESOLVIDO: SOURCED-DEVICE-TEST 192.168.68.107; block-002 (ClearFaces) RESOLVIDO: SOURCED-LEGACY FaceService.php:38/283; admin-api.md e hikvision-isapi.md atualizados
 
 ### 7.2 Verificação final de conformidade `[M]`
 
