@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -231,7 +232,7 @@ func run() error {
 		// Best-effort: para cada device-alvo, busca serial/model/firmware via ISAPI
 		// deviceInfo e persiste (identidade de hardware que o heartbeat não traz).
 		go func() {
-			infoCtx, infoCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			infoCtx, infoCancel := context.WithTimeout(context.Background(), 90*time.Second)
 			defer infoCancel()
 			targets, resErr := resolver.Resolve(infoCtx)
 			if resErr != nil {
@@ -243,6 +244,10 @@ func run() error {
 				if !ok {
 					continue
 				}
+				// Provisiona os gates de acesso no device (relógio + verify mode de
+				// face), independente do deviceInfo: garante que quem é reconhecido
+				// seja LIBERADO, sem depender de config manual no leitor.
+				ensureDeviceReady(infoCtx, hc, tgt.DeviceID, cfg, logger)
 				info, infoErr := hc.FetchDeviceInfo(infoCtx)
 				if infoErr != nil {
 					logger.Warn("worker_started", "", "", fmt.Sprintf("deviceInfo (best-effort) device id=%d falhou: %s", tgt.DeviceID, infoErr.Error()))
@@ -355,6 +360,67 @@ func (r *dbConnResolver) Resolve(ctx context.Context) ([]worker.Target, error) {
 		targets = append(targets, worker.Target{Client: client, DeviceID: c.ID})
 	}
 	return targets, nil
+}
+
+// ensureDeviceReady provisiona, no startup e por device, os gates de acesso que o
+// código vinha vinculando mas NÃO garantia — a causa de um leitor reconhecer a face
+// e mesmo assim NEGAR o acesso. Best-effort: nenhuma falha aqui derruba o worker.
+//   - Relógio: drift fora do limite invalida a janela Valid/horário do usuário.
+//   - VerifyWeekPlan: se o slot não aceita face, o reconhecimento não vira liberação.
+func ensureDeviceReady(ctx context.Context, hc *hikvision.Client, deviceID int64, cfg *config.Config, logger *logging.Logger) {
+	if cfg.DeviceClockGuard {
+		ensureDeviceClock(ctx, hc, deviceID, cfg, logger)
+	}
+	if cfg.DeviceEnsureFaceVerifyMode {
+		changed, err := hc.EnsureFaceVerifyMode(ctx)
+		switch {
+		case err != nil:
+			logger.Warn("device_ready", "", "", fmt.Sprintf("device id=%d: EnsureFaceVerifyMode falhou: %s", deviceID, err.Error()))
+		case changed:
+			logger.Info("device_ready", "", "", fmt.Sprintf("device id=%d: verifyMode ajustado p/ aceitar face 24/7 (faceOrFpOrCardOrPw)", deviceID))
+		}
+	}
+}
+
+// ensureDeviceClock checa o desvio do relógio do device e, se DEVICE_CLOCK_AUTOCORRECT,
+// corrige: device em manual → SetTime manual no MESMO fuso reportado; device em NTP →
+// re-assert NTP (drift com NTP ligado indica servidor NTP inalcançável).
+func ensureDeviceClock(ctx context.Context, hc *hikvision.Client, deviceID int64, cfg *config.Config, logger *logging.Logger) {
+	td, err := hc.GetTime(ctx)
+	if err != nil {
+		logger.Warn("device_ready", "", "", fmt.Sprintf("device id=%d: GetTime falhou: %s", deviceID, err.Error()))
+		return
+	}
+	devT, drift, ok := hikvision.ClockDrift(td.LocalTime, time.Now())
+	if !ok {
+		logger.Warn("device_ready", "", "", fmt.Sprintf("device id=%d: relógio sem offset de fuso (%q); não dá p/ medir drift com segurança", deviceID, td.LocalTime))
+		return
+	}
+	if drift < 0 {
+		drift = -drift
+	}
+	if drift <= time.Duration(cfg.DeviceClockMaxDriftSeconds)*time.Second {
+		return // dentro do limite
+	}
+	logger.Warn("device_clock_drift", "", "", fmt.Sprintf("device id=%d: drift=%s mode=%s tz=%s", deviceID, drift.Round(time.Second), td.TimeMode, td.TimeZone))
+	if !cfg.DeviceClockAutocorrect {
+		return
+	}
+	if strings.EqualFold(td.TimeMode, "ntp") {
+		if serr := hc.SetTime(ctx, hikvision.TimeSetRequest{TimeMode: "ntp", TimeZone: td.TimeZone}); serr != nil {
+			logger.Warn("device_clock_drift", "", "", fmt.Sprintf("device id=%d: re-assert NTP falhou: %s", deviceID, serr.Error()))
+		} else {
+			logger.Info("device_clock_drift", "", "", fmt.Sprintf("device id=%d: NTP re-asserido (drift com NTP ligado sugere servidor NTP inalcançável)", deviceID))
+		}
+		return
+	}
+	// Manual: corrige p/ o agora no MESMO fuso que o device reportou (não inventa fuso).
+	corrected := time.Now().In(devT.Location()).Format("2006-01-02T15:04:05")
+	if serr := hc.SetTime(ctx, hikvision.TimeSetRequest{TimeMode: "manual", LocalTime: corrected, TimeZone: td.TimeZone}); serr != nil {
+		logger.Warn("device_clock_drift", "", "", fmt.Sprintf("device id=%d: SetTime manual falhou: %s", deviceID, serr.Error()))
+	} else {
+		logger.Info("device_clock_drift", "", "", fmt.Sprintf("device id=%d: relógio corrigido (manual) p/ %s", deviceID, corrected))
+	}
 }
 
 // appHealthChecker implements httphandler.HealthChecker.
