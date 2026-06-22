@@ -51,7 +51,7 @@ func (r *DeviceRepository) ListActive(ctx context.Context) ([]domain.Device, err
 		SELECT id, device_identifier, host(ip_address), mac_address,
 		       last_heartbeat_at, is_active, webhook_configured,
 		       created_at, updated_at,
-		       serial_number, model, firmware_version, isapi_username, isapi_port,
+		       serial_number, model, firmware_version, isapi_username, isapi_password_enc, isapi_port,
 		       max_users, max_faces
 		FROM devices
 		WHERE is_active = true
@@ -71,7 +71,7 @@ func (r *DeviceRepository) FindByIdentifier(ctx context.Context, identifier stri
 		SELECT id, device_identifier, host(ip_address), mac_address,
 		       last_heartbeat_at, is_active, webhook_configured,
 		       created_at, updated_at,
-		       serial_number, model, firmware_version, isapi_username, isapi_port,
+		       serial_number, model, firmware_version, isapi_username, isapi_password_enc, isapi_port,
 		       max_users, max_faces
 		FROM devices
 		WHERE device_identifier = $1
@@ -130,7 +130,7 @@ func (r *DeviceRepository) ListDevicesAll(ctx context.Context) ([]domain.Device,
 		SELECT id, device_identifier, host(ip_address), mac_address,
 		       last_heartbeat_at, is_active, webhook_configured,
 		       created_at, updated_at,
-		       serial_number, model, firmware_version, isapi_username, isapi_port,
+		       serial_number, model, firmware_version, isapi_username, isapi_password_enc, isapi_port,
 		       max_users, max_faces
 		FROM devices
 		ORDER BY device_identifier
@@ -150,7 +150,7 @@ func (r *DeviceRepository) GetDeviceByID(ctx context.Context, id int64) (*domain
 		SELECT id, device_identifier, host(ip_address), mac_address,
 		       last_heartbeat_at, is_active, webhook_configured,
 		       created_at, updated_at,
-		       serial_number, model, firmware_version, isapi_username, isapi_port,
+		       serial_number, model, firmware_version, isapi_username, isapi_password_enc, isapi_port,
 		       max_users, max_faces
 		FROM devices
 		WHERE id = $1
@@ -178,7 +178,7 @@ func (r *DeviceRepository) FindByMAC(ctx context.Context, mac string) (*domain.D
 		SELECT id, device_identifier, host(ip_address), mac_address,
 		       last_heartbeat_at, is_active, webhook_configured,
 		       created_at, updated_at,
-		       serial_number, model, firmware_version, isapi_username, isapi_port,
+		       serial_number, model, firmware_version, isapi_username, isapi_password_enc, isapi_port,
 		       max_users, max_faces
 		FROM devices
 		WHERE mac_address = $1 OR device_identifier = $1
@@ -304,7 +304,9 @@ func (r *DeviceRepository) SetDeviceInfo(ctx context.Context, id int64, serial, 
 }
 
 // scanDevices reads device rows.
-// Column order must match all SELECT queries in this file (14 columns + 2 capability columns).
+// Column order must match all SELECT queries in this file (15 columns + 2 capability columns).
+// isapi_password_enc é carregado (nunca serializado em JSON — json:"-") porque
+// toDeviceResponse deriva isapi_credentials_set de username + password_enc não-nil.
 func scanDevices(rows pgx.Rows) ([]domain.Device, error) {
 	var devices []domain.Device
 	for rows.Next() {
@@ -323,6 +325,7 @@ func scanDevices(rows pgx.Rows) ([]domain.Device, error) {
 			&d.Model,
 			&d.FirmwareVersion,
 			&d.ISAPIUsername,
+			&d.ISAPIPasswordEnc,
 			&d.ISAPIPort,
 			&d.MaxUsers, // nullable: NULL → nil
 			&d.MaxFaces, // nullable: NULL → nil

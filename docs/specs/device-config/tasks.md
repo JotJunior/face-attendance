@@ -130,8 +130,8 @@ Ref: plan.md §Project Structure, data-model.md §Resumo de mudanças
 
 - [x] 2.1.1 Criar `migrations/000007_device_capabilities.up.sql` com `ALTER TABLE devices ADD COLUMN max_users INTEGER NULL, ADD COLUMN max_faces INTEGER NULL`
 - [x] 2.1.2 Criar `migrations/000007_device_capabilities.down.sql` com `ALTER TABLE devices DROP COLUMN max_users, DROP COLUMN max_faces`
-- [ ] 2.1.3 Verificar que migration roda sem erro contra `TEST_DATABASE_URL` (`go test -tags integration ./...`)
-- [ ] 2.1.4 Confirmar que colunas existentes não são afetadas (checar via `\d devices` no psql de teste)
+- [x] 2.1.3 Verificar que migration roda sem erro contra `TEST_DATABASE_URL` (`go test -tags integration ./...`) <!-- ✓ migrate up 000001→000007 sem erro em presenca_facial_test (docker) -->
+- [x] 2.1.4 Confirmar que colunas existentes não são afetadas (checar via `\d devices` no psql de teste) <!-- ✓ colunas pré-existentes intactas; max_users/max_faces integer nullable confirmados via information_schema -->
 
 ### 2.2 Domínio: estender `Device` e `DeviceRepository` `[A]`
 
@@ -142,7 +142,7 @@ Ref: plan.md §Project Structure, data-model.md §Entity Device
 - [x] 2.2.3 Criar método `DeviceRepository.SetCapabilities(ctx, id int64, maxUsers, maxFaces *int) error` seguindo padrão de `SetCredentials` (device_repository.go:241-254)
 - [x] 2.2.4 Atualizar `toDeviceResponse` em `admin_api_handlers.go` para incluir `max_users`, `max_faces`, `isapi_credentials_set` (bool derivado de username não-vazio + password_enc não-nil)
 - [x] 2.2.5 Escrever teste unitário: `toDeviceResponse` com credenciais preenchidas → `isapi_credentials_set: true`; sem credenciais → `false`
-- [ ] 2.2.6 Escrever teste de integração: `SetCapabilities` persiste e `GetByID` recupera os valores nullable
+- [x] 2.2.6 Escrever teste de integração: `SetCapabilities` persiste e `GetByID` recupera os valores nullable <!-- ✓ TestDeviceRepository_SetCapabilitiesNullableRoundtrip (integration_test.go): set→get→set-nil→get -->
 
 ---
 
@@ -217,7 +217,7 @@ Ref: spec.md §FR-001/002/003, admin-api.md §Grupo Overview
 - [x] 4.1.1 Estender `deviceResponse` struct (admin_api_handlers.go:110-124) com campos `MaxUsers *int "json:\"max_users\""`, `MaxFaces *int "json:\"max_faces\""`, `IsapiCredentialsSet bool "json:\"isapi_credentials_set\""`
 - [x] 4.1.2 Atualizar `toDeviceResponse` para mapear os 3 novos campos (SOURCED derivação de `isapi_credentials_set`: `username != "" && password_enc != nil`)
 - [x] 4.1.3 Confirmar que `AdminDeviceDetailHandler` (admin_api_handlers.go:195-224) busca o device com os novos campos (query atualizada pelo repositório em 2.2.2)
-- [ ] 4.1.4 Escrever teste de integração: `GET /admin/api/devices/42` retorna `max_users: null`, `isapi_credentials_set: false` quando sem capacidades/credenciais; retorna `isapi_credentials_set: true` após PUT credentials <!-- diferido: requer TEST_DATABASE_URL (Postgres de teste) — sem banco disponível nesta sessão; unitário toDeviceResponse já cobre a lógica (task 2.2.5 ✓) -->
+- [x] 4.1.4 Escrever teste de integração: `GET /admin/api/devices/42` retorna `max_users: null`, `isapi_credentials_set: false` quando sem capacidades/credenciais; retorna `isapi_credentials_set: true` após PUT credentials <!-- ✓ TestAdminDeviceDetail_CredentialsAndCaps_Integration; revelou+corrigiu bug real: GetDeviceByID e os 5 SELECTs de device não carregavam isapi_password_enc, logo credentials_set era sempre false em prod -->
 
 ### 4.2 Handler `PUT /admin/api/devices/{id}/credentials` `[C]`
 
@@ -410,8 +410,8 @@ Ref: spec.md §FR-005, spec.md §Success Criteria, Constitution V
 
 - [x] 7.2.1 Varredura final de logs: grep por `isapi_password` em todos os arquivos de log gerados pelos testes de integração → zero ocorrências — confirmado: `grep -rn "slog\.\|log\.\|fmt\.Print" internal/http/ | grep -i isapi_password` retorna ZERO linhas
 - [x] 7.2.2 Varredura de código: grep por `isapi_password` nos handlers → só aparece como variável local durante Encrypt, nunca em log/response — evidência: `internal/http/admin_device_config_handlers.go` linhas 192/237/260 apenas (struct decode, validação, Encrypt)
-- [ ] 7.2.3 Rodar `go test ./... -count=1` com `TEST_DATABASE_URL` configurado → todos os testes verdes <!-- diferido: sem banco de teste disponível nesta sessão -->
-- [ ] 7.2.4 Verificar migration idempotente: rodar up+down+up sem erro no banco de teste <!-- diferido: sem banco de teste disponível -->
+- [x] 7.2.3 Rodar `go test ./... -count=1` com `TEST_DATABASE_URL` configurado → todos os testes verdes <!-- ✓ go test -tags integration ./... → 10 pacotes ok, 0 falhas (DB presenca_facial_test) -->
+- [x] 7.2.4 Verificar migration idempotente: rodar up+down+up sem erro no banco de teste <!-- ✓ migrate down 1 / up 1 em 000007: colunas removidas e restauradas sem erro -->
 - [x] 7.2.5 Verificar que todos os endpoints novos aparecem na suite de smoke test `admin_smoke_test.go` (ou criar arquivo equivalente) — cobertura em `admin_device_config_handlers_test.go`: TestISAPIHandlers_503_WhenCipherNil cobre todos os 13 handlers; TestDeviceConfigEndpoints_401_WithoutSession cobre auth de todos os 13 endpoints
 
 ---
