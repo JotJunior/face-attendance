@@ -95,11 +95,16 @@ func TestSecurity_TamperedHMACReturns401(t *testing.T) {
 	secret := "test-secret-32-bytes-for-hmac-ok"
 	token := signToken(secret, "admin", time.Hour)
 
-	// Adulterar: substituir último caractere
-	tampered := token[:len(token)-1] + "X"
-	if tampered == token {
-		tampered = token[:len(token)-1] + "Y"
+	// Adulterar o PRIMEIRO caractere da assinatura (bits totalmente
+	// significativos), não o último — cujos bits "don't care" no base64url
+	// tornavam a adulteração um no-op intermitente. Ver session.go (.Strict()).
+	parts := strings.SplitN(token, ".", 2)
+	sig := parts[1]
+	repl := byte('A')
+	if sig[0] == 'A' {
+		repl = 'B'
 	}
+	tampered := parts[0] + "." + string(repl) + sig[1:]
 
 	req := httptest.NewRequest(http.MethodGet, "/admin/api/stats", nil)
 	req.AddCookie(&http.Cookie{Name: "admin_session", Value: tampered})

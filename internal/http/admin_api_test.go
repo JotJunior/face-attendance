@@ -499,3 +499,78 @@ func TestAdminDevices_StatusAndThresholdInResponse(t *testing.T) {
 		t.Error("device 2 webhook_configured deveria ser false")
 	}
 }
+
+// TestToDeviceResponse_IsapiCredentialsSet verifies tasks.md §2.2.5:
+// isapi_credentials_set is true when username + password_enc are present, false otherwise.
+func TestToDeviceResponse_IsapiCredentialsSet(t *testing.T) {
+	user := "admin"
+	enc := []byte("nonce||ciphertext")
+
+	// With credentials
+	d := domain.Device{
+		ID:               1,
+		DeviceIdentifier: "mac1",
+		ISAPIUsername:    &user,
+		ISAPIPasswordEnc: enc,
+	}
+	resp := toDeviceResponse(d, 24)
+	if !resp.IsapiCredentialsSet {
+		t.Error("expected IsapiCredentialsSet=true when username+password_enc are set")
+	}
+
+	// Without credentials (nil username)
+	d2 := domain.Device{
+		ID:               2,
+		DeviceIdentifier: "mac2",
+		ISAPIUsername:    nil,
+		ISAPIPasswordEnc: nil,
+	}
+	resp2 := toDeviceResponse(d2, 24)
+	if resp2.IsapiCredentialsSet {
+		t.Error("expected IsapiCredentialsSet=false when no credentials")
+	}
+
+	// Empty username string — still false
+	emptyUser := ""
+	d3 := domain.Device{
+		ID:               3,
+		DeviceIdentifier: "mac3",
+		ISAPIUsername:    &emptyUser,
+		ISAPIPasswordEnc: enc,
+	}
+	resp3 := toDeviceResponse(d3, 24)
+	if resp3.IsapiCredentialsSet {
+		t.Error("expected IsapiCredentialsSet=false when username is empty string")
+	}
+}
+
+// TestToDeviceResponse_CapacityFields verifies tasks.md §2.2.4:
+// max_users and max_faces are included in the response when set.
+func TestToDeviceResponse_CapacityFields(t *testing.T) {
+	maxU := 5000
+	maxF := 5000
+
+	d := domain.Device{
+		ID:               1,
+		DeviceIdentifier: "mac1",
+		MaxUsers:         &maxU,
+		MaxFaces:         &maxF,
+	}
+	resp := toDeviceResponse(d, 24)
+	if resp.MaxUsers == nil || *resp.MaxUsers != 5000 {
+		t.Errorf("MaxUsers: got %v, want 5000", resp.MaxUsers)
+	}
+	if resp.MaxFaces == nil || *resp.MaxFaces != 5000 {
+		t.Errorf("MaxFaces: got %v, want 5000", resp.MaxFaces)
+	}
+
+	// Nil when not set
+	d2 := domain.Device{ID: 2, DeviceIdentifier: "mac2"}
+	resp2 := toDeviceResponse(d2, 24)
+	if resp2.MaxUsers != nil {
+		t.Errorf("MaxUsers: expected nil, got %v", resp2.MaxUsers)
+	}
+	if resp2.MaxFaces != nil {
+		t.Errorf("MaxFaces: expected nil, got %v", resp2.MaxFaces)
+	}
+}

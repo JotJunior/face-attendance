@@ -51,7 +51,8 @@ func (r *DeviceRepository) ListActive(ctx context.Context) ([]domain.Device, err
 		SELECT id, device_identifier, host(ip_address), mac_address,
 		       last_heartbeat_at, is_active, webhook_configured,
 		       created_at, updated_at,
-		       serial_number, model, firmware_version, isapi_username, isapi_port
+		       serial_number, model, firmware_version, isapi_username, isapi_port,
+		       max_users, max_faces
 		FROM devices
 		WHERE is_active = true
 	`
@@ -70,7 +71,8 @@ func (r *DeviceRepository) FindByIdentifier(ctx context.Context, identifier stri
 		SELECT id, device_identifier, host(ip_address), mac_address,
 		       last_heartbeat_at, is_active, webhook_configured,
 		       created_at, updated_at,
-		       serial_number, model, firmware_version, isapi_username, isapi_port
+		       serial_number, model, firmware_version, isapi_username, isapi_port,
+		       max_users, max_faces
 		FROM devices
 		WHERE device_identifier = $1
 		LIMIT 1
@@ -98,6 +100,14 @@ func (r *DeviceRepository) SetWebhookConfigured(ctx context.Context, identifier 
 	return err
 }
 
+// SetWebhookConfiguredByID marks a device as having its webhook URL configured, by primary key.
+// Used by admin handlers (factory-reset, delete-webhook) that operate on device ID, not identifier.
+func (r *DeviceRepository) SetWebhookConfiguredByID(ctx context.Context, id int64, configured bool) error {
+	query := `UPDATE devices SET webhook_configured = $1, updated_at = now() WHERE id = $2`
+	_, err := r.pool.Exec(ctx, query, configured, id)
+	return err
+}
+
 // CountDevicesByActivity conta dispositivos ativos e inativos conforme thresholdHours.
 // Um dispositivo é considerado ativo se last_heartbeat_at >= now() - thresholdHours.
 // Usa uma única query com CASE para evitar N+1 (CHK-P12).
@@ -120,7 +130,8 @@ func (r *DeviceRepository) ListDevicesAll(ctx context.Context) ([]domain.Device,
 		SELECT id, device_identifier, host(ip_address), mac_address,
 		       last_heartbeat_at, is_active, webhook_configured,
 		       created_at, updated_at,
-		       serial_number, model, firmware_version, isapi_username, isapi_port
+		       serial_number, model, firmware_version, isapi_username, isapi_port,
+		       max_users, max_faces
 		FROM devices
 		ORDER BY device_identifier
 	`
@@ -139,7 +150,8 @@ func (r *DeviceRepository) GetDeviceByID(ctx context.Context, id int64) (*domain
 		SELECT id, device_identifier, host(ip_address), mac_address,
 		       last_heartbeat_at, is_active, webhook_configured,
 		       created_at, updated_at,
-		       serial_number, model, firmware_version, isapi_username, isapi_port
+		       serial_number, model, firmware_version, isapi_username, isapi_port,
+		       max_users, max_faces
 		FROM devices
 		WHERE id = $1
 	`
@@ -166,7 +178,8 @@ func (r *DeviceRepository) FindByMAC(ctx context.Context, mac string) (*domain.D
 		SELECT id, device_identifier, host(ip_address), mac_address,
 		       last_heartbeat_at, is_active, webhook_configured,
 		       created_at, updated_at,
-		       serial_number, model, firmware_version, isapi_username, isapi_port
+		       serial_number, model, firmware_version, isapi_username, isapi_port,
+		       max_users, max_faces
 		FROM devices
 		WHERE mac_address = $1 OR device_identifier = $1
 		LIMIT 1
@@ -262,6 +275,19 @@ func (r *DeviceRepository) HasCredentials(ctx context.Context, id int64) (bool, 
 	return exists, err
 }
 
+// SetCapabilities persists the hardware capacity limits read from ISAPI GetCapabilities.
+// maxUsers and maxFaces are pointers to allow NULL when not available.
+// Ref: tasks.md §2.2.3; mirrors the SetCredentials pattern (device_repository.go:241).
+func (r *DeviceRepository) SetCapabilities(ctx context.Context, id int64, maxUsers, maxFaces *int) error {
+	query := `
+		UPDATE devices
+		SET max_users = $2, max_faces = $3, updated_at = now()
+		WHERE id = $1
+	`
+	_, err := r.pool.Exec(ctx, query, id, maxUsers, maxFaces)
+	return err
+}
+
 // SetDeviceInfo persiste serial/model/firmware obtidos via ISAPI deviceInfo.
 // Valores vazios viram NULL (não sobrescrevem com string vazia).
 func (r *DeviceRepository) SetDeviceInfo(ctx context.Context, id int64, serial, model, firmware string) error {
@@ -278,6 +304,7 @@ func (r *DeviceRepository) SetDeviceInfo(ctx context.Context, id int64, serial, 
 }
 
 // scanDevices reads device rows.
+// Column order must match all SELECT queries in this file (14 columns + 2 capability columns).
 func scanDevices(rows pgx.Rows) ([]domain.Device, error) {
 	var devices []domain.Device
 	for rows.Next() {
@@ -297,6 +324,8 @@ func scanDevices(rows pgx.Rows) ([]domain.Device, error) {
 			&d.FirmwareVersion,
 			&d.ISAPIUsername,
 			&d.ISAPIPort,
+			&d.MaxUsers, // nullable: NULL → nil
+			&d.MaxFaces, // nullable: NULL → nil
 		); err != nil {
 			return nil, err
 		}

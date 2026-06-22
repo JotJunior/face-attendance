@@ -25,4 +25,9 @@ type Device struct {
 	ISAPIUsername    *string `json:"isapi_username,omitempty"`
 	ISAPIPort        int     `json:"isapi_port,omitempty"`
 	ISAPIPasswordEnc []byte  `json:"-"`
+
+	// Hardware capacity limits populated by ISAPI GetCapabilities (nullable until first read).
+	// Ref: data-model.md §Entity Device, tasks.md §2.1/2.2
+	MaxUsers *int `json:"max_users,omitempty"`
+	MaxFaces *int `json:"max_faces,omitempty"`
 }

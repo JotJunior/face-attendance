@@ -137,6 +137,23 @@ func run() error {
 		Logger:                 logger,
 	}
 
+	// ISAPI credential cipher for device-config admin handlers (FASE 4 — device-config).
+	// May be nil when ISAPI_CRED_KEY is absent; handlers return 503 in that case (CHK007/FR-007).
+	var isapiAdminCipher *secrets.Cipher
+	if len(cfg.ISAPICredKey) > 0 {
+		c, cipherErr := secrets.NewCipher(cfg.ISAPICredKey)
+		if cipherErr != nil {
+			return fmt.Errorf("isapi cred cipher (admin): %w", cipherErr)
+		}
+		isapiAdminCipher = c
+	}
+
+	deviceConfigCfg := httphandler.DeviceConfigConfig{
+		DeviceRepo:  deviceRepo,
+		ISAPICipher: isapiAdminCipher,
+		Logger:      logger,
+	}
+
 	srv := httphandler.NewServer(httphandler.ServerConfig{
 		Addr:                    ":8080",
 		WebhookPathSecret:       cfg.WebhookPathSecret,
@@ -156,6 +173,7 @@ func run() error {
 			Publisher:    pub, // não-nil quando adminUIEnabled (ver bloco RabbitMQ)
 			Logger:       logger,
 		},
+		DeviceConfigCfg: deviceConfigCfg,
 		AdminAssets: http.FS(web.Assets), // embed.FS — assets populados na FASE 3
 	})
 

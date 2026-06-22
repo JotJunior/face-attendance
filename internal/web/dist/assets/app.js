@@ -91,10 +91,20 @@ async function apiFetch(url, options = {}, timeoutMs = API_TIMEOUT_MS) {
     throw err;
   }
 }
-const apiGet  = (path, t)        => apiFetch(`/admin/api/${path}`, { method: 'GET' }, t);
-const apiPost = (path, body, t)  => apiFetch(`/admin/api/${path}`, {
+const apiGet    = (path, t)        => apiFetch(`/admin/api/${path}`, { method: 'GET' }, t);
+const apiPost   = (path, body, t)  => apiFetch(`/admin/api/${path}`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
+  body: body !== undefined ? JSON.stringify(body) : undefined,
+}, t);
+const apiPut    = (path, body, t)  => apiFetch(`/admin/api/${path}`, {
+  method: 'PUT',
+  headers: { 'Content-Type': 'application/json' },
+  body: body !== undefined ? JSON.stringify(body) : undefined,
+}, t);
+const apiDelete = (path, body, t)  => apiFetch(`/admin/api/${path}`, {
+  method: 'DELETE',
+  headers: body !== undefined ? { 'Content-Type': 'application/json' } : {},
   body: body !== undefined ? JSON.stringify(body) : undefined,
 }, t);
 
@@ -620,25 +630,55 @@ function renderCfgSection(dev, section) {
   const previewNote = pendingNote('Pré-visualização — os controles desta seção são habilitados quando o backend de configuração do terminal (ISAPI, §7) estiver disponível.');
   const renderers = {
     overview: () => cfgOverview(dev),
-    system:   () => previewNote + cfgSystem(dev),
-    auth:     () => previewNote + cfgAuth(),
-    doors:    () => previewNote + cfgDoors(dev),
-    users:    () => previewNote + cfgUsers(),
+    system:   () => cfgSystem(dev),
+    auth:     () => cfgCredentials(dev),
+    doors:    () => cfgDoors(dev),
+    users:    () => cfgUsers(dev),
     cards:    () => previewNote + cfgCards(),
-    faces:    () => previewNote + cfgFaces(),
-    events:   () => previewNote + cfgEvents(),
+    faces:    () => cfgFaces(dev),
+    events:   () => cfgWebhooks(dev),
     media:    () => previewNote + cfgMedia(),
   };
   el.innerHTML = `<div class="stack">${(renderers[section] || renderers.overview)()}</div>`;
   wireCfgActions(dev);
+  // Wire async sections after DOM is ready
+  if (section === 'auth')   wireCfgCredentials(dev);
+  if (section === 'system') wireCfgSystem(dev);
+  if (section === 'doors')  wireCfgDoors(dev);
+  if (section === 'users')  wireCfgUsers(dev);
+  if (section === 'faces')  wireCfgFaces(dev);
+  if (section === 'events') wireCfgWebhooks(dev);
 }
 
 function cfgOverview(dev) {
   // serial/model/firmware vêm do deviceInfo (ISAPI) persistido no banco; IP/MAC/status/
-  // heartbeat do registro do device. Uptime e capacidades ainda dependem de endpoints
-  // de status/capabilities do device (§7.1) — por isso a nota abaixo.
+  // heartbeat do registro do device. max_users/max_faces/isapi_credentials_set vêm do
+  // GET /admin/api/devices/{id} estendido (FR-002/003).
   const kv = (k, v, mono) => `<div class="kv"><div class="k">${k}</div><div class="v ${mono?'mono':''}">${v}</div></div>`;
+
+  // isapi_credentials_set: bool — null → não configurado (device antigo sem campo)
+  let credBadge;
+  if (dev.isapi_credentials_set === true) {
+    credBadge = badge('ok', 'Configuradas');
+  } else if (dev.isapi_credentials_set === false) {
+    credBadge = badge('warn', 'Não configuradas');
+  } else {
+    credBadge = badge('muted', '—');
+  }
+
+  // max_users/max_faces: null → '—' (nunca exibir zero nem estimativa — FR-002)
+  const maxUsers = dev.max_users != null ? String(dev.max_users) : '—';
+  const maxFaces = dev.max_faces != null ? String(dev.max_faces) : '—';
+
+  // Aviso quando credenciais ISAPI não configuradas (US1-AS3)
+  const credWarn = dev.isapi_credentials_set === false ? `
+    <div class="alert alert-warn" style="margin-bottom:0;">
+      <span style="color:var(--warn); flex:none;">${ICON.warnTri}</span>
+      <div class="grow"><strong style="color:var(--warn);">Credenciais ISAPI não configuradas</strong> — as seções Sistema, Portas, Usuários e Faces dependem da comunicação ISAPI e ficarão desabilitadas até que as credenciais sejam preenchidas. <button class="btn-link" data-section-goto="auth">Configurar agora →</button></div>
+    </div>` : '';
+
   return `
+    ${credWarn}
     <div class="card flush">
       <div class="card-head"><div class="h">Identificação & status</div></div>
       <div class="kv-grid">
@@ -651,107 +691,472 @@ function cfgOverview(dev) {
         ${kv('Status', dev.status === 'active' ? 'Online' : 'Offline')}
         ${kv('Último heartbeat', escHtml(fmtDateTime(dev.last_heartbeat_at)), true)}
         ${kv('Webhook', dev.webhook_configured ? 'Configurado' : 'Ausente')}
+        ${kv('Credenciais ISAPI', credBadge)}
       </div>
     </div>
-    ${pendingNote('Uptime, contadores de uso e capacidades (máx. de usuários/faces) virão dos endpoints de status/capabilities do device (§7.1).')}`;
+    <div class="card flush">
+      <div class="card-head"><div class="h">Capacidades</div></div>
+      <div class="kv-grid">
+        ${kv('Máx. usuários', maxUsers, true)}
+        ${kv('Máx. faces', maxFaces, true)}
+      </div>
+    </div>`;
 }
 
+function cfgCredentials(dev) {
+  // Formulário real de credenciais ISAPI (US2).
+  // Senha usa type="password" e nunca é ecoada de volta (FR-005).
+  // Submit faz PUT /admin/api/devices/{id}/credentials.
+  const credSet = dev.isapi_credentials_set === true;
+  const statusBadge = credSet ? badge('ok', 'Configuradas') : badge('warn', 'Não configuradas');
+  return `
+    <div class="card flush">
+      <div class="card-head">
+        <div class="h">Credenciais ISAPI</div>
+        <span id="cred-status-badge">${statusBadge}</span>
+      </div>
+      <div style="padding:16px;">
+        <div style="font-size:12px; color:var(--text-2); margin-bottom:16px; line-height:1.5;">
+          Informe as credenciais da interface HTTP/ISAPI do terminal. A senha é cifrada antes de armazenar e nunca exibida novamente.
+          ${credSet ? `<br><span style="color:var(--green);">● Credenciais já cadastradas</span> — preencha para atualizar.` : ''}
+        </div>
+        <form id="cred-form" novalidate>
+          <div class="grid-2" style="margin-bottom:14px;">
+            <div class="field">
+              <label class="label" for="cred-user">Usuário ISAPI</label>
+              <input class="input mono" id="cred-user" name="isapi_username" autocomplete="username" placeholder="admin" required />
+            </div>
+            <div class="field">
+              <label class="label" for="cred-port">Porta HTTP</label>
+              <input class="input mono" id="cred-port" name="isapi_port" type="number" min="1" max="65535" placeholder="80" required />
+            </div>
+          </div>
+          <div class="field" style="margin-bottom:18px;">
+            <label class="label" for="cred-pass">Senha ISAPI</label>
+            <input class="input mono" id="cred-pass" name="isapi_password" type="password" autocomplete="new-password" placeholder="••••••••" required />
+          </div>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <button type="submit" class="btn btn-accent" id="cred-submit">Salvar credenciais</button>
+            <span id="cred-feedback" role="alert" aria-live="assertive" style="font-size:12px;"></span>
+          </div>
+        </form>
+      </div>
+    </div>`;
+}
+
+function wireCfgCredentials(dev) {
+  const form = $('cred-form');
+  if (!form) return;
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const username = $('cred-user').value.trim();
+    const password = $('cred-pass').value;
+    const portRaw  = $('cred-port').value.trim();
+    const feedback = $('cred-feedback');
+    const btn      = $('cred-submit');
+
+    // Validação frontend (5.2.6)
+    const port = parseInt(portRaw, 10);
+    if (!username) { feedback.textContent = 'Usuário é obrigatório.'; feedback.style.color = 'var(--red)'; return; }
+    if (!password) { feedback.textContent = 'Senha é obrigatória.'; feedback.style.color = 'var(--red)'; return; }
+    if (!portRaw || isNaN(port) || port < 1 || port > 65535) {
+      feedback.textContent = 'Porta inválida (1–65535).'; feedback.style.color = 'var(--red)'; return;
+    }
+
+    btn.disabled = true; btn.textContent = 'Salvando…'; feedback.textContent = '';
+    try {
+      const res = await apiPut(`devices/${dev.id}/credentials`, {
+        isapi_username: username,
+        isapi_password: password,
+        isapi_port: port,
+      });
+      if (res.status === 401) return;
+      if (res.ok) {
+        const data = await res.json();
+        // Nunca exibir a senha de volta (FR-005)
+        feedback.textContent = `Credenciais salvas. Porta: ${data.isapi_port ?? port}.`;
+        feedback.style.color = 'var(--green)';
+        $('cred-pass').value = '';
+        // Atualizar badge de status
+        const badgeEl = $('cred-status-badge');
+        if (badgeEl && data.isapi_credentials_set) badgeEl.innerHTML = badge('ok', 'Configuradas');
+        // Atualizar estado local para que overview reflita
+        dev.isapi_credentials_set = data.isapi_credentials_set ?? true;
+        dev.isapi_port = data.isapi_port ?? port;
+        showToast('success', 'Credenciais ISAPI salvas com sucesso.');
+      } else {
+        let msg = `Erro ao salvar (status ${res.status}).`;
+        if (res.status === 503) msg = 'Chave de cifra ausente no servidor (ISAPI_CRED_KEY). Contate o administrador.';
+        else if (res.status === 400) { try { const d = await res.json(); if (d.error) msg = d.error; } catch {} }
+        else if (res.status === 404) msg = 'Dispositivo não encontrado.';
+        feedback.textContent = msg; feedback.style.color = 'var(--red)';
+      }
+    } catch (err) {
+      feedback.textContent = err.message === 'timeout' ? 'Tempo de resposta esgotado.' : 'Falha de conexão.';
+      feedback.style.color = 'var(--red)';
+      netError(err);
+    } finally {
+      btn.disabled = false; btn.textContent = 'Salvar credenciais';
+    }
+  });
+}
+
+// ─── 5.3 SISTEMA (time + reboot + factory-reset) ─────────────
 function cfgSystem(dev) {
   return `
     <div class="card flush">
       <div class="card-head"><div class="h">Data & hora</div><span class="badge badge-warn">Crítico</span></div>
       <div style="padding:16px; display:flex; flex-direction:column; gap:14px;">
-        <div class="row-between">
-          <div><div style="font-size:12.5px; font-weight:500;">Sincronização NTP</div><div style="font-size:11px; color:var(--text-3);">Relógio errado quebra a validade dos usuários e o timestamp dos eventos.</div></div>
-          <button class="switch on" aria-label="NTP" aria-pressed="true"><span></span></button>
+        <div class="kv-grid" style="grid-template-columns:1fr 1fr;">
+          <div class="kv"><div class="k">Hora atual no device</div><div class="v mono" id="sys-time-val">Carregando…</div></div>
+          <div class="kv"><div class="k">Modo</div><div class="v mono" id="sys-time-mode">—</div></div>
         </div>
-        <div class="grid-2">
-          <div class="field"><label class="label">Servidor NTP</label><input class="input mono" placeholder="pool.ntp.br"></div>
-          <div class="field"><label class="label">Fuso horário</label><input class="input mono" placeholder="America/Sao_Paulo"></div>
-        </div>
-        <div style="display:flex; gap:10px;"><button class="btn btn-accent" data-pending="Sincronizar relógio">Sincronizar relógio</button><button class="btn btn-ghost" data-pending="Ajuste manual">Ajuste manual</button></div>
+        <div id="sys-time-err" role="alert" style="display:none; color:var(--red); font-size:12px;"></div>
+        <form id="sys-time-form" novalidate>
+          <div class="grid-2" style="margin-bottom:12px;">
+            <div class="field">
+              <label class="label" for="sys-time-mode-sel">Modo</label>
+              <select class="select" id="sys-time-mode-sel">
+                <option value="manual">Manual</option>
+                <option value="ntp">NTP</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="label" for="sys-tz">Fuso horário</label>
+              <input class="input mono" id="sys-tz" placeholder="America/Sao_Paulo" />
+            </div>
+          </div>
+          <div id="sys-ntp-block" style="display:none; margin-bottom:12px;">
+            <div class="field">
+              <label class="label" for="sys-ntp">Servidor NTP</label>
+              <input class="input mono" id="sys-ntp" placeholder="pool.ntp.br" />
+            </div>
+          </div>
+          <div id="sys-manual-block" style="margin-bottom:12px;">
+            <div class="field">
+              <label class="label" for="sys-local-time">Data/hora local (YYYY-MM-DDThh:mm:ss)</label>
+              <input class="input mono" id="sys-local-time" placeholder="2026-06-21T14:00:00" />
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <button type="submit" class="btn btn-accent" id="sys-time-submit">Aplicar</button>
+            <span id="sys-time-feedback" role="alert" aria-live="assertive" style="font-size:12px;"></span>
+          </div>
+        </form>
       </div>
-    </div>
-    <div class="card flush">
-      <div class="card-head"><div class="h">Tela de inicialização</div></div>
-      <div style="padding:16px;"><div class="dropzone">${ICON.upload}<div style="font-size:12.5px; color:var(--text-2); margin-top:6px;">Arraste a imagem de boot ou clique para enviar</div><div class="mono" style="font-size:10.5px; margin-top:4px;">JPG/PNG · máx 1024×600 · até 200KB</div></div></div>
     </div>
     <div class="danger-card">
       <div class="dh">${ICON.warnTri} Zona de perigo</div>
       <div style="padding:16px; display:flex; flex-direction:column; gap:12px;">
         <div class="row-between">
           <div><div style="font-size:12.5px; font-weight:500;">Reiniciar dispositivo</div><div style="font-size:11px; color:var(--text-3);">Indisponível por ~40s durante o reboot.</div></div>
-          <button class="btn btn-warn-outline sm" data-modal="reboot">Reiniciar</button>
+          <button class="btn btn-warn-outline sm" id="sys-reboot-btn">Reiniciar</button>
         </div>
         <div style="height:1px; background:var(--border);"></div>
         <div class="row-between">
           <div><div style="font-size:12.5px; font-weight:500;">Reset de fábrica</div><div style="font-size:11px; color:var(--text-3);">Irreversível — apaga usuários, faces, cartões e configurações.</div></div>
-          <button class="btn btn-danger sm" data-modal="factory">Reset de fábrica</button>
+          <button class="btn btn-danger sm" id="sys-factory-btn">Reset de fábrica</button>
         </div>
       </div>
     </div>`;
 }
 
-function cfgAuth() {
-  const mode = (on, icon, label, sub) => `<div class="authmode ${on?'on':''}">${icon}<div><div style="font-size:13px; font-weight:${on?600:500};">${label}</div>${sub?`<div style="font-size:11px; color:var(--text-3);">${sub}</div>`:''}</div></div>`;
-  return `
-    <div class="card flush">
-      <div class="card-head"><div class="h">Modo de autenticação</div></div>
-      <div style="padding:16px; display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-        ${mode(true, '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-text)" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M9 15a3.5 3.5 0 0 0 6 0"/><circle cx="9.5" cy="11" r="1"/><circle cx="14.5" cy="11" r="1"/></svg>', 'Face', 'recomendado')}
-        ${mode(false, '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg>', 'Cartão', '')}
-        ${mode(false, '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="4" y="4" width="16" height="16" rx="2"/><circle cx="8" cy="9" r="1"/><circle cx="12" cy="9" r="1"/><circle cx="16" cy="9" r="1"/></svg>', 'PIN', '')}
-        ${mode(false, '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="9" cy="12" r="6"/><rect x="13" y="9" width="8" height="6" rx="1"/></svg>', 'Face + Cartão', '')}
-      </div>
-    </div>
-    <div class="card flush">
-      <div class="card-head"><div class="h">Terminal & tela de espera</div></div>
-      <div style="padding:16px; display:flex; flex-direction:column; gap:14px;">
-        <div class="grid-2">
-          <div class="field"><label class="label">Idioma do device</label><select class="select"><option>Português (BR)</option><option>English</option></select></div>
-          <div class="field"><label class="label">Timeout de tela (s)</label><input class="input" placeholder="30"></div>
-        </div>
-        <div class="field"><label class="label">Mensagem de boas-vindas (standby)</label><input class="input" placeholder="Bem-vindo — aproxime o rosto"></div>
-        <div class="dropzone" style="padding:18px;">Enviar mídia de espera (standby) · <span class="mono" style="font-size:10.5px;">JPG/PNG</span></div>
-      </div>
-    </div>`;
+function wireCfgSystem(dev) {
+  // Carregar hora atual do device
+  apiGet(`devices/${dev.id}/time`).then(async res => {
+    const el = $('sys-time-val'), em = $('sys-time-mode'), errEl = $('sys-time-err');
+    if (!el) return;
+    if (res.status === 401) return;
+    if (res.ok) {
+      const d = await res.json();
+      el.textContent = d.local_time || '—';
+      em.textContent = d.time_mode || '—';
+      // Preencher form com valores actuais
+      const modeEl = $('sys-time-mode-sel');
+      const tzEl = $('sys-tz');
+      const ltEl = $('sys-local-time');
+      const ntpEl = $('sys-ntp');
+      if (modeEl) { modeEl.value = d.time_mode || 'manual'; modeEl.dispatchEvent(new Event('change')); }
+      if (tzEl) tzEl.value = d.time_zone || '';
+      if (ltEl) ltEl.value = d.local_time || '';
+    } else {
+      if (errEl) { errEl.textContent = `Não foi possível carregar hora do device (status ${res.status}).`; errEl.style.display = ''; }
+      if (el) el.textContent = '—';
+    }
+  }).catch(err => {
+    const el = $('sys-time-val'), errEl = $('sys-time-err');
+    if (el) el.textContent = '—';
+    if (errEl) { errEl.textContent = err.message === 'timeout' ? 'Tempo de resposta esgotado.' : 'Falha de conexão ao carregar hora.'; errEl.style.display = ''; }
+  });
+
+  // Toggle NTP/manual blocks
+  const modeEl = $('sys-time-mode-sel');
+  if (modeEl) {
+    modeEl.addEventListener('change', () => {
+      const isNtp = modeEl.value === 'ntp';
+      const nb = $('sys-ntp-block'), mb = $('sys-manual-block');
+      if (nb) nb.style.display = isNtp ? '' : 'none';
+      if (mb) mb.style.display = isNtp ? 'none' : '';
+    });
+  }
+
+  // Submit time form
+  const form = $('sys-time-form');
+  if (form) {
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      const btn = $('sys-time-submit'), fb = $('sys-time-feedback');
+      const mode = $('sys-time-mode-sel').value;
+      const tz = ($('sys-tz').value || '').trim();
+      const body = { time_mode: mode, time_zone: tz };
+      if (mode === 'ntp') body.ntp_server = ($('sys-ntp').value || '').trim();
+      else body.local_time = ($('sys-local-time').value || '').trim();
+      btn.disabled = true; btn.textContent = 'Aplicando…'; fb.textContent = '';
+      try {
+        const res = await apiPut(`devices/${dev.id}/time`, body);
+        if (res.status === 401) return;
+        if (res.ok) { fb.textContent = 'Configuração de hora aplicada.'; fb.style.color = 'var(--green)'; showToast('success', 'Hora do dispositivo atualizada.'); }
+        else { let msg = `Erro (status ${res.status}).`; try { const d = await res.json(); if (d.error) msg = d.error; } catch {} fb.textContent = msg; fb.style.color = 'var(--red)'; }
+      } catch (err) { fb.textContent = err.message === 'timeout' ? 'Tempo esgotado.' : 'Falha de conexão.'; fb.style.color = 'var(--red)'; }
+      finally { btn.disabled = false; btn.textContent = 'Aplicar'; }
+    });
+  }
+
+  // Reboot
+  const rebootBtn = $('sys-reboot-btn');
+  if (rebootBtn) {
+    rebootBtn.addEventListener('click', () => {
+      openConfirm({
+        title: 'Reiniciar dispositivo', confirmLabel: 'Reiniciar agora', tone: 'warn', strong: false,
+        body: 'O terminal ficará indisponível por cerca de 40 segundos.',
+        target: cfgTargetOf(dev),
+        onConfirm: async () => {
+          try {
+            const res = await apiPost(`devices/${dev.id}/actions/reboot`);
+            if (res.status === 401) return;
+            if (res.ok) showToast('success', 'Reboot iniciado — o terminal ficará offline por ~40s.');
+            else { let msg = `Erro (status ${res.status}).`; try { const d = await res.json(); if (d.error) msg = d.error; } catch {} showToast('error', msg); }
+          } catch (err) { netError(err); }
+        },
+      });
+    });
+  }
+
+  // Factory reset
+  const factoryBtn = $('sys-factory-btn');
+  if (factoryBtn) {
+    factoryBtn.addEventListener('click', () => {
+      openConfirm({
+        title: 'Reset de fábrica', confirmLabel: 'Apagar tudo e resetar', tone: 'danger', strong: true,
+        body: 'IRREVERSÍVEL — apaga todos os usuários, faces, cartões e configurações. Os membros precisarão ser reprovisionados.',
+        target: cfgTargetOf(dev),
+        onConfirm: async () => {
+          try {
+            const res = await apiPost(`devices/${dev.id}/actions/factory-reset`);
+            if (res.status === 401) return;
+            if (res.ok) {
+              const d = await res.json();
+              // Atualizar estado local webhook_configured (US3-AS3)
+              dev.webhook_configured = d.webhook_configured ?? false;
+              state.devices.byId[dev.id] = dev;
+              showToast('success', 'Reset de fábrica iniciado. Webhook removido do registro.');
+            } else {
+              let msg = `Erro (status ${res.status}).`; try { const d2 = await res.json(); if (d2.error) msg = d2.error; } catch {}
+              showToast('error', msg);
+            }
+          } catch (err) { netError(err); }
+        },
+      });
+    });
+  }
 }
 
+// ─── 5.4 PORTAS ───────────────────────────────────────────────
 function cfgDoors(dev) {
   return `
-    <div class="card pad">
-      <div class="row-between">
-        <div style="display:flex; align-items:center; gap:11px;">
-          <div style="width:38px; height:38px; border-radius:10px; background:var(--green-soft); display:grid; place-items:center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2"><rect x="5" y="3" width="14" height="18" rx="1.5"/><circle cx="15" cy="12" r="1"/></svg></div>
-          <div><div style="font-size:13.5px; font-weight:600;">Porta 1 · Principal</div><div style="font-size:11.5px; color:var(--text-3);">Estado em tempo real exige o endpoint de portas (§7.4).</div></div>
-        </div>
-        <div style="display:flex; gap:8px;">
-          <button class="btn btn-warn-outline sm" data-modal="doorOpen">Destravar 5s</button>
-          <button class="btn btn-ghost sm" data-pending="Manter travada">Manter travada</button>
-        </div>
-      </div>
-    </div>
-    <div class="card flush">
-      <div class="card-head"><div class="h">Configuração da porta</div></div>
+    <div id="doors-list">${loadingState()}</div>
+    <div class="card flush" style="margin-top:0;">
+      <div class="card-head"><div class="h">Configuração de porta</div><span class="badge badge-muted">somente leitura neste build</span></div>
       <div style="padding:16px;" class="grid-2">
-        <div class="field"><label class="label">Delay de destravamento (s)</label><input class="input" placeholder="5"></div>
-        <div class="field"><label class="label">Modo de alarme</label><select class="select"><option>Porta aberta demais</option><option>Arrombamento</option><option>Desativado</option></select></div>
+        <div class="field"><label class="label">Delay de destravamento (s)</label><input class="input" placeholder="5" disabled></div>
+        <div class="field"><label class="label">Modo de alarme</label><select class="select" disabled><option>Porta aberta demais</option><option>Arrombamento</option><option>Desativado</option></select></div>
       </div>
     </div>`;
 }
 
-function cfgUsers() {
+function wireCfgDoors(dev) {
+  const listEl = $('doors-list');
+  if (!listEl) return;
+  apiGet(`devices/${dev.id}/doors`).then(async res => {
+    if (!listEl) return;
+    if (res.status === 401) return;
+    if (!res.ok) {
+      const msg = res.status === 504 ? 'Dispositivo offline — não foi possível carregar portas.' : `Erro ao carregar portas (status ${res.status}).`;
+      listEl.innerHTML = emptyState(ICON.device, 'Erro ao carregar portas', msg);
+      return;
+    }
+    const data = await res.json();
+    const doors = data.doors || [];
+    if (!doors.length) { listEl.innerHTML = emptyState(ICON.device, 'Nenhuma porta encontrada', 'O dispositivo não reportou portas configuradas.'); return; }
+    listEl.innerHTML = doors.map(door => `
+      <div class="card pad" style="margin-bottom:10px;">
+        <div class="row-between">
+          <div style="display:flex; align-items:center; gap:11px;">
+            <div style="width:38px; height:38px; border-radius:10px; background:var(--green-soft); display:grid; place-items:center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2"><rect x="5" y="3" width="14" height="18" rx="1.5"/><circle cx="15" cy="12" r="1"/></svg></div>
+            <div>
+              <div style="font-size:13.5px; font-weight:600;">${escHtml(door.door_name || `Porta ${door.door_id}`)}</div>
+              <div style="font-size:11.5px; color:var(--text-3);">ID ${escHtml(String(door.door_id))} · ${escHtml(String(door.reader_count || 1))} leitor(es) · <span id="door-state-${escHtml(String(door.door_id))}">carregando estado…</span></div>
+            </div>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-warn-outline sm" data-door-open="${escHtml(String(door.door_id))}">Destravar 5s</button>
+          </div>
+        </div>
+      </div>`).join('');
+
+    // Carregar status de cada porta e wire botões de controle
+    doors.forEach(door => {
+      const did = door.door_id;
+      apiGet(`devices/${dev.id}/doors/${did}/status`).then(async sr => {
+        const stEl = $(`door-state-${did}`);
+        if (!stEl) return;
+        if (sr.ok) {
+          const sd = await sr.json();
+          // Exibir valores observados (CHK055 — não presumir enum)
+          stEl.textContent = `porta: ${sd.door_state || '—'} · trava: ${sd.lock_state || '—'}`;
+        } else {
+          stEl.textContent = sr.status === 504 ? 'offline' : `status ${sr.status}`;
+        }
+      }).catch(() => { const stEl = $(`door-state-${did}`); if (stEl) stEl.textContent = 'erro de conexão'; });
+
+      const openBtn = listEl.querySelector(`[data-door-open="${did}"]`);
+      if (openBtn) {
+        openBtn.addEventListener('click', () => {
+          openConfirm({
+            title: `Destravar porta ${did} remotamente`, confirmLabel: 'Destravar', tone: 'warn', strong: false,
+            body: `A porta ${escHtml(door.door_name || `${did}`)} será destravada por 5 segundos. A ação fica registrada no log de auditoria.`,
+            target: cfgTargetOf(dev),
+            onConfirm: async () => {
+              try {
+                const res = await apiPost(`devices/${dev.id}/doors/${did}/control`, { command: 'open' });
+                if (res.status === 401) return;
+                if (res.ok) showToast('success', `Porta ${did} destravada com sucesso.`);
+                else if (res.status === 504) showToast('error', 'Dispositivo offline — não foi possível destravar a porta.');
+                else { let msg = `Erro (status ${res.status}).`; try { const d = await res.json(); if (d.error) msg = d.error; } catch {} showToast('error', msg); }
+              } catch (err) { netError(err); }
+            },
+          });
+        });
+      }
+    });
+  }).catch(err => {
+    const el = $('doors-list');
+    if (el) el.innerHTML = emptyState(ICON.device, 'Falha de conexão', 'Não foi possível carregar a lista de portas.');
+    netError(err);
+  });
+}
+
+// ─── 5.5 USUÁRIOS & FACES ─────────────────────────────────────
+function cfgUsers(dev) {
   return `
     <div class="toolbar">
-      <div class="searchbox" style="width:240px;">${ICON.search}<input placeholder="Buscar usuário…" aria-label="Buscar usuário no device"></div>
-      <button class="btn btn-accent sm" data-pending="Novo usuário">${ICON.plus} Novo usuário</button>
-      <button class="btn btn-ghost sm" data-pending="Captura ao vivo">${ICON.camera} Captura ao vivo</button>
+      <div class="meta mono" id="users-count">Carregando…</div>
+      <div class="spacer"></div>
+      <button class="btn btn-ghost sm" id="users-prev" disabled>Anterior</button>
+      <span class="meta mono" id="users-page">—</span>
+      <button class="btn btn-ghost sm" id="users-next" disabled>Próxima</button>
     </div>
-    <div class="card flush">${emptyState(ICON.members, 'Usuários no terminal', 'A lista de usuários cadastrados no device é carregada do endpoint §7.5, ainda não disponível neste build.')}</div>
-    <div class="card" style="border-color:var(--red); padding:14px 16px;">
-      <div class="row-between"><div><div style="font-size:12.5px; font-weight:500; color:var(--red);">Limpar todos os usuários</div><div style="font-size:11px; color:var(--text-3);">Remove todos os usuários e faces deste terminal.</div></div>
-      <button class="btn btn-danger sm" data-modal="clearUsers">Limpar todos</button></div>
+    <div class="card flush">
+      <div class="thead" style="grid-template-columns:1fr 1fr 80px 60px;">
+        <div>Usuário</div><div>Matrícula</div><div>Faces</div><div>Válido</div>
+      </div>
+      <div id="users-rows">${loadingState()}</div>
+    </div>
+    <div class="card" style="border-color:var(--red); padding:14px 16px; margin-top:0;">
+      <div class="row-between">
+        <div><div style="font-size:12.5px; font-weight:500; color:var(--red);">Limpar todos os usuários</div><div style="font-size:11px; color:var(--text-3);">Remove todos os usuários e faces deste terminal. Requer reprovisionamento.</div></div>
+        <button class="btn btn-danger sm" id="users-clear-btn">Limpar todos</button>
+      </div>
     </div>`;
+}
+
+function wireCfgUsers(dev) {
+  let page = 1;
+  const perPage = 50;
+
+  async function loadUsersPage(p) {
+    const rowsEl = $('users-rows'), cntEl = $('users-count'), pgEl = $('users-page');
+    const prevBtn = $('users-prev'), nextBtn = $('users-next');
+    if (!rowsEl) return;
+    rowsEl.innerHTML = loadingState();
+    if (cntEl) cntEl.textContent = 'Carregando…';
+    if (prevBtn) prevBtn.disabled = true;
+    if (nextBtn) nextBtn.disabled = true;
+    try {
+      const res = await apiGet(`devices/${dev.id}/users?page=${p}&per_page=${perPage}`);
+      if (res.status === 401) return;
+      if (!res.ok) {
+        const msg = res.status === 504 ? 'Dispositivo offline.' : `Erro (status ${res.status}).`;
+        rowsEl.innerHTML = emptyState(ICON.members, 'Erro ao carregar', msg);
+        return;
+      }
+      const data = await res.json();
+      const users = data.users || [];
+      const total = data.total ?? 0;
+      page = data.page ?? p;
+      const totalPages = Math.ceil(total / (data.per_page || perPage));
+      if (cntEl) cntEl.textContent = `${total} usuário(s) no terminal`;
+      if (pgEl) pgEl.textContent = `${page} / ${Math.max(1, totalPages)}`;
+      if (prevBtn) prevBtn.disabled = page <= 1;
+      if (nextBtn) nextBtn.disabled = page >= totalPages;
+      if (!users.length) {
+        rowsEl.innerHTML = emptyState(ICON.members, 'Nenhum usuário cadastrado', 'O terminal não possui usuários no momento.');
+        return;
+      }
+      // camelCase do ISAPI preservado no payload (contracts/admin-api.md §Users)
+      rowsEl.innerHTML = users.map(u => `
+        <div class="trow" style="grid-template-columns:1fr 1fr 80px 60px;">
+          <div class="cell-ellipsis" style="font-size:12.5px; font-weight:500;">${escHtml(u.name || '—')}</div>
+          <div class="mono" style="font-size:11.5px; color:var(--text-2);">${escHtml(u.employeeNo || '—')}</div>
+          <div class="mono" style="font-size:12px;">${escHtml(String(u.numOfFace ?? 0))}</div>
+          <div>${u.valid ? badge('ok','Sim') : badge('muted','Não')}</div>
+        </div>`).join('');
+    } catch (err) {
+      if ($('users-rows')) $('users-rows').innerHTML = emptyState(ICON.members, 'Falha de conexão', 'Tente novamente.');
+      netError(err);
+    }
+  }
+
+  loadUsersPage(1);
+
+  const prevBtn = $('users-prev'), nextBtn = $('users-next');
+  if (prevBtn) prevBtn.addEventListener('click', () => { if (page > 1) loadUsersPage(page - 1); });
+  if (nextBtn) nextBtn.addEventListener('click', () => loadUsersPage(page + 1));
+
+  // Limpar usuários (US5-AS2 — confirmação forte)
+  const clearBtn = $('users-clear-btn');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      openConfirm({
+        title: 'Limpar todos os usuários', confirmLabel: 'Limpar usuários', tone: 'danger', strong: true,
+        body: 'Remove TODOS os usuários e faces deste terminal. Os membros precisarão ser reprovisionados.',
+        target: cfgTargetOf(dev),
+        onConfirm: async () => {
+          try {
+            const res = await apiDelete(`devices/${dev.id}/users`);
+            if (res.status === 401) return;
+            if (res.ok) { showToast('success', 'Usuários removidos do terminal.'); loadUsersPage(1); }
+            else {
+              let msg = `Erro (status ${res.status}).`;
+              if (res.status === 504) msg = 'Dispositivo offline.';
+              else { try { const d = await res.json(); if (d.error) msg = d.error; } catch {} }
+              showToast('error', msg);
+            }
+          } catch (err) { netError(err); }
+        },
+      });
+    });
+  }
 }
 
 function cfgCards() {
@@ -764,39 +1169,131 @@ function cfgCards() {
     </div>`;
 }
 
-function cfgFaces() {
-  const ph = Array.from({length:5}).map(() => `<div class="face-ph"></div>`).join('');
+function cfgFaces(dev) {
+  // DELETE faces é stub (501) — botão desabilitado com tooltip (US5-AS3, 5.5.5)
   return `
-    <div class="card pad">
-      <div class="row-between"><div class="h" style="font-size:13.5px; font-weight:600;">Biblioteca de faces</div><div class="meta mono">§7.7</div></div>
-      <div class="facegrid" style="margin-top:14px;">${ph}<div class="face-add" data-pending="Enviar face">${ICON.plus}</div></div>
-      <div style="margin-top:12px;">${pendingNote('Faces reais carregam do endpoint da biblioteca; os blocos acima são apenas o layout.')}</div>
-    </div>
-    <div class="card pad">
-      <div class="h" style="font-size:13.5px; font-weight:600;">Comparação 1:1</div>
-      <div style="font-size:11.5px; color:var(--text-3); margin-top:3px;">Verifique se uma imagem corresponde a um usuário cadastrado.</div>
-      <div style="display:flex; align-items:center; gap:14px; margin-top:14px;">
-        <div style="width:88px; height:108px; border-radius:10px; background:repeating-linear-gradient(135deg,var(--surface-2) 0 7px,var(--surface-3) 7px 14px); display:grid; place-items:center; color:var(--text-3); font-size:10px;" class="mono">imagem</div>
-        <div style="color:var(--text-3);"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
-        <div style="flex:1;"><select class="select"><option>Selecione um usuário…</option></select><button class="btn btn-accent" style="margin-top:10px;" data-pending="Comparar 1:1">Comparar</button></div>
-      </div>
+    <div class="card flush">
+      <div class="card-head"><div class="h">Biblioteca de faces</div><div id="faces-count" class="meta mono">—</div></div>
+      <div id="faces-list">${loadingState()}</div>
     </div>
     <div class="card" style="border-color:var(--red); padding:14px 16px;">
-      <div class="row-between"><div><div style="font-size:12.5px; font-weight:500; color:var(--red);">Limpar biblioteca de faces</div><div style="font-size:11px; color:var(--text-3);">Remove todas as faces — usuários permanecem sem reconhecimento.</div></div>
-      <button class="btn btn-danger sm" data-modal="clearFaces">Limpar faces</button></div>
+      <div class="row-between">
+        <div>
+          <div style="font-size:12.5px; font-weight:500; color:var(--red);">Limpar biblioteca de faces</div>
+          <div style="font-size:11px; color:var(--text-3);">Remove todas as faces — usuários permanecem sem reconhecimento até reenvio.</div>
+        </div>
+        <button class="btn btn-danger sm" id="faces-clear-btn">Limpar faces</button>
+      </div>
     </div>`;
 }
 
-function cfgEvents() {
+function wireCfgFaces(dev) {
+  // A lista de faces não tem endpoint dedicado de listagem; exibir estado informativo.
+  const listEl = $('faces-list');
+  if (listEl) {
+    listEl.innerHTML = emptyState(ICON.members, 'Visualização não disponível', 'A listagem de faces individuais não é exposta pela ISAPI. Use a seção Usuários para verificar o campo "Faces" por usuário.');
+  }
+  // Botão "Limpar faces" — SOURCED: FaceService.php:38/283 (ENDPOINT_FACE_CLEAR)
+  const clearBtn = $('faces-clear-btn');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', () => {
+      openConfirm({
+        ...CFG_MODALS.clearFaces,
+        target: cfgTargetOf(dev),
+        onConfirm: async () => {
+          try {
+            const res = await apiDelete(`devices/${dev.id}/faces`);
+            if (res.status === 401) return;
+            if (res.ok) { showToast('success', 'Faces removidas do terminal.'); }
+            else {
+              let msg = `Erro (status ${res.status}).`;
+              if (res.status === 504) msg = 'Dispositivo offline.';
+              else { try { const d = await res.json(); if (d.error) msg = d.error; } catch {} }
+              showToast('error', msg);
+            }
+          } catch (err) { netError(err); }
+        },
+      });
+    });
+  }
+}
+
+// ─── 5.6 WEBHOOKS ─────────────────────────────────────────────
+function cfgWebhooks(dev) {
   return `
     <div class="card flush">
-      <div class="card-head"><div class="h">Webhooks</div><button class="btn btn-soft sm" data-pending="Adicionar webhook">${ICON.plus} Adicionar</button></div>
-      ${emptyState(ICON.device, 'Destinos de notificação', 'A lista de webhooks do terminal (§7.8) é carregada do backend de eventos.')}
+      <div class="card-head"><div class="h">Destinos de notificação</div><div id="webhooks-count" class="meta mono">—</div></div>
+      <div id="webhooks-list">${loadingState()}</div>
     </div>
     <div class="card flush">
       <div class="card-head"><div class="h">Stream ao vivo</div><span class="badge badge-muted">desconectado</span></div>
       <div style="padding:16px;">${pendingNote('O monitor de eventos em tempo real do device será habilitado com o stream ISAPI (§7.8).')}</div>
     </div>`;
+}
+
+function wireCfgWebhooks(dev) {
+  const listEl = $('webhooks-list'), cntEl = $('webhooks-count');
+  if (!listEl) return;
+  apiGet(`devices/${dev.id}/webhooks`).then(async res => {
+    if (!listEl) return;
+    if (res.status === 401) return;
+    if (!res.ok) {
+      const msg = res.status === 504 ? 'Dispositivo offline.' : `Erro (status ${res.status}).`;
+      listEl.innerHTML = emptyState(ICON.device, 'Erro ao carregar webhooks', msg);
+      return;
+    }
+    const data = await res.json();
+    const hooks = data.webhooks || [];
+    if (cntEl) cntEl.textContent = `${hooks.length} webhook(s)`;
+    if (!hooks.length) { listEl.innerHTML = emptyState(ICON.device, 'Nenhum webhook configurado', 'Os destinos de notificação do terminal aparecem aqui.'); return; }
+    listEl.innerHTML = hooks.map(h => `
+      <div class="trow" style="grid-template-columns:1fr auto auto;" id="wh-row-${escHtml(h.id)}">
+        <div style="min-width:0;">
+          <div class="cell-ellipsis mono" style="font-size:12px;">${escHtml(h.url || '—')}</div>
+          <div style="font-size:11px; color:var(--text-3);">${escHtml(h.protocol || '—')} · ID: ${escHtml(String(h.id))}</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:6px;">${h._is_primary ? badge('ok','Principal') : ''}</div>
+        <div><button class="btn btn-danger sm" data-wh-delete="${escHtml(String(h.id))}" data-wh-url="${escHtml(h.url || '')}">${ICON.trash}</button></div>
+      </div>`).join('');
+
+    listEl.querySelectorAll('[data-wh-delete]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const whId = btn.dataset.whDelete;
+        const whUrl = btn.dataset.whUrl;
+        openConfirm({
+          title: 'Remover webhook', confirmLabel: 'Remover', tone: 'danger', strong: false,
+          body: `Remove o destino de notificação "${whUrl}". Se for o webhook principal do sistema, os eventos de presença deixarão de ser recebidos.`,
+          target: cfgTargetOf(dev),
+          onConfirm: async () => {
+            try {
+              const res = await apiDelete(`devices/${dev.id}/webhooks/${whId}`);
+              if (res.status === 401) return;
+              if (res.ok) {
+                const d = await res.json();
+                showToast('success', 'Webhook removido.');
+                // Atualizar webhook_configured no estado local (FR-019)
+                dev.webhook_configured = d.webhook_configured ?? dev.webhook_configured;
+                state.devices.byId[dev.id] = dev;
+                // Remover linha da UI
+                const row = $(`wh-row-${whId}`);
+                if (row) row.remove();
+                const remaining = (listEl.querySelectorAll('.trow') || []).length;
+                if (cntEl) cntEl.textContent = `${remaining} webhook(s)`;
+                if (remaining === 0) listEl.innerHTML = emptyState(ICON.device, 'Nenhum webhook configurado', '');
+              } else {
+                let msg = `Erro (status ${res.status}).`; try { const d = await res.json(); if (d.error) msg = d.error; } catch {}
+                showToast('error', msg);
+              }
+            } catch (err) { netError(err); }
+          },
+        });
+      });
+    });
+  }).catch(err => {
+    const el = $('webhooks-list');
+    if (el) el.innerHTML = emptyState(ICON.device, 'Falha de conexão', 'Não foi possível carregar webhooks.');
+    netError(err);
+  });
 }
 
 function cfgMedia() {
@@ -826,6 +1323,8 @@ function wireCfgActions(dev) {
   }));
   $('cfg-content').querySelectorAll('[data-pending]').forEach(b => b.addEventListener('click', () => pendingBackend(b.dataset.pending)));
   $('cfg-content').querySelectorAll('.switch').forEach(sw => sw.addEventListener('click', () => sw.classList.toggle('on')));
+  // "Configurar agora" link no overview navega para aba auth
+  $('cfg-content').querySelectorAll('[data-section-goto]').forEach(b => b.addEventListener('click', () => navigate(`device-config?id=${dev.id}&section=${b.dataset.sectionGoto}`)));
 }
 
 // ─── MEMBERS ──────────────────────────────────────────────────

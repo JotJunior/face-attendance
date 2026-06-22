@@ -16,6 +16,14 @@ import (
 	"time"
 )
 
+// rawURLStrict rejeita base64url não-canônico (bits de padding não-zero).
+// O decoder default (base64.RawURLEncoding) aceita encodings não-canônicos,
+// o que tornava a troca do último caractere de um token um no-op intermitente
+// (os 2 bits "don't care" do último char não alteram os bytes decodificados),
+// deixando passar tokens adulterados. Strict() garante que qualquer
+// adulteração de caractere seja detectada na decodificação.
+var rawURLStrict = base64.RawURLEncoding.Strict()
+
 // tokenPayload é o payload JSON embutido no token de sessão.
 type tokenPayload struct {
 	Sub string `json:"sub"`
@@ -59,8 +67,8 @@ func verifyToken(secret, token string) (sub string, ok bool) {
 	mac.Write([]byte(b64Payload))
 	expectedSig := mac.Sum(nil)
 
-	// Decodificar HMAC recebido
-	sigRecv, err := base64.RawURLEncoding.DecodeString(b64SigRecv)
+	// Decodificar HMAC recebido (estrito: rejeita base64 não-canônico)
+	sigRecv, err := rawURLStrict.DecodeString(b64SigRecv)
 	if err != nil {
 		return "", false
 	}
@@ -70,8 +78,8 @@ func verifyToken(secret, token string) (sub string, ok bool) {
 		return "", false
 	}
 
-	// Decodificar payload (só após validação do HMAC)
-	rawPayload, err := base64.RawURLEncoding.DecodeString(b64Payload)
+	// Decodificar payload (só após validação do HMAC; estrito)
+	rawPayload, err := rawURLStrict.DecodeString(b64Payload)
 	if err != nil {
 		return "", false
 	}
