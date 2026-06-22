@@ -386,7 +386,9 @@ func PostDeviceFactoryResetHandler(cfg DeviceConfigConfig) http.Handler {
 type getTimeResponse struct {
 	LocalTime string `json:"local_time"`
 	TimeZone  string `json:"time_zone"`
-	TimeMode  string `json:"time_mode"`
+	TimeMode  string `json:"time_mode"` // normalizado p/ minúsculo ("ntp"|"manual")
+	NTPServer string `json:"ntp_server,omitempty"`
+	NTPPort   int    `json:"ntp_port,omitempty"`
 }
 
 // GetDeviceTimeHandler serves GET /admin/api/devices/{id}/time.
@@ -421,7 +423,15 @@ func GetDeviceTimeHandler(cfg DeviceConfigConfig) http.Handler {
 		resp := getTimeResponse{
 			LocalTime: td.LocalTime,
 			TimeZone:  td.TimeZone,
-			TimeMode:  td.TimeMode,
+			TimeMode:  strings.ToLower(td.TimeMode),
+		}
+		// Em modo NTP, busca o servidor configurado p/ pré-popular o form
+		// (best-effort — não falha o GET se a leitura do servidor falhar).
+		if strings.EqualFold(td.TimeMode, "ntp") {
+			if ns, nerr := client.GetNTPServer(ctx, 1); nerr == nil && ns != nil {
+				resp.NTPServer = ns.HostName
+				resp.NTPPort = ns.PortNo
+			}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp) //nolint:errcheck

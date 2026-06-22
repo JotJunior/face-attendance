@@ -227,3 +227,31 @@ func TestSetNTPServer_DefaultsPortAndInterval(t *testing.T) {
 		t.Errorf("body missing default synchronizeInterval=60: %q", capturedBody)
 	}
 }
+
+// TestGetNTPServer_ParsesXML cobre a leitura do servidor NTP (GET retorna XML,
+// mesmas tags do PUT; tolera namespace).
+func TestGetNTPServer_ParsesXML(t *testing.T) {
+	srv, cfg := makeISAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || !strings.Contains(r.URL.Path, "/time/ntpServers/1") {
+			t.Errorf("unexpected: %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/xml")
+		w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<NTPServer version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema">
+<id>1</id><addressingFormatType>hostname</addressingFormatType>
+<hostName>time.windows.com</hostName><portNo>123</portNo>
+<synchronizeInterval>60</synchronizeInterval></NTPServer>`)) //nolint:errcheck
+	})
+	defer srv.Close()
+
+	ns, err := hikvision.NewWithHTTPClient(cfg, srv.Client()).GetNTPServer(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("GetNTPServer: %v", err)
+	}
+	if ns.HostName != "time.windows.com" {
+		t.Errorf("HostName: got %q, want time.windows.com", ns.HostName)
+	}
+	if ns.PortNo != 123 {
+		t.Errorf("PortNo: got %d, want 123", ns.PortNo)
+	}
+}

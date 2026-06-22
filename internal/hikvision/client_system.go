@@ -63,6 +63,14 @@ type ntpServerXML struct {
 	SynchronizeInterval  int      `xml:"synchronizeInterval"`
 }
 
+// NTPServerData is the parsed NTP server config read from the device.
+type NTPServerData struct {
+	HostName             string
+	PortNo               int
+	AddressingFormatType string
+	SynchronizeInterval  int
+}
+
 // setTimeXML is the XML shape for PUT /ISAPI/System/time (NTP mode).
 // SOURCED from device test (192.168.68.107, 2026-06-21, HTTP 200).
 type setTimeXML struct {
@@ -245,4 +253,36 @@ func (c *Client) SetNTPServer(ctx context.Context, req NTPServerRequest) error {
 		return nil
 	}
 	return retriableOrNot("SetNTPServer", status, nil)
+}
+
+// GetNTPServer reads the NTP server config for slot id (default 1).
+// GET /ISAPI/System/time/ntpServers/{id} → XML <NTPServer>...</NTPServer>
+// (mesmas tags do PUT; xml.Unmarshal casa por nome local, tolera namespace).
+func (c *Client) GetNTPServer(ctx context.Context, id int) (*NTPServerData, error) {
+	if id <= 0 {
+		id = 1
+	}
+	path := fmt.Sprintf("/ISAPI/System/time/ntpServers/%d", id)
+	respBody, status, err := c.doRequest(ctx, http.MethodGet, path, nil, "")
+	if err != nil {
+		return nil, fmt.Errorf("hikvision: GetNTPServer: %w", err)
+	}
+	if status != 200 {
+		return nil, retriableOrNot("GetNTPServer", status, respBody)
+	}
+	var x struct {
+		HostName             string `xml:"hostName"`
+		PortNo               int    `xml:"portNo"`
+		AddressingFormatType string `xml:"addressingFormatType"`
+		SynchronizeInterval  int    `xml:"synchronizeInterval"`
+	}
+	if xmlErr := xml.Unmarshal(respBody, &x); xmlErr != nil {
+		return nil, fmt.Errorf("hikvision: GetNTPServer XML parse: %w (body: %.120s)", xmlErr, string(respBody))
+	}
+	return &NTPServerData{
+		HostName:             x.HostName,
+		PortNo:               x.PortNo,
+		AddressingFormatType: x.AddressingFormatType,
+		SynchronizeInterval:  x.SynchronizeInterval,
+	}, nil
 }

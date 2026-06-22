@@ -870,15 +870,16 @@ function wireCfgSystem(dev) {
     if (res.ok) {
       const d = await res.json();
       el.textContent = d.local_time || '—';
-      em.textContent = d.time_mode || '—';
+      em.textContent = (d.time_mode || '—').toUpperCase();
       // Preencher form com valores actuais
       const modeEl = $('sys-time-mode-sel');
       const tzEl = $('sys-tz');
       const ltEl = $('sys-local-time');
       const ntpEl = $('sys-ntp');
-      if (modeEl) { modeEl.value = d.time_mode || 'manual'; modeEl.dispatchEvent(new Event('change')); }
+      if (modeEl) { modeEl.value = (d.time_mode || 'manual').toLowerCase(); modeEl.dispatchEvent(new Event('change')); }
       if (tzEl) tzEl.value = d.time_zone || '';
       if (ltEl) ltEl.value = d.local_time || '';
+      if (ntpEl) ntpEl.value = d.ntp_server || '';
     } else {
       if (errEl) { errEl.textContent = `Não foi possível carregar hora do device (status ${res.status}).`; errEl.style.display = ''; }
       if (el) el.textContent = '—';
