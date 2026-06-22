@@ -132,6 +132,13 @@ func buildUserJSON(employeeNo, name string) string {
 				"endTime":   "2037-12-31T23:59:59",
 				"timeType":  "local",
 			},
+			// doorRight é a LISTA de portas que o usuário pode abrir. Sem ela, há
+			// firmware/config em que o leitor RECONHECE a face mas NEGA o acesso
+			// ("sem permissão"), pois RightPlan só amarra o HORÁRIO por porta, não a
+			// permissão de porta em si. SOURCED do payload provado no device real:
+			// legacy/hik-api/old/src/Device/DSK1T673DWX/User.php:81 ('doorRight'=>'1,2').
+			"doorRight":    "1,2",
+			"localUIRight": false,
 			// Vincula o template de horário semanal (porta 1, plano 1 = 24/7).
 			// Sem planTemplateNo o leitor recusa o acesso com "Duração inválida".
 			// O firmware exige planTemplateNo como STRING (número é rejeitado).

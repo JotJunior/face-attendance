@@ -44,6 +44,13 @@ type Config struct {
 	// Device monitoring
 	DeviceOfflineThresholdHours int // DEVICE_OFFLINE_THRESHOLD_HOURS (default: 24)
 
+	// Device readiness (gates de acesso provisionados no startup, por device).
+	// Garantem que o leitor LIBERA quem reconhece — sem depender de config manual.
+	DeviceClockGuard           bool // DEVICE_CLOCK_GUARD (default: true) — checa drift do relógio
+	DeviceClockAutocorrect     bool // DEVICE_CLOCK_AUTOCORRECT (default: true) — corrige drift via SetTime/NTP
+	DeviceClockMaxDriftSeconds int  // DEVICE_CLOCK_MAX_DRIFT_SECONDS (default: 120)
+	DeviceEnsureFaceVerifyMode bool // DEVICE_ENSURE_FACE_VERIFY_MODE (default: true) — garante face 24/7
+
 	// Rate limiting
 	WebhookRateLimitPerIPPerMin int // WEBHOOK_RATE_LIMIT_PER_IP_PER_MIN (default: 60)
 	AdminSyncMinIntervalSeconds int // ADMIN_SYNC_MIN_INTERVAL_SECONDS (default: 60)
@@ -139,6 +146,11 @@ func Load() (*Config, error) {
 		AdminCookieSecure:           optionalBool("ADMIN_COOKIE_SECURE", true),
 		// Device monitoring threshold
 		DeviceOfflineThresholdHours: optionalInt("DEVICE_OFFLINE_THRESHOLD_HOURS", 24),
+		// Device readiness (gates provisionados no startup)
+		DeviceClockGuard:           optionalBool("DEVICE_CLOCK_GUARD", true),
+		DeviceClockAutocorrect:     optionalBool("DEVICE_CLOCK_AUTOCORRECT", true),
+		DeviceClockMaxDriftSeconds: optionalInt("DEVICE_CLOCK_MAX_DRIFT_SECONDS", 120),
+		DeviceEnsureFaceVerifyMode: optionalBool("DEVICE_ENSURE_FACE_VERIFY_MODE", true),
 	}
 
 	// Load per-device ISAPI configs: ISAPI_DEVICE_1_HOST, ISAPI_DEVICE_2_HOST, ...

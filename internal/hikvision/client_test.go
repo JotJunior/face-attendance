@@ -90,7 +90,7 @@ func TestUpsertUser_Create(t *testing.T) {
 	if !strings.Contains(receivedPath, "/UserInfo/Record") {
 		t.Errorf("expected /UserInfo/Record, got %s", receivedPath)
 	}
-	for _, want := range []string{`"employeeNo":"12345678901"`, `"name":"Test User"`, `"userType":"normal"`, `"Valid"`} {
+	for _, want := range []string{`"employeeNo":"12345678901"`, `"name":"Test User"`, `"userType":"normal"`, `"Valid"`, `"doorRight":"1,2"`} {
 		if !strings.Contains(receivedJSON, want) {
 			t.Errorf("JSON missing %s, got: %s", want, receivedJSON)
 		}

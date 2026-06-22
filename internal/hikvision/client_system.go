@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // TimeData holds the time configuration retrieved from the device.
@@ -160,6 +161,25 @@ func (c *Client) GetTime(ctx context.Context) (*TimeData, error) {
 	}
 
 	return nil, fmt.Errorf("hikvision: GetTime: resposta não-parseável como XML nem JSON (body: %.120s)", string(respBody))
+}
+
+// ClockDrift calcula o desvio entre o relógio do device (localTime do GetTime) e `now`.
+// Só retorna ok=true quando localTime traz OFFSET de fuso (RFC3339, ex.
+// "2026-06-21T14:30:00-03:00"): aí o instante é absoluto e o drift é confiável. Sem
+// offset (ex. "2026-06-21T14:30:00") NÃO dá pra medir desvio com segurança — não
+// inventamos o fuso (Princípio I) — então ok=false e o chamador apenas avisa.
+// devTime preserva a Location do offset reportado, p/ formatar uma correção no MESMO fuso.
+func ClockDrift(localTime string, now time.Time) (devTime time.Time, drift time.Duration, ok bool) {
+	lt := strings.TrimSpace(localTime)
+	if lt == "" {
+		return time.Time{}, 0, false
+	}
+	t, err := time.Parse(time.RFC3339, lt)
+	if err != nil {
+		// time.RFC3339 exige offset; localTime sem offset cai aqui → ok=false.
+		return time.Time{}, 0, false
+	}
+	return t, now.Sub(t), true
 }
 
 // SetTime sends PUT /ISAPI/System/time to the device.
