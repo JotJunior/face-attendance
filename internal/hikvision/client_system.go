@@ -151,7 +151,7 @@ func (c *Client) SetTime(ctx context.Context, req TimeSetRequest) error {
 			return fmt.Errorf("hikvision: SetTime: marshal XML: %w", err)
 		}
 		_, status, reqErr := c.doRequest(ctx, http.MethodPut, "/ISAPI/System/time",
-			strings.NewReader(string(b)), "application/xml")
+			strings.NewReader(xml.Header+string(b)), "application/xml")
 		if reqErr != nil {
 			return fmt.Errorf("hikvision: SetTime (NTP): %w", reqErr)
 		}
@@ -217,7 +217,7 @@ func (c *Client) SetNTPServer(ctx context.Context, req NTPServerRequest) error {
 
 	path := fmt.Sprintf("/ISAPI/System/time/ntpServers/%d", id)
 	_, status, reqErr := c.doRequest(ctx, http.MethodPut, path,
-		strings.NewReader(string(b)), "application/xml")
+		strings.NewReader(xml.Header+string(b)), "application/xml")
 	if reqErr != nil {
 		return fmt.Errorf("hikvision: SetNTPServer: %w", reqErr)
 	}
