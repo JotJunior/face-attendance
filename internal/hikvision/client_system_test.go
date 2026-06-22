@@ -69,6 +69,36 @@ func TestGetTime_ParsesJSON(t *testing.T) {
 	}
 }
 
+// TestGetTime_ParsesXML cobre o firmware V4.48.20: /ISAPI/System/time responde
+// XML (ignora ?format=json). Resposta real capturada do device em 2026-06-22.
+func TestGetTime_ParsesXML(t *testing.T) {
+	srv, cfg := makeISAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<Time version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema">
+<timeMode>NTP</timeMode>
+<localTime>2026-06-21T23:54:21-03:00</localTime>
+<timeZone>CST+3:00:00</timeZone>
+<IANA>Asia/Shanghai</IANA>
+</Time>`)) //nolint:errcheck
+	})
+	defer srv.Close()
+
+	td, err := hikvision.NewWithHTTPClient(cfg, srv.Client()).GetTime(context.Background())
+	if err != nil {
+		t.Fatalf("GetTime: %v", err)
+	}
+	if td.TimeMode != "NTP" {
+		t.Errorf("TimeMode: got %q, want NTP", td.TimeMode)
+	}
+	if td.TimeZone != "CST+3:00:00" {
+		t.Errorf("TimeZone: got %q, want CST+3:00:00", td.TimeZone)
+	}
+	if td.LocalTime != "2026-06-21T23:54:21-03:00" {
+		t.Errorf("LocalTime: got %q", td.LocalTime)
+	}
+}
+
 // TestSetTime_ManualMode_SendsCorrectBody verifies SetTime sends JSON with timeMode=manual.
 // SOURCED: DeviceService.php:278-320.
 func TestSetTime_ManualMode_SendsCorrectBody(t *testing.T) {

@@ -823,7 +823,7 @@ function cfgSystem(dev) {
             </div>
             <div class="field">
               <label class="label" for="sys-tz">Fuso horário</label>
-              <input class="input mono" id="sys-tz" placeholder="America/Sao_Paulo" />
+              <input class="input mono" id="sys-tz" placeholder="CST+3:00:00 (formato HikVision)" />
             </div>
           </div>
           <div id="sys-ntp-block" style="display:none; margin-bottom:12px;">

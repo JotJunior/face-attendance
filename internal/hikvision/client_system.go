@@ -102,10 +102,16 @@ func (c *Client) FactoryReset(ctx context.Context) error {
 }
 
 // GetTime retrieves the current time configuration from the device.
-// SOURCED: DeviceService.php:251-270 (GET) + parseTimeData:395-406 (JSON parse).
-// Response is JSON: {"Time":{"localTime":"...","timeZone":"...","timeMode":"..."}}.
+// IMPORTANTE: /ISAPI/System/time IGNORA ?format=json e responde XML neste
+// firmware (V4.48.20) — verificado no device 2026-06-22, ex.:
+//
+//	<Time version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema">
+//	  <timeMode>NTP</timeMode><localTime>2026-...T..-03:00</localTime>
+//	  <timeZone>CST+3:00:00</timeZone><IANA>Asia/Shanghai</IANA></Time>
+//
+// Parse XML primário + fallback JSON (firmwares que honrem format=json).
 func (c *Client) GetTime(ctx context.Context) (*TimeData, error) {
-	respBody, status, err := c.doRequest(ctx, http.MethodGet, "/ISAPI/System/time?format=json", nil, "")
+	respBody, status, err := c.doRequest(ctx, http.MethodGet, "/ISAPI/System/time", nil, "")
 	if err != nil {
 		return nil, fmt.Errorf("hikvision: GetTime: %w", err)
 	}
@@ -113,25 +119,39 @@ func (c *Client) GetTime(ctx context.Context) (*TimeData, error) {
 		return nil, retriableOrNot("GetTime", status, respBody)
 	}
 
-	// Parse JSON response. The ISAPI wraps data in {"Time":{...}}.
-	// SOURCED: parseTimeData (DeviceService.php:395-406) reads data['Time']['localTime'] etc.
-	var wrapper struct {
+	// Primário: XML <Time><timeMode/><localTime/><timeZone/></Time> (com namespace;
+	// xml.Unmarshal casa por nome local).
+	var xmlData struct {
+		LocalTime string `xml:"localTime"`
+		TimeZone  string `xml:"timeZone"`
+		TimeMode  string `xml:"timeMode"`
+	}
+	if xmlErr := xml.Unmarshal(respBody, &xmlData); xmlErr == nil &&
+		(xmlData.TimeMode != "" || xmlData.LocalTime != "" || xmlData.TimeZone != "") {
+		return &TimeData{
+			LocalTime: xmlData.LocalTime,
+			TimeZone:  xmlData.TimeZone,
+			TimeMode:  xmlData.TimeMode,
+		}, nil
+	}
+
+	// Fallback: JSON {"Time":{...}}.
+	var jsonData struct {
 		Time struct {
 			LocalTime string `json:"localTime"`
 			TimeZone  string `json:"timeZone"`
 			TimeMode  string `json:"timeMode"`
 		} `json:"Time"`
 	}
-	if err := json.Unmarshal(respBody, &wrapper); err != nil {
-		return nil, fmt.Errorf("hikvision: GetTime JSON parse: %w (body: %.120s)", err, string(respBody))
+	if jsonErr := json.Unmarshal(respBody, &jsonData); jsonErr == nil {
+		return &TimeData{
+			LocalTime: jsonData.Time.LocalTime,
+			TimeZone:  jsonData.Time.TimeZone,
+			TimeMode:  jsonData.Time.TimeMode,
+		}, nil
 	}
 
-	td := wrapper.Time
-	return &TimeData{
-		LocalTime: td.LocalTime,
-		TimeZone:  td.TimeZone,
-		TimeMode:  td.TimeMode,
-	}, nil
+	return nil, fmt.Errorf("hikvision: GetTime: resposta não-parseável como XML nem JSON (body: %.120s)", string(respBody))
 }
 
 // SetTime sends PUT /ISAPI/System/time to the device.
