@@ -69,6 +69,36 @@ func TestGetTime_ParsesJSON(t *testing.T) {
 	}
 }
 
+// TestGetTime_ParsesXML cobre o firmware V4.48.20: /ISAPI/System/time responde
+// XML (ignora ?format=json). Resposta real capturada do device em 2026-06-22.
+func TestGetTime_ParsesXML(t *testing.T) {
+	srv, cfg := makeISAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<Time version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema">
+<timeMode>NTP</timeMode>
+<localTime>2026-06-21T23:54:21-03:00</localTime>
+<timeZone>CST+3:00:00</timeZone>
+<IANA>Asia/Shanghai</IANA>
+</Time>`)) //nolint:errcheck
+	})
+	defer srv.Close()
+
+	td, err := hikvision.NewWithHTTPClient(cfg, srv.Client()).GetTime(context.Background())
+	if err != nil {
+		t.Fatalf("GetTime: %v", err)
+	}
+	if td.TimeMode != "NTP" {
+		t.Errorf("TimeMode: got %q, want NTP", td.TimeMode)
+	}
+	if td.TimeZone != "CST+3:00:00" {
+		t.Errorf("TimeZone: got %q, want CST+3:00:00", td.TimeZone)
+	}
+	if td.LocalTime != "2026-06-21T23:54:21-03:00" {
+		t.Errorf("LocalTime: got %q", td.LocalTime)
+	}
+}
+
 // TestSetTime_ManualMode_SendsCorrectBody verifies SetTime sends JSON with timeMode=manual.
 // SOURCED: DeviceService.php:278-320.
 func TestSetTime_ManualMode_SendsCorrectBody(t *testing.T) {
@@ -195,5 +225,33 @@ func TestSetNTPServer_DefaultsPortAndInterval(t *testing.T) {
 	}
 	if !strings.Contains(capturedBody, "60") {
 		t.Errorf("body missing default synchronizeInterval=60: %q", capturedBody)
+	}
+}
+
+// TestGetNTPServer_ParsesXML cobre a leitura do servidor NTP (GET retorna XML,
+// mesmas tags do PUT; tolera namespace).
+func TestGetNTPServer_ParsesXML(t *testing.T) {
+	srv, cfg := makeISAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || !strings.Contains(r.URL.Path, "/time/ntpServers/1") {
+			t.Errorf("unexpected: %s %s", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/xml")
+		w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+<NTPServer version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema">
+<id>1</id><addressingFormatType>hostname</addressingFormatType>
+<hostName>time.windows.com</hostName><portNo>123</portNo>
+<synchronizeInterval>60</synchronizeInterval></NTPServer>`)) //nolint:errcheck
+	})
+	defer srv.Close()
+
+	ns, err := hikvision.NewWithHTTPClient(cfg, srv.Client()).GetNTPServer(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("GetNTPServer: %v", err)
+	}
+	if ns.HostName != "time.windows.com" {
+		t.Errorf("HostName: got %q, want time.windows.com", ns.HostName)
+	}
+	if ns.PortNo != 123 {
+		t.Errorf("PortNo: got %d, want 123", ns.PortNo)
 	}
 }

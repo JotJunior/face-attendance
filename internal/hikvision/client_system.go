@@ -63,6 +63,14 @@ type ntpServerXML struct {
 	SynchronizeInterval  int      `xml:"synchronizeInterval"`
 }
 
+// NTPServerData is the parsed NTP server config read from the device.
+type NTPServerData struct {
+	HostName             string
+	PortNo               int
+	AddressingFormatType string
+	SynchronizeInterval  int
+}
+
 // setTimeXML is the XML shape for PUT /ISAPI/System/time (NTP mode).
 // SOURCED from device test (192.168.68.107, 2026-06-21, HTTP 200).
 type setTimeXML struct {
@@ -102,10 +110,16 @@ func (c *Client) FactoryReset(ctx context.Context) error {
 }
 
 // GetTime retrieves the current time configuration from the device.
-// SOURCED: DeviceService.php:251-270 (GET) + parseTimeData:395-406 (JSON parse).
-// Response is JSON: {"Time":{"localTime":"...","timeZone":"...","timeMode":"..."}}.
+// IMPORTANTE: /ISAPI/System/time IGNORA ?format=json e responde XML neste
+// firmware (V4.48.20) — verificado no device 2026-06-22, ex.:
+//
+//	<Time version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema">
+//	  <timeMode>NTP</timeMode><localTime>2026-...T..-03:00</localTime>
+//	  <timeZone>CST+3:00:00</timeZone><IANA>Asia/Shanghai</IANA></Time>
+//
+// Parse XML primário + fallback JSON (firmwares que honrem format=json).
 func (c *Client) GetTime(ctx context.Context) (*TimeData, error) {
-	respBody, status, err := c.doRequest(ctx, http.MethodGet, "/ISAPI/System/time?format=json", nil, "")
+	respBody, status, err := c.doRequest(ctx, http.MethodGet, "/ISAPI/System/time", nil, "")
 	if err != nil {
 		return nil, fmt.Errorf("hikvision: GetTime: %w", err)
 	}
@@ -113,25 +127,39 @@ func (c *Client) GetTime(ctx context.Context) (*TimeData, error) {
 		return nil, retriableOrNot("GetTime", status, respBody)
 	}
 
-	// Parse JSON response. The ISAPI wraps data in {"Time":{...}}.
-	// SOURCED: parseTimeData (DeviceService.php:395-406) reads data['Time']['localTime'] etc.
-	var wrapper struct {
+	// Primário: XML <Time><timeMode/><localTime/><timeZone/></Time> (com namespace;
+	// xml.Unmarshal casa por nome local).
+	var xmlData struct {
+		LocalTime string `xml:"localTime"`
+		TimeZone  string `xml:"timeZone"`
+		TimeMode  string `xml:"timeMode"`
+	}
+	if xmlErr := xml.Unmarshal(respBody, &xmlData); xmlErr == nil &&
+		(xmlData.TimeMode != "" || xmlData.LocalTime != "" || xmlData.TimeZone != "") {
+		return &TimeData{
+			LocalTime: xmlData.LocalTime,
+			TimeZone:  xmlData.TimeZone,
+			TimeMode:  xmlData.TimeMode,
+		}, nil
+	}
+
+	// Fallback: JSON {"Time":{...}}.
+	var jsonData struct {
 		Time struct {
 			LocalTime string `json:"localTime"`
 			TimeZone  string `json:"timeZone"`
 			TimeMode  string `json:"timeMode"`
 		} `json:"Time"`
 	}
-	if err := json.Unmarshal(respBody, &wrapper); err != nil {
-		return nil, fmt.Errorf("hikvision: GetTime JSON parse: %w (body: %.120s)", err, string(respBody))
+	if jsonErr := json.Unmarshal(respBody, &jsonData); jsonErr == nil {
+		return &TimeData{
+			LocalTime: jsonData.Time.LocalTime,
+			TimeZone:  jsonData.Time.TimeZone,
+			TimeMode:  jsonData.Time.TimeMode,
+		}, nil
 	}
 
-	td := wrapper.Time
-	return &TimeData{
-		LocalTime: td.LocalTime,
-		TimeZone:  td.TimeZone,
-		TimeMode:  td.TimeMode,
-	}, nil
+	return nil, fmt.Errorf("hikvision: GetTime: resposta não-parseável como XML nem JSON (body: %.120s)", string(respBody))
 }
 
 // SetTime sends PUT /ISAPI/System/time to the device.
@@ -151,7 +179,7 @@ func (c *Client) SetTime(ctx context.Context, req TimeSetRequest) error {
 			return fmt.Errorf("hikvision: SetTime: marshal XML: %w", err)
 		}
 		_, status, reqErr := c.doRequest(ctx, http.MethodPut, "/ISAPI/System/time",
-			strings.NewReader(string(b)), "application/xml")
+			strings.NewReader(xml.Header+string(b)), "application/xml")
 		if reqErr != nil {
 			return fmt.Errorf("hikvision: SetTime (NTP): %w", reqErr)
 		}
@@ -217,7 +245,7 @@ func (c *Client) SetNTPServer(ctx context.Context, req NTPServerRequest) error {
 
 	path := fmt.Sprintf("/ISAPI/System/time/ntpServers/%d", id)
 	_, status, reqErr := c.doRequest(ctx, http.MethodPut, path,
-		strings.NewReader(string(b)), "application/xml")
+		strings.NewReader(xml.Header+string(b)), "application/xml")
 	if reqErr != nil {
 		return fmt.Errorf("hikvision: SetNTPServer: %w", reqErr)
 	}
@@ -225,4 +253,36 @@ func (c *Client) SetNTPServer(ctx context.Context, req NTPServerRequest) error {
 		return nil
 	}
 	return retriableOrNot("SetNTPServer", status, nil)
+}
+
+// GetNTPServer reads the NTP server config for slot id (default 1).
+// GET /ISAPI/System/time/ntpServers/{id} → XML <NTPServer>...</NTPServer>
+// (mesmas tags do PUT; xml.Unmarshal casa por nome local, tolera namespace).
+func (c *Client) GetNTPServer(ctx context.Context, id int) (*NTPServerData, error) {
+	if id <= 0 {
+		id = 1
+	}
+	path := fmt.Sprintf("/ISAPI/System/time/ntpServers/%d", id)
+	respBody, status, err := c.doRequest(ctx, http.MethodGet, path, nil, "")
+	if err != nil {
+		return nil, fmt.Errorf("hikvision: GetNTPServer: %w", err)
+	}
+	if status != 200 {
+		return nil, retriableOrNot("GetNTPServer", status, respBody)
+	}
+	var x struct {
+		HostName             string `xml:"hostName"`
+		PortNo               int    `xml:"portNo"`
+		AddressingFormatType string `xml:"addressingFormatType"`
+		SynchronizeInterval  int    `xml:"synchronizeInterval"`
+	}
+	if xmlErr := xml.Unmarshal(respBody, &x); xmlErr != nil {
+		return nil, fmt.Errorf("hikvision: GetNTPServer XML parse: %w (body: %.120s)", xmlErr, string(respBody))
+	}
+	return &NTPServerData{
+		HostName:             x.HostName,
+		PortNo:               x.PortNo,
+		AddressingFormatType: x.AddressingFormatType,
+		SynchronizeInterval:  x.SynchronizeInterval,
+	}, nil
 }
