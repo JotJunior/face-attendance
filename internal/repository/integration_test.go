@@ -146,6 +146,59 @@ func TestDeviceRepository_UpsertAndList(t *testing.T) {
 	}
 }
 
+// TestDeviceRepository_SetCapabilitiesNullableRoundtrip cobre a task 2.2.6:
+// SetCapabilities persiste e GetDeviceByID recupera os valores nullable
+// (incl. o round-trip de volta para NULL).
+func TestDeviceRepository_SetCapabilitiesNullableRoundtrip(t *testing.T) {
+	pool := testPool(t)
+	cleanup(t, pool)
+	repo := repository.NewDeviceRepository(pool)
+	ctx := context.Background()
+
+	const ident = "11:22:33:44:55:66"
+	if err := repo.Upsert(ctx, domain.Device{DeviceIdentifier: ident}); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	dev, err := repo.FindByIdentifier(ctx, ident)
+	if err != nil || dev == nil {
+		t.Fatalf("FindByIdentifier: %v (dev=%v)", err, dev)
+	}
+
+	// Estado inicial: capacidades NULL.
+	got, err := repo.GetDeviceByID(ctx, dev.ID)
+	if err != nil {
+		t.Fatalf("GetDeviceByID (inicial): %v", err)
+	}
+	if got.MaxUsers != nil || got.MaxFaces != nil {
+		t.Errorf("capacidades iniciais: MaxUsers=%v MaxFaces=%v, want nil/nil", got.MaxUsers, got.MaxFaces)
+	}
+
+	// SetCapabilities persiste valores e GetDeviceByID os recupera.
+	maxU, maxF := 50000, 50000
+	if err := repo.SetCapabilities(ctx, dev.ID, &maxU, &maxF); err != nil {
+		t.Fatalf("SetCapabilities: %v", err)
+	}
+	got, err = repo.GetDeviceByID(ctx, dev.ID)
+	if err != nil {
+		t.Fatalf("GetDeviceByID (após set): %v", err)
+	}
+	if got.MaxUsers == nil || *got.MaxUsers != maxU || got.MaxFaces == nil || *got.MaxFaces != maxF {
+		t.Errorf("após SetCapabilities: MaxUsers=%v MaxFaces=%v, want %d/%d", got.MaxUsers, got.MaxFaces, maxU, maxF)
+	}
+
+	// Round-trip de volta para NULL (campos nullable).
+	if err := repo.SetCapabilities(ctx, dev.ID, nil, nil); err != nil {
+		t.Fatalf("SetCapabilities (nil): %v", err)
+	}
+	got, err = repo.GetDeviceByID(ctx, dev.ID)
+	if err != nil {
+		t.Fatalf("GetDeviceByID (após nil): %v", err)
+	}
+	if got.MaxUsers != nil || got.MaxFaces != nil {
+		t.Errorf("após SetCapabilities(nil): MaxUsers=%v MaxFaces=%v, want nil/nil", got.MaxUsers, got.MaxFaces)
+	}
+}
+
 // ---------- AttendanceEvents ----------
 
 func TestAttendanceEventRepository_InsertAndDedup(t *testing.T) {
