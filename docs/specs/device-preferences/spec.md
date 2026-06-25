@@ -403,7 +403,8 @@ normalização.
   que solicita captura facial ao vivo via `POST /ISAPI/AccessControl/CaptureFaceData`
   com XML body `<CaptureFaceDataCond version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema"><captureInfrared>false</captureInfrared><dataType>url</dataType></CaptureFaceDataCond>`;
   o sistema recebe a URL da imagem capturada, faz download e retorna a imagem ao
-  painel (como base64 ou streaming direto, a definir no plan).
+  painel como **base64 em JSON** (Clarification 3 resolvida — dec-011; não expõe IP
+  interno do device).
 
 **Grupo 9: Segurança e Validação**
 
@@ -471,32 +472,51 @@ normalização.
 
 ## Clarifications
 
-### Clarification 1 — Escopo de Cartões [NEEDS CLARIFICATION]
+### Clarification 1 — Escopo de Cartões [AGUARDANDO DECISÃO HUMANA — block-001]
 
 A feature `device-config` explicitamente deixou gestão de cartões fora de escopo
 ("Gestão de cartões RFID/NFC — o fluxo principal é por face"). Os contratos ISAPI
 de cartões estão verificados em `legacy/hik2go/src/Hik2go/Card.php` (FR-017 a FR-019).
 
-**Pergunta**: Gestão de cartões (`CardInfo`) faz parte do escopo desta feature
-`device-preferences`, ou deve permanecer fora de escopo?
+**Status**: Bloqueio humano registrado (block-001 / dec-013). O clarify-answerer não
+atingiu score >=2 para nenhuma opção — a decisão depende de prioridade de produto.
 
-**Opções sugeridas**:
-- A. **Incluir** — implementar FR-017/018/019 (vincular, consultar, remover cartão
-  por número) como parte desta feature.
-- B. **Excluir** — manter fora de escopo; o operador usa a interface web do dispositivo
-  para gestão de cartões.
+**Pergunta pendente para o operador**: Gestão de cartões (`CardInfo`) deve:
+- A. **Incluir nesta feature** — implementar FR-017/018/019 neste ciclo (US5 P3,
+  contratos verificados em `Card.php`).
+- B. **Excluir permanentemente** — operador usa interface web do dispositivo.
 - C. **Feature separada** — especificar como `card-management` em ciclo futuro.
 
-### Clarification 2 — Limites de Tamanho de Imagem por Modelo [RISCO]
+FR-017/018/019 e User Story 5 permanecem condicionais até resposta do operador.
 
-Os limites de tamanho aceitos pelo firmware para standby picture, boot logo e material
-de propaganda variam por modelo de terminal (DS-K1T673*, DS-K1T681DBX). A fonte
-`legacy/hik2go` não documenta esses limites.
+### Clarification 2 — Limites de Tamanho de Imagem por Modelo [RESOLVIDA — dec-010]
 
-**Status**: registrado como risco — não bloqueia a spec. O plan DEVE propor estratégia:
-(a) retornar erro do firmware ao operador sem silenciar; (b) validar tamanho no lado
-servidor com limites conservadores documentados; ou (c) expor as capacidades via
-endpoint de capabilities antes do upload.
+**Resolução (score 3)**: O sistema NÃO pré-valida tamanho de imagem no servidor.
+Estratégia adotada:
+- FR-025 (já na spec) exige validação de tipo `image/*` antes de repassar ao device.
+- Limite de tamanho: **não hardcodar** — sem fonte rastreável para DS-K1T681DBX
+  (Constitution I). O erro do firmware é repassado ao operador com mensagem acionável
+  (FR-023, spec edge case US3).
+- O plan DEVE documentar: (a) exemplo de mensagem de erro acionável para tamanho
+  excedido; (b) orientação ao operador sobre limites observados por modelo
+  (DS-K1T673*: ~200 KB conforme CLAUDE.md; DS-K1T681DBX: a descobrir em runtime).
+
+### Clarification 3 — Formato de Retorno da Captura Facial ao Vivo [RESOLVIDA — dec-011]
+
+**Resolução (score 2)**: FR-021 retorna imagem como **base64 em JSON**.
+- Consistente com padrão de todos os endpoints `/admin/api/*` (JSON).
+- Não expõe IP interno nem credenciais do device (Constitution V).
+- O backend faz download da URL capturada pelo device e encoda em base64 antes
+  de retornar ao painel.
+
+### Clarification 4 — Material de Propaganda Órfão Após Falha Parcial [RESOLVIDA — dec-012]
+
+**Resolução (score 2)**: Estratégia "documentar risco + retornar ID do material órfão".
+- FR-013 prescreve: "materiais órfãos DEVEM ser documentados no plano como risco de
+  limpeza manual".
+- Na resposta de erro de FR-013, o sistema DEVE incluir o `id` do material criado
+  na etapa (a) para que o operador use FR-014 (`DELETE /media/{id}`) para limpeza.
+- O plan DEVE documentar este fluxo de limpeza manual.
 
 ---
 
