@@ -170,41 +170,7 @@ modelo.
 
 ---
 
-### User Story 5 — Gerenciar cartões vinculados a membros (Priority: P3) [NEEDS CLARIFICATION: Confirmar se gestão de cartões RFID está no escopo do produto ou deve permanecer fora de escopo como em `device-config`]
-
-O operador pode, pelo painel admin, vincular um cartão físico (RFID/NFC) a um membro
-já cadastrado no terminal, consultar o cartão de um membro e remover vínculo de cartão
-— sem acesso à interface web do dispositivo.
-
-**Why this priority**: Cartões são mecanismo de autenticação alternativo (ou complementar
-à face). Membros que não têm foto cadastrada ou cujo reconhecimento facial é instável
-podem usar cartão como fallback. A feature `device-config` explicitamente deixou isso
-fora de escopo; esta feature retoma se confirmado.
-
-**Independent Test**: Via painel, vincular um número de cartão ao CPF de um membro
-no dispositivo; testar que o dispositivo reconhece o cartão; remover o vínculo e
-confirmar que o cartão deixa de ser aceito.
-
-**Acceptance Scenarios**:
-
-1. **Given** membro cadastrado no terminal (employeeNo = CPF),
-   **When** o operador vincula um número de cartão via painel,
-   **Then** o sistema envia `PUT /ISAPI/AccessControl/CardInfo/SetUp` com
-   `{cardNo, employeeNo, cardType}` e confirma sucesso; o dispositivo aceita o cartão.
-
-2. **Given** cartão vinculado a um membro,
-   **When** o operador consulta o cartão de um membro,
-   **Then** o sistema busca via `POST /ISAPI/AccessControl/CardInfo/Search` e retorna
-   os dados do cartão (cardNo, cardType, employeeNo).
-
-3. **Given** cartão vinculado a um membro,
-   **When** o operador remove o vínculo,
-   **Then** o sistema envia `PUT /ISAPI/AccessControl/CardInfo/Delete` com o cardNo
-   e confirma remoção; o dispositivo passa a rejeitar o cartão.
-
----
-
-### User Story 6 — Configurar parâmetros avançados de reconhecimento facial (Priority: P4)
+### User Story 5 — Configurar parâmetros avançados de reconhecimento facial (Priority: P4)
 
 O operador configura a distância máxima de reconhecimento facial do terminal pelo painel
 admin, permitindo ajuste para diferentes ambientes físicos (corredor estreito vs. espaço
@@ -250,8 +216,6 @@ normalização.
 - Dispositivo não suporta o modo de verificação selecionado (ex: biometria habilitada
   mas firmware mais antigo) → o ISAPI retorna erro; o sistema repassa ao operador sem
   silenciar.
-- Cartão vinculado a employeeNo inexistente no terminal → o dispositivo pode aceitar
-  (cartão sem face) ou rejeitar; o plan DEVE documentar o comportamento observado.
 - Remoção de standby picture que não existe mais no dispositivo → `DeleteCustomStandbyPic`
   retorna erro; o sistema trata como 404 e remove da listagem local se aplicável.
 
@@ -372,26 +336,9 @@ normalização.
     (campo: `AcsEvent.totalNum.@max`).
   Todas as 4 chamadas ISAPI são executadas para montar a resposta agregada.
 
-**Grupo 7: Gestão de Cartões (CardInfo) — condicional a clarificação**
+**Grupo 7: Face Avançado**
 
-- **FR-017** [condicional]: O sistema DEVE expor `PUT /admin/api/devices/{id}/cards`
-  que vincula ou atualiza um cartão via `PUT /ISAPI/AccessControl/CardInfo/SetUp?format=json`
-  com body `{CardInfo:{cardNo, employeeNo, cardType}}` onde `employeeNo` é o CPF
-  normalizado do membro (mesma chave de correlação — Constitution II).
-
-- **FR-018** [condicional]: O sistema DEVE expor
-  `GET /admin/api/devices/{id}/cards/{card_no}` que consulta um cartão via
-  `POST /ISAPI/AccessControl/CardInfo/Search?format=json` com body
-  `{CardInfoSearchCond:{searchID:"1", searchResultPosition:0, maxResults:30, CardNoList:[{cardNo:<card_no>}]}}`.
-
-- **FR-019** [condicional]: O sistema DEVE expor
-  `DELETE /admin/api/devices/{id}/cards/{card_no}` que remove um cartão via
-  `PUT /ISAPI/AccessControl/CardInfo/Delete?format=json` com body
-  `{CardInfoDelCond:{CardNoList:[{cardNo:<card_no>}]}}`.
-
-**Grupo 8: Face Avançado**
-
-- **FR-020**: O sistema DEVE expor `PUT /admin/api/devices/{id}/preferences/face-config`
+- **FR-017**: O sistema DEVE expor `PUT /admin/api/devices/{id}/preferences/face-config`
   que configura os parâmetros de comparação facial via
   `PUT /ISAPI/AccessControl/FaceCompareCond` com XML `<FaceCompareCond version="2.0">`;
   o campo configurável pelo operador é `maxDistance` (float); os demais campos têm
@@ -399,30 +346,30 @@ normalização.
   leftBorder=0, rightBorder=0, upBorder=0, bottomBorder=0, faceScore=0,
   faceScoreThreshold1=0, ROIRegionMode=manual.
 
-- **FR-021**: O sistema DEVE expor `POST /admin/api/devices/{id}/preferences/face-capture`
+- **FR-018**: O sistema DEVE expor `POST /admin/api/devices/{id}/preferences/face-capture`
   que solicita captura facial ao vivo via `POST /ISAPI/AccessControl/CaptureFaceData`
   com XML body `<CaptureFaceDataCond version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema"><captureInfrared>false</captureInfrared><dataType>url</dataType></CaptureFaceDataCond>`;
   o sistema recebe a URL da imagem capturada, faz download e retorna a imagem ao
   painel como **base64 em JSON** (Clarification 3 resolvida — dec-011; não expõe IP
   interno do device).
 
-**Grupo 9: Segurança e Validação**
+**Grupo 8: Segurança e Validação**
 
-- **FR-022**: Todos os novos endpoints DEVEM exigir sessão admin válida (cookie HMAC,
+- **FR-019**: Todos os novos endpoints DEVEM exigir sessão admin válida (cookie HMAC,
   igual aos endpoints `/admin/api/*` existentes) — Constitution V.
 
-- **FR-023**: Operações ISAPI que falham por timeout DEVEM retornar `504 Gateway Timeout`
+- **FR-020**: Operações ISAPI que falham por timeout DEVEM retornar `504 Gateway Timeout`
   com mensagem acionável; erros de autenticação ISAPI retornam `502 Bad Gateway`
   sem expor senha ou credenciais.
 
-- **FR-024**: O backend DEVE validar que `{id}` corresponde a dispositivo existente
+- **FR-021**: O backend DEVE validar que `{id}` corresponde a dispositivo existente
   antes de qualquer conexão ISAPI; dispositivo inexistente retorna `404`.
 
-- **FR-025**: Uploads de imagem (FR-007, FR-010, FR-013) DEVEM validar que o
+- **FR-022**: Uploads de imagem (FR-007, FR-010, FR-013) DEVEM validar que o
   arquivo enviado pelo operador é uma imagem (`image/*`) antes de repassar ao
   dispositivo; tipo inválido retorna `400 Bad Request`.
 
-- **FR-026**: Logs de todas as operações DEVEM incluir `device_id` e `stage` e
+- **FR-023**: Logs de todas as operações DEVEM incluir `device_id` e `stage` e
   DEVEM NOT incluir a senha ISAPI, tokens ou conteúdo binário de imagem —
   Constitution V, Constitution VI.
 
@@ -437,9 +384,6 @@ normalização.
 - **Material / Program / Schedule** (no dispositivo, não persistidos localmente):
   material de propaganda, programa de exibição e agendamento — entidades do
   `Publish` namespace do firmware.
-- **Card** (no dispositivo, não persistida localmente): vínculo entre `cardNo` e
-  `employeeNo` (CPF) no firmware do terminal.
-
 ---
 
 ## Success Criteria
@@ -472,38 +416,38 @@ normalização.
 
 ## Clarifications
 
-### Clarification 1 — Escopo de Cartões [AGUARDANDO DECISÃO HUMANA — block-001]
+### Clarification 1 — Escopo de Cartões [RESOLVIDA — block-001 / dec-017]
 
 A feature `device-config` explicitamente deixou gestão de cartões fora de escopo
 ("Gestão de cartões RFID/NFC — o fluxo principal é por face"). Os contratos ISAPI
-de cartões estão verificados em `legacy/hik2go/src/Hik2go/Card.php` (FR-017 a FR-019).
+de cartões estão verificados em `legacy/hik2go/src/Hik2go/Card.php`.
 
-**Status**: Bloqueio humano registrado (block-001 / dec-013). O clarify-answerer não
-atingiu score >=2 para nenhuma opção — a decisão depende de prioridade de produto.
+**Resolução (operador, opção B — score 3)**: Gestão de cartões RFID está **excluída
+permanentemente** desta feature. Cartões não fazem parte do produto — a presença é
+por reconhecimento facial. O operador usa a interface web do próprio dispositivo para
+operações de `CardInfo`, se necessário. FR-017/018/019 (condicionais) e User Story 5
+foram removidos da spec (dec-017, block-001 respondido em 2026-06-25).
 
-**Pergunta pendente para o operador**: Gestão de cartões (`CardInfo`) deve:
-- A. **Incluir nesta feature** — implementar FR-017/018/019 neste ciclo (US5 P3,
-  contratos verificados em `Card.php`).
-- B. **Excluir permanentemente** — operador usa interface web do dispositivo.
-- C. **Feature separada** — especificar como `card-management` em ciclo futuro.
-
-FR-017/018/019 e User Story 5 permanecem condicionais até resposta do operador.
+> Nota: o campo `users.cards` continua presente em FR-016 (estatísticas) porque
+> a ISAPI `UserInfo/Count` retorna `bindCardUserNumber` como contador somente-leitura
+> do dispositivo — exibi-lo no painel é leitura informativa, não implementação de
+> gestão de cartões.
 
 ### Clarification 2 — Limites de Tamanho de Imagem por Modelo [RESOLVIDA — dec-010]
 
 **Resolução (score 3)**: O sistema NÃO pré-valida tamanho de imagem no servidor.
 Estratégia adotada:
-- FR-025 (já na spec) exige validação de tipo `image/*` antes de repassar ao device.
+- FR-022 (já na spec) exige validação de tipo `image/*` antes de repassar ao device.
 - Limite de tamanho: **não hardcodar** — sem fonte rastreável para DS-K1T681DBX
   (Constitution I). O erro do firmware é repassado ao operador com mensagem acionável
-  (FR-023, spec edge case US3).
+  (FR-020, spec edge case US3).
 - O plan DEVE documentar: (a) exemplo de mensagem de erro acionável para tamanho
   excedido; (b) orientação ao operador sobre limites observados por modelo
   (DS-K1T673*: ~200 KB conforme CLAUDE.md; DS-K1T681DBX: a descobrir em runtime).
 
 ### Clarification 3 — Formato de Retorno da Captura Facial ao Vivo [RESOLVIDA — dec-011]
 
-**Resolução (score 2)**: FR-021 retorna imagem como **base64 em JSON**.
+**Resolução (score 2)**: FR-018 retorna imagem como **base64 em JSON**.
 - Consistente com padrão de todos os endpoints `/admin/api/*` (JSON).
 - Não expõe IP interno nem credenciais do device (Constitution V).
 - O backend faz download da URL capturada pelo device e encoda em base64 antes
@@ -531,4 +475,6 @@ Estratégia adotada:
 - Controle de portas — coberto pela feature `device-config`.
 - Stream de eventos em tempo real (SSE/WebSocket via alertStream) — fora de escopo
   desta e da feature `device-config`.
-- Módulo de cartões se Clarification 1 resultar em opção B ou C.
+- Gestão de cartões RFID/NFC (`CardInfo`: vincular, consultar, remover cartão) —
+  excluída permanentemente por decisão do operador (block-001 / dec-017). Presença
+  é por reconhecimento facial; operador usa interface web do dispositivo para CartInfo.
