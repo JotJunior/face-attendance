@@ -61,15 +61,16 @@ const ICON = {
 };
 
 const CFG_SECTIONS = [
-  { id:'overview', label:'Visão geral',          icon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="8" x2="12" y2="8"/></svg>` },
-  { id:'system',   label:'Sistema & manutenção',  icon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><line x1="4" y1="8" x2="20" y2="8"/><circle cx="9" cy="8" r="2"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="15" cy="16" r="2"/></svg>` },
-  { id:'auth',     label:'Autenticação',          icon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="11" r="2"/><path d="M9 15.5a3.5 3.5 0 0 1 6 0"/></svg>` },
-  { id:'doors',    label:'Portas & acesso',       icon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="5" y="3" width="14" height="18" rx="1.5"/><circle cx="15" cy="12" r="1"/></svg>` },
-  { id:'users',    label:'Usuários no device',    icon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 5.5a3 3 0 0 1 0 5.5"/></svg>` },
-  { id:'cards',    label:'Cartões',               icon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg>` },
-  { id:'faces',    label:'Biblioteca de faces',   icon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><circle cx="9.5" cy="11" r="1"/><circle cx="14.5" cy="11" r="1"/><path d="M9 15a3.5 3.5 0 0 0 6 0"/></svg>` },
-  { id:'events',   label:'Eventos & webhooks',    icon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M10 21a2 2 0 0 0 4 0"/></svg>` },
-  { id:'media',    label:'Mídia',                 icon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="m4 18 5-5 4 4 3-3 4 4"/></svg>` },
+  { id:'overview',     label:'Visão geral',          icon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="8" x2="12" y2="8"/></svg>` },
+  { id:'system',       label:'Sistema & manutenção',  icon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><line x1="4" y1="8" x2="20" y2="8"/><circle cx="9" cy="8" r="2"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="15" cy="16" r="2"/></svg>` },
+  { id:'auth',         label:'Autenticação',          icon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="11" r="2"/><path d="M9 15.5a3.5 3.5 0 0 1 6 0"/></svg>` },
+  { id:'doors',        label:'Portas & acesso',       icon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="5" y="3" width="14" height="18" rx="1.5"/><circle cx="15" cy="12" r="1"/></svg>` },
+  { id:'users',        label:'Usuários no device',    icon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M16 5.5a3 3 0 0 1 0 5.5"/></svg>` },
+  { id:'cards',        label:'Cartões',               icon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg>` },
+  { id:'faces',        label:'Biblioteca de faces',   icon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><circle cx="9.5" cy="11" r="1"/><circle cx="14.5" cy="11" r="1"/><path d="M9 15a3.5 3.5 0 0 0 6 0"/></svg>` },
+  { id:'events',       label:'Eventos & webhooks',    icon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M10 21a2 2 0 0 0 4 0"/></svg>` },
+  { id:'preferences',  label:'Preferências',          icon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>` },
+  { id:'media',        label:'Mídia',                 icon:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="m4 18 5-5 4 4 3-3 4 4"/></svg>` },
 ];
 
 // ─── FETCH ────────────────────────────────────────────────────
@@ -629,25 +630,28 @@ function renderCfgSection(dev, section) {
   const el = $('cfg-content');
   const previewNote = pendingNote('Pré-visualização — os controles desta seção são habilitados quando o backend de configuração do terminal (ISAPI, §7) estiver disponível.');
   const renderers = {
-    overview: () => cfgOverview(dev),
-    system:   () => cfgSystem(dev),
-    auth:     () => cfgCredentials(dev),
-    doors:    () => cfgDoors(dev),
-    users:    () => cfgUsers(dev),
-    cards:    () => previewNote + cfgCards(),
-    faces:    () => cfgFaces(dev),
-    events:   () => cfgWebhooks(dev),
-    media:    () => previewNote + cfgMedia(),
+    overview:     () => cfgOverview(dev),
+    system:       () => cfgSystem(dev),
+    auth:         () => cfgCredentials(dev),
+    doors:        () => cfgDoors(dev),
+    users:        () => cfgUsers(dev),
+    cards:        () => previewNote + cfgCards(),
+    faces:        () => cfgFaces(dev),
+    events:       () => cfgWebhooks(dev),
+    preferences:  () => cfgPreferences(dev),
+    media:        () => cfgMediaFull(dev),
   };
   el.innerHTML = `<div class="stack">${(renderers[section] || renderers.overview)()}</div>`;
   wireCfgActions(dev);
   // Wire async sections after DOM is ready
-  if (section === 'auth')   wireCfgCredentials(dev);
-  if (section === 'system') wireCfgSystem(dev);
-  if (section === 'doors')  wireCfgDoors(dev);
-  if (section === 'users')  wireCfgUsers(dev);
-  if (section === 'faces')  wireCfgFaces(dev);
-  if (section === 'events') wireCfgWebhooks(dev);
+  if (section === 'auth')        wireCfgCredentials(dev);
+  if (section === 'system')      wireCfgSystem(dev);
+  if (section === 'doors')       wireCfgDoors(dev);
+  if (section === 'users')       wireCfgUsers(dev);
+  if (section === 'faces')       wireCfgFaces(dev);
+  if (section === 'events')      wireCfgWebhooks(dev);
+  if (section === 'preferences') wireCfgPreferences(dev);
+  if (section === 'media')       wireCfgMediaFull(dev);
 }
 
 function cfgOverview(dev) {
@@ -1297,16 +1301,726 @@ function wireCfgWebhooks(dev) {
   });
 }
 
-function cfgMedia() {
+// ─── PREFERÊNCIAS (tasks 4.1–4.5) ─────────────────────────────
+
+// Modos de verificação disponíveis no HikVision (SOURCED AuthMode.php)
+const VERIFY_MODES = [
+  { value: 'face',                label: 'Reconhecimento facial' },
+  { value: 'card',                label: 'Cartão' },
+  { value: 'pin',                 label: 'PIN' },
+  { value: 'face_or_card',        label: 'Face ou cartão' },
+  { value: 'card_or_pin',         label: 'Cartão ou PIN' },
+  { value: 'face_or_card_or_pin', label: 'Face, cartão ou PIN' },
+  { value: 'face_and_pin',        label: 'Face + PIN (duplo)' },
+  { value: 'card_and_pin',        label: 'Cartão + PIN (duplo)' },
+  { value: 'face_and_card',       label: 'Face + cartão (duplo)' },
+];
+
+// Modos de display suportados (SOURCED IdentityTerminal.php)
+const DISPLAY_MODES = [
+  { value: 'normal', label: 'Normal' },
+  { value: 'full',   label: 'Tela cheia' },
+  { value: 'split',  label: 'Dividido' },
+];
+
+function cfgPreferences(dev) {
   return `
-    <div class="row-between"><div class="meta">Imagens enviadas ao dispositivo</div><button class="btn btn-accent sm" data-pending="Enviar mídia">${ICON.upload} Enviar</button></div>
-    <div class="facegrid" style="grid-template-columns:repeat(4,1fr);">
-      <div class="face-ph" style="aspect-ratio:16/10;"></div>
-      <div class="face-ph" style="aspect-ratio:16/10;"></div>
-      <div class="face-add" style="aspect-ratio:16/10;" data-pending="Enviar mídia">${ICON.plus}</div>
+    <!-- 4.1 Modo de Verificação -->
+    <div class="card flush" id="pref-authmode-card">
+      <div class="card-head">
+        <div class="h">Modo de Verificação</div>
+        <span id="pref-authmode-badge" class="meta mono" style="font-size:11px;">Carregando…</span>
+      </div>
+      <div style="padding:16px;">
+        <div style="font-size:12px; color:var(--text-2); margin-bottom:14px; line-height:1.5;">
+          Define como o terminal autentica os usuários (aplicado a todos os dias da semana).
+        </div>
+        <div id="pref-authmode-err" style="display:none; color:var(--red); font-size:12px; margin-bottom:10px;"></div>
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <select class="select" id="pref-authmode-sel" style="width:280px;" disabled>
+            <option value="">Carregando…</option>
+          </select>
+          <button class="btn btn-accent sm" id="pref-authmode-save" disabled>Salvar modo</button>
+          <span id="pref-authmode-fb" role="alert" aria-live="assertive" style="font-size:12px;"></span>
+        </div>
+      </div>
     </div>
-    ${pendingNote('O gerenciamento de mídia do terminal (§7.9) depende do backend correspondente.')}`;
+
+    <!-- 4.2 Layout de Tela -->
+    <div class="card flush" id="pref-display-card">
+      <div class="card-head"><div class="h">Layout de Tela</div></div>
+      <div style="padding:16px;">
+        <div style="font-size:12px; color:var(--text-2); margin-bottom:14px; line-height:1.5;">
+          Controla como o terminal exibe informações na tela durante o reconhecimento.
+        </div>
+        <div id="pref-display-err" style="display:none; color:var(--red); font-size:12px; margin-bottom:10px;"></div>
+        <!-- Seletor de modo (tabs) -->
+        <div style="margin-bottom:16px;">
+          <div class="label">Modo de exibição</div>
+          <div class="seg" id="pref-display-mode" style="display:inline-flex;">
+            ${DISPLAY_MODES.map(m => `<button class="seg-btn" data-mode="${m.value}">${m.label}</button>`).join('')}
+          </div>
+        </div>
+        <!-- Inputs numéricos -->
+        <div class="grid-2" style="margin-bottom:16px;">
+          <div class="field">
+            <label class="label" for="pref-screen-off">Desligar tela após (s)</label>
+            <input class="input mono" id="pref-screen-off" type="number" min="0" placeholder="60" />
+          </div>
+          <div class="field">
+            <label class="label" for="pref-preview-time">Tempo de pré-visualização (s)</label>
+            <input class="input mono" id="pref-preview-time" type="number" min="0" placeholder="5" />
+          </div>
+          <div class="field">
+            <label class="label" for="pref-standby-timeout">Timeout standby (s)</label>
+            <input class="input mono" id="pref-standby-timeout" type="number" min="0" placeholder="30" />
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <button class="btn btn-accent sm" id="pref-display-save" disabled>Salvar layout</button>
+          <span id="pref-display-fb" role="alert" aria-live="assertive" style="font-size:12px;"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4.3 Standby Picture -->
+    <div class="card flush" id="pref-standby-card">
+      <div class="card-head">
+        <div class="h">Imagem de Standby</div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <label class="btn btn-accent sm" style="cursor:pointer; margin:0;">
+            ${ICON.upload} Enviar imagem
+            <input type="file" id="pref-standby-file" accept="image/*" style="display:none;" />
+          </label>
+          <button class="btn btn-ghost sm" id="pref-standby-disable">Desativar customizada</button>
+        </div>
+      </div>
+      <div id="pref-standby-list" style="padding:16px;">${loadingState()}</div>
+    </div>
+
+    <!-- 4.3 Boot Logo -->
+    <div class="card flush" id="pref-bootpic-card">
+      <div class="card-head">
+        <div class="h">Boot Logo</div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <label class="btn btn-accent sm" style="cursor:pointer; margin:0;">
+            ${ICON.upload} Enviar logo
+            <input type="file" id="pref-bootpic-file" accept="image/jpeg,image/jpg" style="display:none;" />
+          </label>
+          <button class="btn btn-ghost sm" id="pref-bootpic-delete">Remover logo</button>
+        </div>
+      </div>
+      <div id="pref-bootpic-status" style="padding:16px;">
+        <div style="font-size:12.5px; color:var(--text-2); line-height:1.5;">
+          Imagem exibida na inicialização do terminal. Somente JPEG. Tamanho máximo aceito pelo firmware varia por modelo.
+        </div>
+      </div>
+    </div>
+
+    <!-- 4.4 Estatísticas de Capacidade -->
+    <div class="card flush" id="pref-stats-card">
+      <div class="card-head">
+        <div class="h">Estatísticas de Capacidade</div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span class="meta mono" id="pref-stats-updated" style="font-size:11px;"></span>
+          <button class="btn btn-ghost sm" id="pref-stats-refresh">Atualizar</button>
+        </div>
+      </div>
+      <div id="pref-stats-body" style="padding:16px;">${loadingState()}</div>
+    </div>
+
+    <!-- 4.5 Configuração Avançada de Face -->
+    <div class="card flush" id="pref-faceadv-card">
+      <div class="card-head"><div class="h">Configuração Avançada de Face</div></div>
+      <div style="padding:16px;">
+        <div style="font-size:12px; color:var(--text-2); margin-bottom:14px; line-height:1.5;">
+          Distância máxima para reconhecimento facial. Valores maiores aumentam a área de detecção.
+        </div>
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:20px;">
+          <div class="field" style="width:220px;">
+            <label class="label" for="pref-maxdistance">Distância máxima (m)</label>
+            <input class="input mono" id="pref-maxdistance" type="number" step="0.1" min="0.1" max="5" placeholder="1.5" />
+          </div>
+          <button class="btn btn-accent sm" id="pref-faceadv-save" style="margin-top:18px;">Salvar configuração</button>
+          <span id="pref-faceadv-fb" role="alert" aria-live="assertive" style="font-size:12px; margin-top:18px;"></span>
+        </div>
+        <div style="border-top:1px solid var(--border); padding-top:16px;">
+          <div style="font-size:13px; font-weight:600; margin-bottom:8px;">Captura ao Vivo</div>
+          <div style="font-size:12px; color:var(--text-2); margin-bottom:12px; line-height:1.5;">
+            Captura uma imagem do que o terminal está vendo agora (câmera frontal).
+          </div>
+          <button class="btn btn-soft sm" id="pref-facecapture-btn">Capturar imagem</button>
+          <div id="pref-facecapture-result" style="margin-top:14px; display:none;">
+            <img id="pref-facecapture-img" src="" alt="Captura ao vivo do terminal" style="max-width:320px; border-radius:10px; border:1px solid var(--border);" />
+          </div>
+          <div id="pref-facecapture-err" style="display:none; margin-top:10px; font-size:12px; color:var(--red);"></div>
+        </div>
+      </div>
+    </div>
+  `;
 }
+
+function wireCfgPreferences(dev) {
+  // ── 4.1 Modo de Verificação ──────────────────────────────────
+  const authmodeCard = $('pref-authmode-card');
+  if (authmodeCard) {
+    const sel = $('pref-authmode-sel');
+    const saveBtn = $('pref-authmode-save');
+    const fb = $('pref-authmode-fb');
+    const badge = $('pref-authmode-badge');
+    const errEl = $('pref-authmode-err');
+
+    apiGet(`devices/${dev.id}/preferences/auth-mode`).then(async res => {
+      if (!sel) return;
+      if (res.status === 401) return;
+      if (!res.ok) {
+        const msg = res.status === 504 ? 'Dispositivo offline — não foi possível carregar.' : `Erro (status ${res.status}).`;
+        errEl.textContent = msg; errEl.style.display = '';
+        if (badge) badge.textContent = 'Indisponível';
+        return;
+      }
+      const data = await res.json();
+      const plans = data.weekPlans || [];
+
+      // Todos os dias devem ter o mesmo modo; pega o do primeiro
+      const currentMode = plans.length > 0 ? (plans[0].verifyMode || '') : '';
+
+      // Popular select com opções disponíveis
+      sel.innerHTML = VERIFY_MODES.map(m =>
+        `<option value="${escHtml(m.value)}" ${m.value === currentMode ? 'selected' : ''}>${escHtml(m.label)}</option>`
+      ).join('');
+
+      // Adicionar opção desconhecida se o modo atual não constar na lista
+      if (currentMode && !VERIFY_MODES.find(m => m.value === currentMode)) {
+        sel.innerHTML = `<option value="${escHtml(currentMode)}" selected>${escHtml(currentMode)}</option>` + sel.innerHTML;
+      }
+
+      sel.disabled = false;
+      if (saveBtn) saveBtn.disabled = false;
+      if (badge) badge.textContent = currentMode || '—';
+    }).catch(err => {
+      if (errEl) { errEl.textContent = err.message === 'timeout' ? 'Tempo de resposta esgotado.' : 'Falha de conexão.'; errEl.style.display = ''; }
+      if (badge) badge.textContent = 'Indisponível';
+    });
+
+    if (saveBtn) {
+      saveBtn.addEventListener('click', async () => {
+        const mode = sel.value;
+        if (!mode) return;
+        saveBtn.disabled = true; saveBtn.textContent = 'Salvando…'; fb.textContent = '';
+        try {
+          const res = await apiPut(`devices/${dev.id}/preferences/auth-mode`, { verifyMode: mode });
+          if (res.status === 401) return;
+          if (res.ok) {
+            fb.textContent = 'Modo de verificação salvo.'; fb.style.color = 'var(--green)';
+            if (badge) badge.textContent = mode;
+            showToast('success', 'Modo de verificação atualizado.');
+          } else {
+            let msg = `Erro (status ${res.status}).`;
+            if (res.status === 504) msg = 'Dispositivo offline.';
+            else { try { const d = await res.json(); if (d.error) msg = d.error; } catch {} }
+            fb.textContent = msg; fb.style.color = 'var(--red)';
+          }
+        } catch (err) {
+          fb.textContent = err.message === 'timeout' ? 'Tempo esgotado.' : 'Falha de conexão.'; fb.style.color = 'var(--red)';
+        } finally {
+          saveBtn.disabled = false; saveBtn.textContent = 'Salvar modo';
+        }
+      });
+    }
+  }
+
+  // ── 4.2 Layout de Tela ──────────────────────────────────────
+  const displayCard = $('pref-display-card');
+  if (displayCard) {
+    const saveBtn = $('pref-display-save');
+    const fb = $('pref-display-fb');
+    const errEl = $('pref-display-err');
+    let currentDisplayMode = 'normal';
+
+    // Wire mode tabs
+    const modeGroup = $('pref-display-mode');
+    if (modeGroup) {
+      modeGroup.querySelectorAll('.seg-btn').forEach(b => b.addEventListener('click', () => {
+        currentDisplayMode = b.dataset.mode;
+        modeGroup.querySelectorAll('.seg-btn').forEach(x => x.classList.toggle('active', x === b));
+      }));
+    }
+
+    apiGet(`devices/${dev.id}/preferences/display`).then(async res => {
+      if (res.status === 401) return;
+      if (!res.ok) {
+        const msg = res.status === 504 ? 'Dispositivo offline.' : `Erro (status ${res.status}).`;
+        if (errEl) { errEl.textContent = msg; errEl.style.display = ''; }
+        return;
+      }
+      const data = await res.json();
+      currentDisplayMode = data.showMode || 'normal';
+
+      // Ativar tab do modo atual
+      if (modeGroup) {
+        modeGroup.querySelectorAll('.seg-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === currentDisplayMode));
+      }
+
+      const soEl = $('pref-screen-off');
+      const ptEl = $('pref-preview-time');
+      const stEl = $('pref-standby-timeout');
+      if (soEl) soEl.value = data.screenOffTimeout != null ? data.screenOffTimeout : '';
+      if (ptEl) ptEl.value = data.previewShowTime  != null ? data.previewShowTime  : '';
+      if (stEl) stEl.value = data.standbyTimeout   != null ? data.standbyTimeout   : '';
+
+      if (saveBtn) saveBtn.disabled = false;
+    }).catch(err => {
+      if (errEl) { errEl.textContent = err.message === 'timeout' ? 'Tempo de resposta esgotado.' : 'Falha de conexão.'; errEl.style.display = ''; }
+    });
+
+    if (saveBtn) {
+      saveBtn.addEventListener('click', async () => {
+        const soEl = $('pref-screen-off');
+        const ptEl = $('pref-preview-time');
+        const stEl = $('pref-standby-timeout');
+        const screenOffTimeout = parseInt(soEl ? soEl.value : '', 10);
+        const previewShowTime  = parseInt(ptEl ? ptEl.value : '', 10);
+        const standbyTimeout   = parseInt(stEl ? stEl.value : '', 10);
+
+        if (isNaN(screenOffTimeout) || isNaN(previewShowTime) || isNaN(standbyTimeout)) {
+          fb.textContent = 'Preencha todos os campos numéricos.'; fb.style.color = 'var(--red)'; return;
+        }
+
+        saveBtn.disabled = true; saveBtn.textContent = 'Salvando…'; fb.textContent = '';
+        try {
+          const res = await apiPut(`devices/${dev.id}/preferences/display`, {
+            showMode: currentDisplayMode,
+            screenOffTimeout,
+            previewShowTime,
+            standbyTimeout,
+          });
+          if (res.status === 401) return;
+          if (res.ok) {
+            fb.textContent = 'Layout de tela salvo.'; fb.style.color = 'var(--green)';
+            showToast('success', 'Layout de tela atualizado.');
+          } else {
+            let msg = `Erro (status ${res.status}).`;
+            if (res.status === 504) msg = 'Dispositivo offline.';
+            else if (res.status === 400) { try { const d = await res.json(); if (d.error) msg = d.error; } catch {} }
+            fb.textContent = msg; fb.style.color = 'var(--red)';
+          }
+        } catch (err) {
+          fb.textContent = err.message === 'timeout' ? 'Tempo esgotado.' : 'Falha de conexão.'; fb.style.color = 'var(--red)';
+        } finally {
+          saveBtn.disabled = false; saveBtn.textContent = 'Salvar layout';
+        }
+      });
+    }
+  }
+
+  // ── 4.3 Standby Picture ──────────────────────────────────────
+  function loadStandbyList() {
+    const listEl = $('pref-standby-list');
+    if (!listEl) return;
+    listEl.innerHTML = loadingState();
+    apiGet(`devices/${dev.id}/preferences/standby-pictures`).then(async res => {
+      if (!listEl) return;
+      if (res.status === 401) return;
+      if (!res.ok) {
+        const msg = res.status === 504 ? 'Dispositivo offline.' : `Erro (status ${res.status}).`;
+        listEl.innerHTML = emptyState(ICON.upload, 'Erro ao carregar', msg);
+        return;
+      }
+      const data = await res.json();
+      const pics = data.pictures || [];
+      if (!pics.length) {
+        listEl.innerHTML = emptyState(ICON.upload, 'Nenhuma imagem de standby', 'Envie uma imagem para personalizar a tela de espera do terminal.');
+        return;
+      }
+      listEl.innerHTML = pics.map(p => `
+        <div class="trow" style="grid-template-columns:1fr auto;" id="standby-row-${escHtml(p.uuid)}">
+          <div style="min-width:0;">
+            <div class="cell-ellipsis mono" style="font-size:12px;">${escHtml(p.fileName || p.uuid)}</div>
+            <div style="font-size:11px; color:var(--text-3);">UUID: ${escHtml(p.uuid)}</div>
+          </div>
+          <button class="btn btn-danger sm" data-standby-del="${escHtml(p.uuid)}">${ICON.trash}</button>
+        </div>`).join('');
+
+      listEl.querySelectorAll('[data-standby-del]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const uuid = btn.dataset.standbyDel;
+          btn.disabled = true;
+          try {
+            const res = await apiDelete(`devices/${dev.id}/preferences/standby-pictures/${uuid}`);
+            if (res.status === 401) return;
+            if (res.ok) {
+              showToast('success', 'Imagem de standby removida.');
+              const row = $(`standby-row-${uuid}`);
+              if (row) row.remove();
+              if (!listEl.querySelector('.trow')) listEl.innerHTML = emptyState(ICON.upload, 'Nenhuma imagem de standby', '');
+            } else {
+              let msg = `Erro (status ${res.status}).`;
+              try { const d = await res.json(); if (d.error) msg = d.error; } catch {}
+              showToast('error', msg);
+              btn.disabled = false;
+            }
+          } catch (err) { netError(err); btn.disabled = false; }
+        });
+      });
+    }).catch(err => {
+      const el = $('pref-standby-list');
+      if (el) el.innerHTML = emptyState(ICON.upload, 'Falha de conexão', '');
+      netError(err);
+    });
+  }
+
+  loadStandbyList();
+
+  const standbyFile = $('pref-standby-file');
+  if (standbyFile) {
+    standbyFile.addEventListener('change', async () => {
+      const file = standbyFile.files[0];
+      if (!file) return;
+      standbyFile.value = '';
+      if (!file.type.startsWith('image/')) { showToast('error', 'O arquivo deve ser uma imagem (image/*).'); return; }
+      showToast('info', 'Enviando imagem de standby…');
+      const fd = new FormData();
+      fd.append('file', file, file.name);
+      try {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 60_000);
+        const res = await fetch(`/admin/api/devices/${dev.id}/preferences/standby-pictures`, {
+          method: 'POST', body: fd, credentials: 'same-origin', signal: ctrl.signal,
+        });
+        clearTimeout(timer);
+        if (res.status === 401) { navigate('login', false); return; }
+        if (res.ok) {
+          showToast('success', 'Imagem enviada e standby customizado ativado.');
+          loadStandbyList();
+        } else if (res.status === 413) {
+          showToast('error', 'Arquivo muito grande (máximo 20 MB).');
+        } else {
+          let msg = `Erro ao enviar (status ${res.status}).`;
+          try { const d = await res.json(); if (d.error) msg = d.error; } catch {}
+          showToast('error', msg);
+        }
+      } catch (err) {
+        netError(err);
+      }
+    });
+  }
+
+  const standbyDisableBtn = $('pref-standby-disable');
+  if (standbyDisableBtn) {
+    standbyDisableBtn.addEventListener('click', async () => {
+      standbyDisableBtn.disabled = true; standbyDisableBtn.textContent = 'Desativando…';
+      try {
+        const res = await apiPut(`devices/${dev.id}/preferences/standby-pictures/disable`);
+        if (res.status === 401) return;
+        if (res.ok) showToast('success', 'Standby customizado desativado — exibição padrão restaurada.');
+        else { let msg = `Erro (status ${res.status}).`; try { const d = await res.json(); if (d.error) msg = d.error; } catch {} showToast('error', msg); }
+      } catch (err) { netError(err); }
+      finally { standbyDisableBtn.disabled = false; standbyDisableBtn.textContent = 'Desativar customizada'; }
+    });
+  }
+
+  // ── 4.3 Boot Logo ───────────────────────────────────────────
+  const bootpicFile = $('pref-bootpic-file');
+  if (bootpicFile) {
+    bootpicFile.addEventListener('change', async () => {
+      const file = bootpicFile.files[0];
+      if (!file) return;
+      bootpicFile.value = '';
+      if (!file.type.startsWith('image/')) { showToast('error', 'O arquivo deve ser uma imagem.'); return; }
+      showToast('info', 'Enviando boot logo…');
+      const fd = new FormData();
+      fd.append('file', file, file.name);
+      try {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 60_000);
+        const res = await fetch(`/admin/api/devices/${dev.id}/preferences/boot-picture`, {
+          method: 'POST', body: fd, credentials: 'same-origin', signal: ctrl.signal,
+        });
+        clearTimeout(timer);
+        if (res.status === 401) { navigate('login', false); return; }
+        if (res.ok) {
+          showToast('success', 'Boot logo enviado com sucesso.');
+        } else if (res.status === 413) {
+          showToast('error', 'Arquivo muito grande (máximo 20 MB).');
+        } else {
+          let msg = `Erro ao enviar (status ${res.status}).`;
+          try { const d = await res.json(); if (d.error) msg = d.error; } catch {}
+          showToast('error', msg);
+        }
+      } catch (err) { netError(err); }
+    });
+  }
+
+  const bootpicDeleteBtn = $('pref-bootpic-delete');
+  if (bootpicDeleteBtn) {
+    bootpicDeleteBtn.addEventListener('click', () => {
+      openConfirm({
+        title: 'Remover boot logo', confirmLabel: 'Remover', tone: 'warn', strong: false,
+        body: 'Remove a imagem de inicialização customizada. O terminal voltará a exibir o logo padrão HikVision.',
+        target: cfgTargetOf(dev),
+        onConfirm: async () => {
+          try {
+            const res = await apiDelete(`devices/${dev.id}/preferences/boot-picture`);
+            if (res.status === 401) return;
+            if (res.ok) showToast('success', 'Boot logo removido.');
+            else { let msg = `Erro (status ${res.status}).`; try { const d = await res.json(); if (d.error) msg = d.error; } catch {} showToast('error', msg); }
+          } catch (err) { netError(err); }
+        },
+      });
+    });
+  }
+
+  // ── 4.4 Estatísticas de Capacidade ──────────────────────────
+  function loadStats() {
+    const body = $('pref-stats-body');
+    const updEl = $('pref-stats-updated');
+    if (!body) return;
+    body.innerHTML = loadingState();
+    if (updEl) updEl.textContent = 'Atualizando…';
+    apiGet(`devices/${dev.id}/stats`).then(async res => {
+      if (!body) return;
+      if (res.status === 401) return;
+      if (!res.ok) {
+        // US4-AC2: offline → Indisponível, nunca zeros
+        body.innerHTML = statGrid('Indisponível', 'Indisponível', 'Indisponível', 'Indisponível', 'Indisponível', 'Indisponível');
+        if (updEl) updEl.textContent = res.status === 504 ? 'Dispositivo offline' : `Erro status ${res.status}`;
+        return;
+      }
+      const data = await res.json();
+      const u = data.users || {};
+      const e = data.events || {};
+      const fmt = v => v != null ? v.toLocaleString('pt-BR') : 'Indisponível';
+      body.innerHTML = statGrid(fmt(u.total), fmt(u.max), fmt(u.faces), fmt(u.cards), fmt(e.total), fmt(e.max));
+      if (updEl) updEl.textContent = `Atualizado ${fmtShort(new Date().toISOString())}`;
+    }).catch(err => {
+      const el = $('pref-stats-body');
+      if (el) el.innerHTML = statGrid('Indisponível', 'Indisponível', 'Indisponível', 'Indisponível', 'Indisponível', 'Indisponível');
+      const u = $('pref-stats-updated'); if (u) u.textContent = 'Falha de conexão';
+      netError(err);
+    });
+  }
+
+  function statGrid(usrTotal, usrMax, faces, cards, evtTotal, evtMax) {
+    const cell = (label, value) => `
+      <div style="padding:14px 16px;">
+        <div style="font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-3); font-weight:600; margin-bottom:4px;">${label}</div>
+        <div style="font-size:18px; font-weight:600; font-variant-numeric:tabular-nums;">${escHtml(String(value))}</div>
+      </div>`;
+    return `<div style="display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--border);">
+      ${cell('Usuários cadastrados', usrTotal)}
+      ${cell('Capacidade máx. usuários', usrMax)}
+      ${cell('Faces cadastradas', faces)}
+      ${cell('Cartões cadastrados', cards)}
+      ${cell('Eventos registrados', evtTotal)}
+      ${cell('Capacidade máx. eventos', evtMax)}
+    </div>`;
+  }
+
+  loadStats();
+
+  const refreshBtn = $('pref-stats-refresh');
+  if (refreshBtn) refreshBtn.addEventListener('click', loadStats);
+
+  // ── 4.5 Configuração Avançada de Face ───────────────────────
+  const faceadvSave = $('pref-faceadv-save');
+  if (faceadvSave) {
+    faceadvSave.addEventListener('click', async () => {
+      const maxDistEl = $('pref-maxdistance');
+      const fb = $('pref-faceadv-fb');
+      const maxDistance = parseFloat(maxDistEl ? maxDistEl.value : '');
+      if (isNaN(maxDistance) || maxDistance <= 0) {
+        fb.textContent = 'Informe um valor maior que zero.'; fb.style.color = 'var(--red)'; return;
+      }
+      faceadvSave.disabled = true; faceadvSave.textContent = 'Salvando…'; fb.textContent = '';
+      try {
+        const res = await apiPut(`devices/${dev.id}/preferences/face-config`, { maxDistance });
+        if (res.status === 401) return;
+        if (res.ok) {
+          fb.textContent = 'Configuração salva.'; fb.style.color = 'var(--green)';
+          showToast('success', 'Configuração de face atualizada.');
+        } else {
+          let msg = `Erro (status ${res.status}).`;
+          if (res.status === 504) msg = 'Dispositivo offline.';
+          else if (res.status === 400) { try { const d = await res.json(); if (d.error) msg = d.error; } catch {} }
+          fb.textContent = msg; fb.style.color = 'var(--red)';
+        }
+      } catch (err) {
+        fb.textContent = err.message === 'timeout' ? 'Tempo esgotado.' : 'Falha de conexão.'; fb.style.color = 'var(--red)';
+      } finally {
+        faceadvSave.disabled = false; faceadvSave.textContent = 'Salvar configuração';
+      }
+    });
+  }
+
+  const captureBtn = $('pref-facecapture-btn');
+  if (captureBtn) {
+    captureBtn.addEventListener('click', async () => {
+      const resultEl = $('pref-facecapture-result');
+      const imgEl = $('pref-facecapture-img');
+      const errEl = $('pref-facecapture-err');
+      captureBtn.disabled = true; captureBtn.textContent = 'Capturando…';
+      if (resultEl) resultEl.style.display = 'none';
+      if (errEl) errEl.style.display = 'none';
+      try {
+        const res = await apiFetch(`/admin/api/devices/${dev.id}/preferences/face-capture`, { method: 'POST', credentials: 'same-origin' }, 30_000);
+        if (res.status === 401) { navigate('login', false); return; }
+        if (res.ok) {
+          const data = await res.json();
+          if (data.image && imgEl && resultEl) {
+            imgEl.src = `data:image/jpeg;base64,${data.image}`;
+            resultEl.style.display = '';
+          }
+        } else {
+          let msg = `Não foi possível capturar (status ${res.status}).`;
+          if (res.status === 504) msg = 'Dispositivo offline — câmera inacessível.';
+          else if (res.status === 502) msg = 'Falha de segurança ou dispositivo inacessível.';
+          else { try { const d = await res.json(); if (d.error) msg = d.error; } catch {} }
+          if (errEl) { errEl.textContent = msg; errEl.style.display = ''; }
+        }
+      } catch (err) {
+        if (errEl) { errEl.textContent = err.message === 'timeout' ? 'Captura esgotou o tempo (30s).' : 'Falha de conexão.'; errEl.style.display = ''; }
+        netError(err);
+      } finally {
+        captureBtn.disabled = false; captureBtn.textContent = 'Capturar imagem';
+      }
+    });
+  }
+}
+
+// ─── MÍDIA (propaganda — task 4.5.3) ──────────────────────────
+
+function cfgMediaFull(dev) {
+  return `
+    <div class="card flush" id="media-list-card">
+      <div class="card-head">
+        <div class="h">Material de propaganda</div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <label class="btn btn-accent sm" style="cursor:pointer; margin:0;">
+            ${ICON.upload} Enviar imagem
+            <input type="file" id="media-upload-file" accept="image/*" style="display:none;" />
+          </label>
+          <button class="btn btn-danger sm" id="media-delete-all">${ICON.trash} Remover tudo</button>
+        </div>
+      </div>
+      <div id="media-list-body" style="padding:16px;">${loadingState()}</div>
+    </div>
+  `;
+}
+
+function wireCfgMediaFull(dev) {
+  function loadMediaList() {
+    const body = $('media-list-body');
+    if (!body) return;
+    body.innerHTML = loadingState();
+    apiGet(`devices/${dev.id}/media`).then(async res => {
+      if (!body) return;
+      if (res.status === 401) return;
+      if (!res.ok) {
+        const msg = res.status === 504 ? 'Dispositivo offline.' : `Erro (status ${res.status}).`;
+        body.innerHTML = emptyState(ICON.upload, 'Erro ao carregar materiais', msg);
+        return;
+      }
+      const data = await res.json();
+      const items = data.materials || [];
+      if (!items.length) {
+        body.innerHTML = emptyState(ICON.upload, 'Nenhum material cadastrado', 'Envie uma imagem para exibir propaganda no terminal.');
+        return;
+      }
+      body.innerHTML = items.map(m => `
+        <div class="trow" style="grid-template-columns:1fr auto;" id="media-row-${escHtml(m.id)}">
+          <div style="min-width:0;">
+            <div class="cell-ellipsis" style="font-size:12.5px; font-weight:500;">${escHtml(m.name || m.id)}</div>
+            <div class="mono" style="font-size:11px; color:var(--text-3);">ID: ${escHtml(m.id)}</div>
+          </div>
+          <button class="btn btn-danger sm" data-media-del="${escHtml(m.id)}">${ICON.trash}</button>
+        </div>`).join('');
+
+      body.querySelectorAll('[data-media-del]').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = btn.dataset.mediaDel;
+          btn.disabled = true;
+          try {
+            const res = await apiDelete(`devices/${dev.id}/media/${id}`);
+            if (res.status === 401) return;
+            if (res.ok) {
+              showToast('success', 'Material removido.');
+              const row = $(`media-row-${id}`);
+              if (row) row.remove();
+              if (!body.querySelector('.trow')) body.innerHTML = emptyState(ICON.upload, 'Nenhum material cadastrado', '');
+            } else {
+              let msg = `Erro (status ${res.status}).`; try { const d = await res.json(); if (d.error) msg = d.error; } catch {}
+              showToast('error', msg); btn.disabled = false;
+            }
+          } catch (err) { netError(err); btn.disabled = false; }
+        });
+      });
+    }).catch(err => {
+      const el = $('media-list-body');
+      if (el) el.innerHTML = emptyState(ICON.upload, 'Falha de conexão', '');
+      netError(err);
+    });
+  }
+
+  loadMediaList();
+
+  const uploadFile = $('media-upload-file');
+  if (uploadFile) {
+    uploadFile.addEventListener('change', async () => {
+      const file = uploadFile.files[0];
+      if (!file) return;
+      uploadFile.value = '';
+      if (!file.type.startsWith('image/')) { showToast('error', 'O arquivo deve ser uma imagem (image/*).'); return; }
+      showToast('info', 'Criando material de propaganda…');
+      const fd = new FormData();
+      fd.append('file', file, file.name);
+      try {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 120_000);
+        const res = await fetch(`/admin/api/devices/${dev.id}/media`, {
+          method: 'POST', body: fd, credentials: 'same-origin', signal: ctrl.signal,
+        });
+        clearTimeout(timer);
+        if (res.status === 401) { navigate('login', false); return; }
+        if (res.ok) {
+          showToast('success', 'Material criado e programação configurada.');
+          loadMediaList();
+        } else if (res.status === 413) {
+          showToast('error', 'Arquivo muito grande (máximo 20 MB).');
+        } else {
+          let msg = `Erro ao criar material (status ${res.status}).`;
+          try {
+            const d = await res.json();
+            if (d.error) msg = d.error;
+            if (d.orphanMaterialId) msg += ` Material órfão: ${d.orphanMaterialId}`;
+          } catch {}
+          showToast('error', msg);
+        }
+      } catch (err) { netError(err); }
+    });
+  }
+
+  const deleteAllBtn = $('media-delete-all');
+  if (deleteAllBtn) {
+    deleteAllBtn.addEventListener('click', () => {
+      openConfirm({
+        title: 'Remover toda propaganda', confirmLabel: 'Remover tudo', tone: 'danger', strong: false,
+        body: 'Remove todos os materiais de propaganda cadastrados no terminal.',
+        target: cfgTargetOf(dev),
+        onConfirm: async () => {
+          try {
+            const res = await apiDelete(`devices/${dev.id}/media`);
+            if (res.status === 401) return;
+            if (res.ok) { showToast('success', 'Todos os materiais removidos.'); loadMediaList(); }
+            else { let msg = `Erro (status ${res.status}).`; try { const d = await res.json(); if (d.error) msg = d.error; } catch {} showToast('error', msg); }
+          } catch (err) { netError(err); }
+        },
+      });
+    });
+  }
+}
+
+function cfgMedia() { return cfgMediaFull({}); } // alias legado — não deveria ser chamado
 
 const CFG_MODALS = {
   reboot:     { title:'Reiniciar dispositivo', confirmLabel:'Reiniciar agora', tone:'warn', strong:false, body:'O terminal ficará indisponível por cerca de 40 segundos. Reconhecimentos não serão registrados durante a reinicialização.' },

@@ -320,41 +320,41 @@ Ref: plan.md §2.3, spec.md §FR-001 a §FR-018
 
 Ref: spec.md §US1, §FR-001, §FR-002, §SC-001
 
-- [ ] 4.1.1 Adicionar card "Modo de Verificação" na tela de device (`app.js`): dropdown com opções de `verifyMode` (face, card, pin, face_or_card, card_or_pin, face_or_card_or_pin, etc. — conforme lista retornada pelo GET)
-- [ ] 4.1.2 Ao abrir o card, buscar `GET /admin/api/devices/{id}/preferences/auth-mode` e pré-popular o dropdown com o modo atual
-- [ ] 4.1.3 Botão "Salvar": envia `PUT /admin/api/devices/{id}/preferences/auth-mode` com `{verifyMode}` selecionado; exibe sucesso ou mensagem de erro acionável
+- [x] 4.1.1 Adicionar card "Modo de Verificação" na tela de device (`app.js`): dropdown com opções de `verifyMode` (face, card, pin, face_or_card, card_or_pin, face_or_card_or_pin, etc. — conforme lista retornada pelo GET)
+- [x] 4.1.2 Ao abrir o card, buscar `GET /admin/api/devices/{id}/preferences/auth-mode` e pré-popular o dropdown com o modo atual
+- [x] 4.1.3 Botão "Salvar": envia `PUT /admin/api/devices/{id}/preferences/auth-mode` com `{verifyMode}` selecionado; exibe sucesso ou mensagem de erro acionável
 
 ### 4.2 Seção "Layout de Tela" (Display) `[M]`
 
 Ref: spec.md §US2, §FR-003, §FR-004, §FR-005, §SC-002
 
-- [ ] 4.2.1 Adicionar card "Layout de Tela": 3 botões/tabs para `normal` / `full` / `split`; 3 sliders/inputs numéricos para `screenOffTimeout`, `previewShowTime`, `standbyTimeout`
-- [ ] 4.2.2 Ao abrir, buscar `GET .../preferences/display` e pré-popular os controles; opcionalmente carregar thumbnails via `GET .../preferences/display/thumbnails` para preview visual
-- [ ] 4.2.3 Botão "Salvar": envia `PUT .../preferences/display`; exibe sucesso ou erro do firmware (ex: valor de timeout rejeitado)
+- [x] 4.2.1 Adicionar card "Layout de Tela": 3 botões/tabs para `normal` / `full` / `split`; 3 sliders/inputs numéricos para `screenOffTimeout`, `previewShowTime`, `standbyTimeout`
+- [x] 4.2.2 Ao abrir, buscar `GET .../preferences/display` e pré-popular os controles; opcionalmente carregar thumbnails via `GET .../preferences/display/thumbnails` para preview visual
+- [x] 4.2.3 Botão "Salvar": envia `PUT .../preferences/display`; exibe sucesso ou erro do firmware (ex: valor de timeout rejeitado)
 
 ### 4.3 Seção "Imagens de Branding" (Standby + Boot) `[M]`
 
 Ref: spec.md §US3, §FR-006 a §FR-011, §SC-003
 
-- [ ] 4.3.1 Adicionar card "Standby Picture": lista de imagens (`GET .../preferences/standby-pictures`), botão de upload (input file com `accept="image/*"`, envia `POST` multipart), botão de remover por UUID, botão "Desativar standby customizado"
-- [ ] 4.3.2 Adicionar card "Boot Logo": botão de upload JPEG, botão de remover; mensagem de erro de rejeição de tamanho pelo firmware exibida de forma acionável
-- [ ] 4.3.3 Feedback de operações de upload: spinner durante upload + mensagem de sucesso/erro; NUNCA exibir silêncio para falha
+- [x] 4.3.1 Adicionar card "Standby Picture": lista de imagens (`GET .../preferences/standby-pictures`), botão de upload (input file com `accept="image/*"`, envia `POST` multipart), botão de remover por UUID, botão "Desativar standby customizado"
+- [x] 4.3.2 Adicionar card "Boot Logo": botão de upload JPEG, botão de remover; mensagem de erro de rejeição de tamanho pelo firmware exibida de forma acionável
+- [x] 4.3.3 Feedback de operações de upload: spinner durante upload + mensagem de sucesso/erro; NUNCA exibir silêncio para falha
 
 ### 4.4 Seção "Estatísticas de Capacidade" `[M]`
 
 Ref: spec.md §US4, §FR-016, §SC-004, §SC-005
 
-- [ ] 4.4.1 Adicionar card "Estatísticas" com 6 counters: `Usuários (total/max)`, `Faces (total)`, `Cartões (total)`, `Eventos (total/max)` — todos buscados de `GET /admin/api/devices/{id}/stats`
-- [ ] 4.4.2 Device offline → exibir "Indisponível" em cada counter, NUNCA zero por padrão (US4-AC2)
-- [ ] 4.4.3 Botão de refresh; exibição da última atualização em timestamp
+- [x] 4.4.1 Adicionar card "Estatísticas" com 6 counters: `Usuários (total/max)`, `Faces (total)`, `Cartões (total)`, `Eventos (total/max)` — todos buscados de `GET /admin/api/devices/{id}/stats`
+- [x] 4.4.2 Device offline → exibir "Indisponível" em cada counter, NUNCA zero por padrão (US4-AC2)
+- [x] 4.4.3 Botão de refresh; exibição da última atualização em timestamp
 
 ### 4.5 Seção "Configuração Avançada de Face" `[M]`
 
 Ref: spec.md §US5, §FR-017, §FR-018, §SC-001
 
-- [ ] 4.5.1 Adicionar card "Face Avançado": input numérico para `maxDistance` (m), botão "Salvar" que envia `PUT .../preferences/face-config`
-- [ ] 4.5.2 Botão "Captura ao Vivo": envia `POST .../preferences/face-capture`, exibe a imagem retornada (base64 → `<img src="data:image/jpeg;base64,...">`); mensagem acionável se captura falhar (câmera obstruída, firmware não suporta)
-- [ ] 4.5.3 Seção de propaganda (Material/Program/Schedule): formulário de upload de imagem + botão "Remover toda propaganda"; iniciar com layout funcional ou "aguardando backend" se FASE 3 não estiver completa
+- [x] 4.5.1 Adicionar card "Face Avançado": input numérico para `maxDistance` (m), botão "Salvar" que envia `PUT .../preferences/face-config`
+- [x] 4.5.2 Botão "Captura ao Vivo": envia `POST .../preferences/face-capture`, exibe a imagem retornada (base64 → `<img src="data:image/jpeg;base64,...">`); mensagem acionável se captura falhar (câmera obstruída, firmware não suporta)
+- [x] 4.5.3 Seção de propaganda (Material/Program/Schedule): formulário de upload de imagem + botão "Remover toda propaganda"; implementado na nova aba "Mídia" (cfgMediaFull)
 
 ---
 
