@@ -84,9 +84,9 @@
 
 Ref: spec.md §FR-001, plan.md §2.1, SOURCED `Hik2go/Preferences/AuthMode.php`
 
-- [ ] 1.1.1 Criar `internal/hikvision/client_authmode.go` com struct `VerifyWeekPlan {WeekPlanCfgs []WeekPlanCfg}` e `WeekPlanCfg {WeekNo int; VerifyMode string}`
-- [ ] 1.1.2 Implementar `(c *Client) GetVerifyMode(ctx context.Context) (*VerifyWeekPlan, error)` — `GET /ISAPI/AccessControl/VerifyWeekPlanCfg/1?format=json` (SOURCED AuthMode.php)
-- [ ] 1.1.3 Escrever testes unitários: `GetVerifyMode` parseia JSON de exemplo com 7 planos semanais; erro 401 → `NonRetriableError`
+- [x] 1.1.1 Criar `internal/hikvision/client_authmode.go` com struct `VerifyWeekPlan {WeekPlanCfgs []WeekPlanCfg}` e `WeekPlanCfg {WeekNo int; VerifyMode string}`
+- [x] 1.1.2 Implementar `(c *Client) GetVerifyMode(ctx context.Context) (*VerifyWeekPlan, error)` — `GET /ISAPI/AccessControl/VerifyWeekPlanCfg/1?format=json` (SOURCED AuthMode.php)
+- [x] 1.1.3 Escrever testes unitários: `GetVerifyMode` parseia JSON de exemplo com 7 planos semanais; erro 401 → `NonRetriableError`
 
 ### 1.2 `client_authmode.go`: SetVerifyMode (read-modify-write) `[A]`
 
@@ -94,17 +94,17 @@ Ref: spec.md §FR-002, plan.md §2.1 nota "generalizar EnsureFaceVerifyMode", SO
 
 Dependência: 1.1 concluída.
 
-- [ ] 1.2.1 Implementar `(c *Client) SetVerifyMode(ctx context.Context, mode string) error` — lê o plano atual via `GetVerifyMode`, substitui `verifyMode` em todos os `WeekPlanCfg`, envia `PUT /ISAPI/AccessControl/VerifyWeekPlanCfg/1?format=json` com o plano completo
-- [ ] 1.2.2 **Teste de idempotência obrigatório** (Constitution II): chamar `SetVerifyMode` duas vezes com o mesmo modo produz payload idêntico; reprocessar não corrompe o plano
-- [ ] 1.2.3 Escrever teste: `SetVerifyMode("face")` monta o body com todos os 7 planos e `verifyMode: "face"` em cada um; teste de payload vs mock
+- [x] 1.2.1 Implementar `(c *Client) SetVerifyMode(ctx context.Context, mode string) error` — lê o plano atual via `GetVerifyMode`, substitui `verifyMode` em todos os `WeekPlanCfg`, envia `PUT /ISAPI/AccessControl/VerifyWeekPlanCfg/1?format=json` com o plano completo
+- [x] 1.2.2 **Teste de idempotência obrigatório** (Constitution II): chamar `SetVerifyMode` duas vezes com o mesmo modo produz payload idêntico; reprocessar não corrompe o plano
+- [x] 1.2.3 Escrever teste: `SetVerifyMode("face")` monta o body com todos os 7 planos e `verifyMode: "face"` em cada um; teste de payload vs mock
 
 ### 1.3 `client_display.go`: GetIdentityTerminal `[A]`
 
 Ref: spec.md §FR-003, plan.md §2.1, SOURCED `Hik2go/Preferences/IdentityTerminal.php`
 
-- [ ] 1.3.1 Criar `internal/hikvision/client_display.go` com struct `IdentityTerminalDisplay {ShowMode string; ScreenOffTimeout int; PreviewShowTime int; StandbyTimeout int; ReadOnlyFields map[string]interface{}}` (campos read-only preservados como raw para o RMW)
-- [ ] 1.3.2 Implementar `(c *Client) GetIdentityTerminal(ctx context.Context) (*IdentityTerminalDisplay, error)` — `GET /ISAPI/AccessControl/IdentityTerminal` (XML sem `?format=json`); parsear os campos mapeados preservando os read-only (SOURCED IdentityTerminal.php)
-- [ ] 1.3.3 Escrever testes: `GetIdentityTerminal` parseia XML com `showMode=normal` e todos os campos read-only presentes; erro 401 → `NonRetriableError`
+- [x] 1.3.1 Criar `internal/hikvision/client_display.go` com struct `IdentityTerminalDisplay {ShowMode string; ScreenOffTimeout int; PreviewShowTime int; StandbyTimeout int; ReadOnlyFields map[string]interface{}}` (campos read-only preservados como raw para o RMW)
+- [x] 1.3.2 Implementar `(c *Client) GetIdentityTerminal(ctx context.Context) (*IdentityTerminalDisplay, error)` — `GET /ISAPI/AccessControl/IdentityTerminal` (XML sem `?format=json`); parsear os campos mapeados preservando os read-only (SOURCED IdentityTerminal.php)
+- [x] 1.3.3 Escrever testes: `GetIdentityTerminal` parseia XML com `showMode=normal` e todos os campos read-only presentes; erro 401 → `NonRetriableError`
 
 ### 1.4 `client_display.go`: PutIdentityTerminal (read-modify-write) `[A]`
 
@@ -112,24 +112,24 @@ Ref: spec.md §FR-004, plan.md §2.1, SOURCED `IdentityTerminal.php`
 
 Dependência: 1.3 concluída. Edge case: PUT sem leitura prévia do `version` → firmware rejeita.
 
-- [ ] 1.4.1 Implementar `(c *Client) PutIdentityTerminal(ctx context.Context, screenOffTimeout, previewShowTime, standbyTimeout int, showMode string) error` — lê via `GetIdentityTerminal`, aplica os valores configuráveis, mapeia `showMode` (normal→normal/full; full→advertising/full; split→advertising/split), preserva todos os campos read-only e o atributo `version` do XML raiz, envia `PUT /ISAPI/AccessControl/IdentityTerminal` com `Content-Type: application/xml`
-- [ ] 1.4.2 **Teste de idempotência obrigatório** (Constitution II): `PutIdentityTerminal` com mesmos valores produz XML idêntico; campos read-only não são alterados
-- [ ] 1.4.3 Escrever testes: mapeamento de `showMode` (`"normal"` → `showMode=normal advertisingDisplayType=full`; `"full"` → `showMode=advertising advertisingDisplayType=full`; `"split"` → `showMode=advertising advertisingDisplayType=split`); campos read-only preservados no XML de saída
+- [x] 1.4.1 Implementar `(c *Client) PutIdentityTerminal(ctx context.Context, screenOffTimeout, previewShowTime, standbyTimeout int, showMode string) error` — lê via `GetIdentityTerminal`, aplica os valores configuráveis, mapeia `showMode` (normal→normal/full; full→advertising/full; split→advertising/split), preserva todos os campos read-only e o atributo `version` do XML raiz, envia `PUT /ISAPI/AccessControl/IdentityTerminal` com `Content-Type: application/xml`
+- [x] 1.4.2 **Teste de idempotência obrigatório** (Constitution II): `PutIdentityTerminal` com mesmos valores produz XML idêntico; campos read-only não são alterados
+- [x] 1.4.3 Escrever testes: mapeamento de `showMode` (`"normal"` → `showMode=normal advertisingDisplayType=full`; `"full"` → `showMode=advertising advertisingDisplayType=full`; `"split"` → `showMode=advertising advertisingDisplayType=split`); campos read-only preservados no XML de saída
 
 ### 1.5 `client_display.go`: GetShowModeThumbnails `[M]`
 
 Ref: spec.md §FR-005, plan.md §2.1, SOURCED `IdentityTerminal.php`
 
-- [ ] 1.5.1 Implementar `(c *Client) GetShowModeThumbnails(ctx context.Context) (interface{}, error)` — `GET /ISAPI/AccessControl/Reader/GetShowModeThumbnailsList?format=json`; retorna o JSON bruto passado ao handler
-- [ ] 1.5.2 Escrever teste: `GetShowModeThumbnails` retorna payload não-nulo para 200; erro 404 (não suportado pelo firmware) retorna erro rastreável
+- [x] 1.5.1 Implementar `(c *Client) GetShowModeThumbnails(ctx context.Context) (interface{}, error)` — `GET /ISAPI/AccessControl/Reader/GetShowModeThumbnailsList?format=json`; retorna o JSON bruto passado ao handler
+- [x] 1.5.2 Escrever teste: `GetShowModeThumbnails` retorna payload não-nulo para 200; erro 404 (não suportado pelo firmware) retorna erro rastreável
 
 ### 1.6 `client_standby.go`: ListStandbyPictures `[A]`
 
 Ref: spec.md §FR-006, plan.md §2.1, SOURCED `Hik2go/Preferences/StandbyPicture.php`
 
-- [ ] 1.6.1 Criar `internal/hikvision/client_standby.go` com struct `StandbyPicture {UUID string; FileName string}`
-- [ ] 1.6.2 Implementar `(c *Client) ListStandbyPictures(ctx context.Context) ([]StandbyPicture, error)` — `GET /ISAPI/Publish/StandbyPictureMgr/GetCustomStandbyPicList?format=json` (SOURCED StandbyPicture.php)
-- [ ] 1.6.3 Escrever testes: lista de 2 imagens com UUID e FileName corretos; lista vazia retorna slice vazio (não nil)
+- [x] 1.6.1 Criar `internal/hikvision/client_standby.go` com struct `StandbyPicture {UUID string; FileName string}`
+- [x] 1.6.2 Implementar `(c *Client) ListStandbyPictures(ctx context.Context) ([]StandbyPicture, error)` — `GET /ISAPI/Publish/StandbyPictureMgr/GetCustomStandbyPicList?format=json` (SOURCED StandbyPicture.php)
+- [x] 1.6.3 Escrever testes: lista de 2 imagens com UUID e FileName corretos; lista vazia retorna slice vazio (não nil)
 
 ### 1.7 `client_standby.go`: UploadStandbyPicture, EnableCustomStandby, DisableCustomStandby, DeleteStandbyPicture `[A]`
 
@@ -137,12 +137,12 @@ Ref: spec.md §FR-007, §FR-008, §FR-009, plan.md §2.1, SOURCED `StandbyPictur
 
 Dependência: 1.6 concluída.
 
-- [ ] 1.7.1 Implementar `(c *Client) UploadStandbyPicture(ctx context.Context, filename string, data []byte) error` — multipart `POST /ISAPI/Publish/StandbyPictureMgr/UploadCustomStandbyPic?format=json` com campo `UploadCustomStandbyPic` (JSON: `{filePathType:"multipart", filePath:<filename>}`) e campo `filePath` (binário); usa template multipart de `UploadFace` como referência (SOURCED StandbyPicture.php)
-- [ ] 1.7.2 Implementar `(c *Client) EnableCustomStandby(ctx context.Context) error` — `PUT /ISAPI/Publish/StandbyPictureMgr/StandbyPicDisplayParams?format=json` body `{standbyPicType:"custom", displayEffect:"stretch", switchingTime:20}`
-- [ ] 1.7.3 Implementar `(c *Client) DisableCustomStandby(ctx context.Context) error` — mesma rota com body `{standbyPicType:"default", displayEffect:"stretch", switchingTime:20}`
-- [ ] 1.7.4 Implementar `(c *Client) DeleteStandbyPicture(ctx context.Context, uuid string) error` — `POST /ISAPI/Publish/StandbyPictureMgr/DeleteCustomStandbyPic?format=json` body `{customStandbyPicUUIDList:[{customStandbyPicUUID:"<uuid>"}]}`
-- [ ] 1.7.5 **Teste de idempotência obrigatório** (Constitution II): `DisableCustomStandby` chamado duas vezes produz o mesmo estado-alvo no device (body idêntico)
-- [ ] 1.7.6 Escrever testes unitários: upload multipart monta os campos corretos (UploadCustomStandbyPic JSON + filePath binário); `DeleteStandbyPicture` envia o UUID correto no body; enable/disable enviam os bodies distintos corretos
+- [x] 1.7.1 Implementar `(c *Client) UploadStandbyPicture(ctx context.Context, filename string, data []byte) error` — multipart `POST /ISAPI/Publish/StandbyPictureMgr/UploadCustomStandbyPic?format=json` com campo `UploadCustomStandbyPic` (JSON: `{filePathType:"multipart", filePath:<filename>}`) e campo `filePath` (binário); usa template multipart de `UploadFace` como referência (SOURCED StandbyPicture.php)
+- [x] 1.7.2 Implementar `(c *Client) EnableCustomStandby(ctx context.Context) error` — `PUT /ISAPI/Publish/StandbyPictureMgr/StandbyPicDisplayParams?format=json` body `{standbyPicType:"custom", displayEffect:"stretch", switchingTime:20}`
+- [x] 1.7.3 Implementar `(c *Client) DisableCustomStandby(ctx context.Context) error` — mesma rota com body `{standbyPicType:"default", displayEffect:"stretch", switchingTime:20}`
+- [x] 1.7.4 Implementar `(c *Client) DeleteStandbyPicture(ctx context.Context, uuid string) error` — `POST /ISAPI/Publish/StandbyPictureMgr/DeleteCustomStandbyPic?format=json` body `{customStandbyPicUUIDList:[{customStandbyPicUUID:"<uuid>"}]}`
+- [x] 1.7.5 **Teste de idempotência obrigatório** (Constitution II): `DisableCustomStandby` chamado duas vezes produz o mesmo estado-alvo no device (body idêntico)
+- [x] 1.7.6 Escrever testes unitários: upload multipart monta os campos corretos (UploadCustomStandbyPic JSON + filePath binário); `DeleteStandbyPicture` envia o UUID correto no body; enable/disable enviam os bodies distintos corretos
 
 ### 1.8 `client_bootpic.go`: UploadBootPicture, DeleteBootPicture `[A]`
 
