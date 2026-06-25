@@ -224,71 +224,71 @@ Ref: spec.md §FR-022, plan.md §2.2
 
 Ref: spec.md §FR-001, §FR-002, plan.md §2.2
 
-- [ ] 2.1.1 Criar `admin_device_preferences_handlers.go` com `GetDeviceAuthModeHandler(cfg DeviceConfigConfig) http.Handler`: extrai `{id}` via `deviceConfigPathSegments`, chama `loadDeviceAndISAPIClient`, chama `client.GetVerifyMode(ctx)`, responde JSON com o plano semanal completo (shape: `{weekPlans:[{weekNo, verifyMode}]}` — decisão inline consistente com padrão de passthrough)
-- [ ] 2.1.2 Criar `PutDeviceAuthModeHandler(cfg DeviceConfigConfig) http.Handler`: decode `{verifyMode string}` do body, valida não-vazio, chama `client.SetVerifyMode(ctx, mode)`, responde `{result:"ok", device_id:N}`
-- [ ] 2.1.3 Log estruturado em ambos: `device_id`, `stage: "auth-mode"`, sem senha ISAPI (FR-023)
-- [ ] 2.1.4 Escrever testes: GET retorna `{weekPlans:[...]}` com mock; PUT com `verifyMode` vazio → 400; PUT com device inexistente → 404; timeout ISAPI → 504
+- [x] 2.1.1 Criar `admin_device_preferences_handlers.go` com `GetDeviceAuthModeHandler(cfg DeviceConfigConfig) http.Handler`: extrai `{id}` via `deviceConfigPathSegments`, chama `loadDeviceAndISAPIClient`, chama `client.GetVerifyMode(ctx)`, responde JSON com o plano semanal completo (shape: `{weekPlans:[{weekNo, verifyMode}]}` — decisão inline consistente com padrão de passthrough)
+- [x] 2.1.2 Criar `PutDeviceAuthModeHandler(cfg DeviceConfigConfig) http.Handler`: decode `{verifyMode string}` do body, valida não-vazio, chama `client.SetVerifyMode(ctx, mode)`, responde `{result:"ok", device_id:N}`
+- [x] 2.1.3 Log estruturado em ambos: `device_id`, `stage: "auth-mode"`, sem senha ISAPI (FR-023)
+- [x] 2.1.4 Escrever testes: GET retorna `{weekPlans:[...]}` com mock; PUT com `verifyMode` vazio → 400; PUT com device inexistente → 404; timeout ISAPI → 504
 
 ### 2.2 GetDeviceDisplayHandler + PutDeviceDisplayHandler + GetDeviceDisplayThumbnailsHandler `[A]`
 
 Ref: spec.md §FR-003, §FR-004, §FR-005, plan.md §2.2
 
-- [ ] 2.2.1 Criar `GetDeviceDisplayHandler(cfg DeviceConfigConfig) http.Handler`: chama `client.GetIdentityTerminal(ctx)`, responde JSON com campos mapeados: `{showMode, screenOffTimeout, previewShowTime, standbyTimeout}`
-- [ ] 2.2.2 Criar `PutDeviceDisplayHandler(cfg DeviceConfigConfig) http.Handler`: decode `{showMode string; screenOffTimeout int; previewShowTime int; standbyTimeout int}`, valida `showMode ∈ {normal, full, split}` (400 se inválido), chama `client.PutIdentityTerminal(ctx, ...)`, responde `{result:"ok", device_id:N}`
-- [ ] 2.2.3 Criar `GetDeviceDisplayThumbnailsHandler(cfg DeviceConfigConfig) http.Handler`: chama `client.GetShowModeThumbnails(ctx)`, responde o JSON da ISAPI diretamente
-- [ ] 2.2.4 Escrever testes: GET display retorna os 4 campos corretos; PUT com `showMode: "invalid"` → 400; timeout → 504
+- [x] 2.2.1 Criar `GetDeviceDisplayHandler(cfg DeviceConfigConfig) http.Handler`: chama `client.GetIdentityTerminal(ctx)`, responde JSON com campos mapeados: `{showMode, screenOffTimeout, previewShowTime, standbyTimeout}`
+- [x] 2.2.2 Criar `PutDeviceDisplayHandler(cfg DeviceConfigConfig) http.Handler`: decode `{showMode string; screenOffTimeout int; previewShowTime int; standbyTimeout int}`, valida `showMode ∈ {normal, full, split}` (400 se inválido), chama `client.PutIdentityTerminal(ctx, ...)`, responde `{result:"ok", device_id:N}`
+- [x] 2.2.3 Criar `GetDeviceDisplayThumbnailsHandler(cfg DeviceConfigConfig) http.Handler`: chama `client.GetShowModeThumbnails(ctx)`, responde o JSON da ISAPI diretamente
+- [x] 2.2.4 Escrever testes: GET display retorna os 4 campos corretos; PUT com `showMode: "invalid"` → 400; timeout → 504
 
 ### 2.3 GetDeviceStandbyPicturesHandler + PostDeviceStandbyPictureHandler + DeleteDeviceStandbyPictureHandler + PutDeviceStandbyDisableHandler `[A]`
 
 Ref: spec.md §FR-006, §FR-007, §FR-008, §FR-009, plan.md §2.2
 
-- [ ] 2.3.1 Criar `GetDeviceStandbyPicturesHandler(cfg DeviceConfigConfig) http.Handler`: chama `client.ListStandbyPictures(ctx)`, responde `{pictures:[{uuid, fileName}], total:N}`
-- [ ] 2.3.2 Criar `PostDeviceStandbyPictureHandler(cfg DeviceConfigConfig) http.Handler`: aplica `http.MaxBytesReader` (constante de 1.12.1), parseia multipart, valida `image/*` (helper de 1.14.1), extrai filename e binário, chama `client.UploadStandbyPicture(ctx, filename, data)` seguido de `client.EnableCustomStandby(ctx)`; responde `{result:"uploaded_and_enabled", device_id:N}`; falha na ativação é reportada mesmo com upload bem-sucedido
-- [ ] 2.3.3 Criar `DeleteDeviceStandbyPictureHandler(cfg DeviceConfigConfig) http.Handler`: extrai `{uuid}` do path (segmento após `standby-pictures/`; validar não-vazio e sem `/` nem `..`); chama `client.DeleteStandbyPicture(ctx, uuid)`; responde `{result:"deleted", device_id:N}`
-- [ ] 2.3.4 Criar `PutDeviceStandbyDisableHandler(cfg DeviceConfigConfig) http.Handler`: chama `client.DisableCustomStandby(ctx)`, responde `{result:"disabled", device_id:N}`
-- [ ] 2.3.5 Escrever testes: POST sem file → 400; POST com tipo inválido → 400; POST com body > 20 MB → 413; DELETE com uuid vazio → 400 ou 404; PUT disable → 200
+- [x] 2.3.1 Criar `GetDeviceStandbyPicturesHandler(cfg DeviceConfigConfig) http.Handler`: chama `client.ListStandbyPictures(ctx)`, responde `{pictures:[{uuid, fileName}], total:N}`
+- [x] 2.3.2 Criar `PostDeviceStandbyPictureHandler(cfg DeviceConfigConfig) http.Handler`: aplica `http.MaxBytesReader` (constante de 1.12.1), parseia multipart, valida `image/*` (helper de 1.14.1), extrai filename e binário, chama `client.UploadStandbyPicture(ctx, filename, data)` seguido de `client.EnableCustomStandby(ctx)`; responde `{result:"uploaded_and_enabled", device_id:N}`; falha na ativação é reportada mesmo com upload bem-sucedido
+- [x] 2.3.3 Criar `DeleteDeviceStandbyPictureHandler(cfg DeviceConfigConfig) http.Handler`: extrai `{uuid}` do path (segmento após `standby-pictures/`; validar não-vazio e sem `/` nem `..`); chama `client.DeleteStandbyPicture(ctx, uuid)`; responde `{result:"deleted", device_id:N}`
+- [x] 2.3.4 Criar `PutDeviceStandbyDisableHandler(cfg DeviceConfigConfig) http.Handler`: chama `client.DisableCustomStandby(ctx)`, responde `{result:"disabled", device_id:N}`
+- [x] 2.3.5 Escrever testes: POST sem file → 400; POST com tipo inválido → 400; POST com body > 20 MB → 413; DELETE com uuid vazio → 400 ou 404; PUT disable → 200
 
 ### 2.4 PostDeviceBootPictureHandler + DeleteDeviceBootPictureHandler `[A]`
 
 Ref: spec.md §FR-010, §FR-011, plan.md §2.2
 
-- [ ] 2.4.1 Criar `PostDeviceBootPictureHandler(cfg DeviceConfigConfig) http.Handler`: aplica `http.MaxBytesReader`, parseia multipart JPEG, valida `image/*`, chama `client.UploadBootPicture(ctx, deviceID, data)`, responde `{result:"uploaded", device_id:N}`; mensagem de erro de rejeição de tamanho pelo firmware é repassada ao operador com contexto acionável
-- [ ] 2.4.2 Criar `DeleteDeviceBootPictureHandler(cfg DeviceConfigConfig) http.Handler`: chama `client.DeleteBootPicture(ctx)`, responde `{result:"deleted", device_id:N}`
-- [ ] 2.4.3 Escrever testes: POST com arquivo não-JPEG (mas image/png) → aceito pelo handler (validação é `image/*`, não exclusivo JPEG); POST com `Content-Type: text/plain` → 400
+- [x] 2.4.1 Criar `PostDeviceBootPictureHandler(cfg DeviceConfigConfig) http.Handler`: aplica `http.MaxBytesReader`, parseia multipart JPEG, valida `image/*`, chama `client.UploadBootPicture(ctx, deviceID, data)`, responde `{result:"uploaded", device_id:N}`; mensagem de erro de rejeição de tamanho pelo firmware é repassada ao operador com contexto acionável
+- [x] 2.4.2 Criar `DeleteDeviceBootPictureHandler(cfg DeviceConfigConfig) http.Handler`: chama `client.DeleteBootPicture(ctx)`, responde `{result:"deleted", device_id:N}`
+- [x] 2.4.3 Escrever testes: POST com arquivo não-JPEG (mas image/png) → aceito pelo handler (validação é `image/*`, não exclusivo JPEG); POST com `Content-Type: text/plain` → 400
 
 ### 2.5 GetDeviceMediaHandler + PostDeviceMediaHandler + DeleteDeviceMediaItemHandler + DeleteDeviceMediaAllHandler `[A]`
 
 Ref: spec.md §FR-012, §FR-013, §FR-014, §FR-015, plan.md §2.2
 
-- [ ] 2.5.1 Criar `GetDeviceMediaHandler(cfg DeviceConfigConfig) http.Handler`: chama `client.ListMaterials(ctx)`, responde `{materials:[{id, name}], total:N}`
-- [ ] 2.5.2 Criar `PostDeviceMediaHandler(cfg DeviceConfigConfig) http.Handler`: aplica `http.MaxBytesReader`, parseia multipart, valida `image/*`, chama `client.CreateAdvertisingMedia(ctx, filename, data)`; resposta de sucesso: `{result:"created", materialId, programId, scheduleId, device_id:N}`; resposta de erro com material órfão: `{error:"...", stage:"<etapa falhou>", orphanMaterialId:"<id>", device_id:N}` (Clarification 4 — dec-012)
-- [ ] 2.5.3 Criar `DeleteDeviceMediaItemHandler(cfg DeviceConfigConfig) http.Handler`: extrai `{id}` do path, chama `client.DeleteMaterial(ctx, id)`, responde `{result:"deleted", device_id:N}`
-- [ ] 2.5.4 Criar `DeleteDeviceMediaAllHandler(cfg DeviceConfigConfig) http.Handler`: chama `client.DeleteAllMaterials(ctx)`, responde `{result:"all_deleted", device_id:N}`
-- [ ] 2.5.5 Escrever testes: POST com imagem → resposta com os 3 IDs; POST falha na etapa (c) → resposta com `orphanMaterialId`; DELETE item → 200; DELETE all → 200
+- [x] 2.5.1 Criar `GetDeviceMediaHandler(cfg DeviceConfigConfig) http.Handler`: chama `client.ListMaterials(ctx)`, responde `{materials:[{id, name}], total:N}`
+- [x] 2.5.2 Criar `PostDeviceMediaHandler(cfg DeviceConfigConfig) http.Handler`: aplica `http.MaxBytesReader`, parseia multipart, valida `image/*`, chama `client.CreateAdvertisingMedia(ctx, filename, data)`; resposta de sucesso: `{result:"created", materialId, programId, scheduleId, device_id:N}`; resposta de erro com material órfão: `{error:"...", stage:"<etapa falhou>", orphanMaterialId:"<id>", device_id:N}` (Clarification 4 — dec-012)
+- [x] 2.5.3 Criar `DeleteDeviceMediaItemHandler(cfg DeviceConfigConfig) http.Handler`: extrai `{id}` do path, chama `client.DeleteMaterial(ctx, id)`, responde `{result:"deleted", device_id:N}`
+- [x] 2.5.4 Criar `DeleteDeviceMediaAllHandler(cfg DeviceConfigConfig) http.Handler`: chama `client.DeleteAllMaterials(ctx)`, responde `{result:"all_deleted", device_id:N}`
+- [x] 2.5.5 Escrever testes: POST com imagem → resposta com os 3 IDs; POST falha na etapa (c) → resposta com `orphanMaterialId`; DELETE item → 200; DELETE all → 200
 
 ### 2.6 GetDeviceStatsHandler `[A]`
 
 Ref: spec.md §FR-016, plan.md §2.2
 
-- [ ] 2.6.1 Criar `GetDeviceStatsHandler(cfg DeviceConfigConfig) http.Handler`: chama `client.GetDeviceStats(ctx)`, responde `{users:{total, faces, cards, max}, events:{total, max}}`; device offline → 504 ou 502 (via `mapISAPIError`), NUNCA retorna zeros por padrão (US4-AC2: zero e "indisponível" são distintos)
-- [ ] 2.6.2 Escrever testes: GET stats agrega os 6 campos corretos de mock; device offline → 504, não retorna zeros; erro de auth → 502
+- [x] 2.6.1 Criar `GetDeviceStatsHandler(cfg DeviceConfigConfig) http.Handler`: chama `client.GetDeviceStats(ctx)`, responde `{users:{total, faces, cards, max}, events:{total, max}}`; device offline → 504 ou 502 (via `mapISAPIError`), NUNCA retorna zeros por padrão (US4-AC2: zero e "indisponível" são distintos)
+- [x] 2.6.2 Escrever testes: GET stats agrega os 6 campos corretos de mock; device offline → 504, não retorna zeros; erro de auth → 502
 
 ### 2.7 PutDeviceFaceConfigHandler + PostDeviceFaceCaptureHandler `[A]`
 
 Ref: spec.md §FR-017, §FR-018, plan.md §2.2
 
-- [ ] 2.7.1 Criar `PutDeviceFaceConfigHandler(cfg DeviceConfigConfig) http.Handler`: decode `{maxDistance float64}` do body, valida `maxDistance > 0`, chama `client.SetFaceCompareCond(ctx, maxDistance)`, responde `{result:"ok", device_id:N}`
-- [ ] 2.7.2 Criar `PostDeviceFaceCaptureHandler(cfg DeviceConfigConfig) http.Handler`: chama `client.CaptureFaceData(ctx)`, encoda os bytes resultantes em base64, responde `{image:"<base64>", device_id:N}` (dec-011 — nunca expõe URL/IP interno)
-- [ ] 2.7.3 Escrever testes: PUT com `maxDistance: -1` → 400; PUT com `maxDistance: 1.5` → 200; POST face-capture retorna base64 válido (não URL); erro SSRF (host diferente) → 502 com mensagem de segurança
+- [x] 2.7.1 Criar `PutDeviceFaceConfigHandler(cfg DeviceConfigConfig) http.Handler`: decode `{maxDistance float64}` do body, valida `maxDistance > 0`, chama `client.SetFaceCompareCond(ctx, maxDistance)`, responde `{result:"ok", device_id:N}`
+- [x] 2.7.2 Criar `PostDeviceFaceCaptureHandler(cfg DeviceConfigConfig) http.Handler`: chama `client.CaptureFaceData(ctx)`, encoda os bytes resultantes em base64, responde `{image:"<base64>", device_id:N}` (dec-011 — nunca expõe URL/IP interno)
+- [x] 2.7.3 Escrever testes: PUT com `maxDistance: -1` → 400; PUT com `maxDistance: 1.5` → 200; POST face-capture retorna base64 válido (não URL); erro SSRF (host diferente) → 502 com mensagem de segurança
 
 ### 2.8 Infraestrutura transversal dos handlers `[A]`
 
 Ref: spec.md §FR-019, §FR-020, §FR-021, §FR-023, plan.md §2.2
 
-- [ ] 2.8.1 Garantir que todos os 18 handlers usam `loadDeviceAndISAPIClient` → `404` para device inexistente (FR-021); o factory dos handlers está em `admin_device_preferences_handlers.go`
-- [ ] 2.8.2 Garantir que todos os handlers mapeiam erros via `mapISAPIError`: timeout → 504, auth inválida (digest 401) → 502 sem expor senha (FR-020, SC-006)
-- [ ] 2.8.3 Garantir log estruturado em todos os handlers: campos `device_id` e `stage` presentes; senha ISAPI, tokens e conteúdo binário NUNCA logados (FR-023)
-- [ ] 2.8.4 Escrever teste transversal: para qualquer handler da feature, device com `id = 9999` (inexistente) → 404 sem tentar ISAPI; timeout → 504; password nunca aparece em log ou response body
+- [x] 2.8.1 Garantir que todos os 18 handlers usam `loadDeviceAndISAPIClient` → `404` para device inexistente (FR-021); o factory dos handlers está em `admin_device_preferences_handlers.go`
+- [x] 2.8.2 Garantir que todos os handlers mapeiam erros via `mapISAPIError`: timeout → 504, auth inválida (digest 401) → 502 sem expor senha (FR-020, SC-006)
+- [x] 2.8.3 Garantir log estruturado em todos os handlers: campos `device_id` e `stage` presentes; senha ISAPI, tokens e conteúdo binário NUNCA logados (FR-023)
+- [x] 2.8.4 Escrever teste transversal: para qualquer handler da feature, device com `id = 9999` (inexistente) → 404 sem tentar ISAPI; timeout → 504; password nunca aparece em log ou response body
 
 ---
 
@@ -301,11 +301,11 @@ Ref: spec.md §FR-019, §FR-020, §FR-021, §FR-023, plan.md §2.2
 
 Ref: plan.md §2.3, spec.md §FR-001 a §FR-018
 
-- [ ] 3.1.1 Em `server.go`, estender o `switch segs[0]` de `adminDevicesRouter` com `case "preferences"` + `case "stats"`
-- [ ] 3.1.2 Implementar switch de `segs[1]` dentro de `preferences` cobrindo todos os subpaths do plan.md §2.3: `auth-mode`, `display` (com `thumbnails`), `standby-pictures` (com `disable` e `{uuid}`), `boot-picture`, `media` (com `{id}` e bulk), `face-config`, `face-capture`
-- [ ] 3.1.3 Garantir `405 Method Not Allowed` para métodos inesperados e `404` para segmentos desconhecidos (padrão existente)
-- [ ] 3.1.4 Construir os handlers no `adminDevicesRouter` uma única vez (variáveis locais `getAuthMode := GetDeviceAuthModeHandler(cfg)`, etc.) seguindo o padrão existente
-- [ ] 3.1.5 Escrever testes de roteamento: `GET /admin/api/devices/1/preferences/auth-mode` → 200; `PUT /admin/api/devices/1/preferences/display` → 200; `PATCH /admin/api/devices/1/preferences/auth-mode` → 405; `GET /admin/api/devices/1/preferences/nao-existe` → 404; `GET /admin/api/devices/1/stats` → 200
+- [x] 3.1.1 Em `server.go`, estender o `switch segs[0]` de `adminDevicesRouter` com `case "preferences"` + `case "stats"`
+- [x] 3.1.2 Implementar switch de `segs[1]` dentro de `preferences` cobrindo todos os subpaths do plan.md §2.3: `auth-mode`, `display` (com `thumbnails`), `standby-pictures` (com `disable` e `{uuid}`), `boot-picture`, `media` (com `{id}` e bulk), `face-config`, `face-capture`
+- [x] 3.1.3 Garantir `405 Method Not Allowed` para métodos inesperados e `404` para segmentos desconhecidos (padrão existente)
+- [x] 3.1.4 Construir os handlers no `adminDevicesRouter` uma única vez (variáveis locais `getAuthMode := GetDeviceAuthModeHandler(cfg)`, etc.) seguindo o padrão existente
+- [x] 3.1.5 Escrever testes de roteamento: `GET /admin/api/devices/1/preferences/auth-mode` → 200; `PUT /admin/api/devices/1/preferences/display` → 200; `PATCH /admin/api/devices/1/preferences/auth-mode` → 405; `GET /admin/api/devices/1/preferences/nao-existe` → 404; `GET /admin/api/devices/1/stats` → 200
 
 ---
 
