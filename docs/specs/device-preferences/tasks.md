@@ -148,39 +148,39 @@ Dependência: 1.6 concluída.
 
 Ref: spec.md §FR-010, §FR-011, plan.md §2.1, SOURCED `Hik2go/Preferences/InitializationScreen.php`
 
-- [ ] 1.8.1 Criar `internal/hikvision/client_bootpic.go`
-- [ ] 1.8.2 Implementar `(c *Client) UploadBootPicture(ctx context.Context, deviceID int64, data []byte) error` — multipart `POST /ISAPI/System/powerUpPicture?format=json` com campo `picture_info` (JSON: `{type:"filePathType", faceLibType:"binay"}`) e campo `picture_name` (binário JPEG com nome `<deviceID>.jpg`); SOURCED `InitializationScreen.php`
-- [ ] 1.8.3 Implementar `(c *Client) DeleteBootPicture(ctx context.Context) error` — `DELETE /ISAPI/System/powerUpPicture?format=json`
-- [ ] 1.8.4 Escrever testes: upload monta multipart com campos exatos (`picture_info` JSON + `picture_name` binário com nome correto); delete faz DELETE no path correto; erro 404 firmware (imagem inexistente) → erro rastreável
+- [x] 1.8.1 Criar `internal/hikvision/client_bootpic.go`
+- [x] 1.8.2 Implementar `(c *Client) UploadBootPicture(ctx context.Context, deviceID int64, data []byte) error` — multipart `POST /ISAPI/System/powerUpPicture?format=json` com campo `picture_info` (JSON: `{type:"filePathType", faceLibType:"binay"}`) e campo `picture_name` (binário JPEG com nome `<deviceID>.jpg`); SOURCED `InitializationScreen.php`
+- [x] 1.8.3 Implementar `(c *Client) DeleteBootPicture(ctx context.Context) error` — `DELETE /ISAPI/System/powerUpPicture?format=json`
+- [x] 1.8.4 Escrever testes: upload monta multipart com campos exatos (`picture_info` JSON + `picture_name` binário com nome correto); delete faz DELETE no path correto; erro 404 firmware (imagem inexistente) → erro rastreável
 
 ### 1.9 `client_media.go`: ListMaterials, CreateAdvertisingMedia (5 etapas), DeleteMaterial, DeleteAllMaterials `[A]`
 
 Ref: spec.md §FR-012, §FR-013, §FR-014, §FR-015, plan.md §2.1, SOURCED `Hik2go/Preferences/Media.php` + `Presentation.php`
 
-- [ ] 1.9.1 Criar `internal/hikvision/client_media.go` com struct `Material {ID string; Name string}` e `AdvertisingMediaResult {MaterialID string; ProgramID string; ScheduleID string}`
-- [ ] 1.9.2 Implementar `(c *Client) ListMaterials(ctx context.Context) ([]Material, error)` — `GET /ISAPI/Publish/MaterialMgr/material` (SOURCED Media.php)
-- [ ] 1.9.3 Implementar `(c *Client) CreateAdvertisingMedia(ctx context.Context, filename string, data []byte) (*AdvertisingMediaResult, error)` — executa as 5 etapas sequenciais (a)-(e) do FR-013: (a) POST Material XML; (b) POST upload binário; (c) POST Program XML; (d) PUT Page XML; (e) PUT Schedule XML; retorna IDs criados ou erro com etapa falha + `OrphanMaterialID` (Clarification 4)
-- [ ] 1.9.4 Implementar `(c *Client) DeleteMaterial(ctx context.Context, id string) error` — `DELETE /ISAPI/Publish/MaterialMgr/material/{id}` (SOURCED Media.php)
-- [ ] 1.9.5 Implementar `(c *Client) DeleteAllMaterials(ctx context.Context) error` — lista via `ListMaterials` e remove cada um via `DeleteMaterial`; erro individual não bloqueia os demais (falhar alto no final)
-- [ ] 1.9.6 Escrever testes: `CreateAdvertisingMedia` simula falha na etapa (c) → retorna erro com `OrphanMaterialID` preenchido; `DeleteAllMaterials` com 3 materiais chama Delete 3 vezes; `ListMaterials` parseia XML de exemplo
+- [x] 1.9.1 Criar `internal/hikvision/client_media.go` com struct `Material {ID string; Name string}` e `AdvertisingMediaResult {MaterialID string; ProgramID string; ScheduleID string}`
+- [x] 1.9.2 Implementar `(c *Client) ListMaterials(ctx context.Context) ([]Material, error)` — `GET /ISAPI/Publish/MaterialMgr/material` (SOURCED Media.php)
+- [x] 1.9.3 Implementar `(c *Client) CreateAdvertisingMedia(ctx context.Context, filename string, data []byte) (*AdvertisingMediaResult, error)` — executa as 5 etapas sequenciais (a)-(e) do FR-013: (a) POST Material XML; (b) POST upload binário; (c) POST Program XML; (d) PUT Page XML; (e) PUT Schedule XML; retorna IDs criados ou erro com etapa falha + `OrphanMaterialID` (Clarification 4)
+- [x] 1.9.4 Implementar `(c *Client) DeleteMaterial(ctx context.Context, id string) error` — `DELETE /ISAPI/Publish/MaterialMgr/material/{id}` (SOURCED Media.php)
+- [x] 1.9.5 Implementar `(c *Client) DeleteAllMaterials(ctx context.Context) error` — lista via `ListMaterials` e remove cada um via `DeleteMaterial`; erro individual não bloqueia os demais (falhar alto no final)
+- [x] 1.9.6 Escrever testes: `CreateAdvertisingMedia` simula falha na etapa (c) → retorna erro com `OrphanMaterialID` preenchido; `DeleteAllMaterials` com 3 materiais chama Delete 3 vezes; `ListMaterials` parseia XML de exemplo
 
 ### 1.10 `client_stats.go`: GetDeviceStats `[A]`
 
 Ref: spec.md §FR-016, plan.md §2.1, SOURCED `Hik2go/Stats.php`
 
-- [ ] 1.10.1 Criar `internal/hikvision/client_stats.go` com struct `DeviceStats {Users UserStats; Events EventStats}`, `UserStats {Total int; Faces int; Cards int; Max int}`, `EventStats {Total int; Max int}`
-- [ ] 1.10.2 Implementar `(c *Client) GetDeviceStats(ctx context.Context) (*DeviceStats, error)` — executa as 4 chamadas ISAPI em paralelo ou sequencial: (1) `GET /ISAPI/AccessControl/UserInfo/Count?format=json` → `users.total/faces/cards`; (2) `GET /ISAPI/AccessControl/UserInfo/capabilities?format=json` → `users.max`; (3) `POST /ISAPI/AccessControl/AcsEventTotalNum?format=json` body `{AcsEventTotalNumCond:{major:0, minor:0}}` → `events.total`; (4) `GET /ISAPI/AccessControl/AcsEventTotalNum/capabilities?format=json` → `events.max`; mapeia campos conforme FR-016 (SOURCED Stats.php)
-- [ ] 1.10.3 Escrever testes: `GetDeviceStats` agrega os 4 payloads mock em `DeviceStats` com todos os campos corretos; erro numa das 4 chamadas → retorna erro com indicação de qual falhou
+- [x] 1.10.1 Criar `internal/hikvision/client_stats.go` com struct `DeviceStats {Users UserStats; Events EventStats}`, `UserStats {Total int; Faces int; Cards int; Max int}`, `EventStats {Total int; Max int}`
+- [x] 1.10.2 Implementar `(c *Client) GetDeviceStats(ctx context.Context) (*DeviceStats, error)` — executa as 4 chamadas ISAPI em paralelo ou sequencial: (1) `GET /ISAPI/AccessControl/UserInfo/Count?format=json` → `users.total/faces/cards`; (2) `GET /ISAPI/AccessControl/UserInfo/capabilities?format=json` → `users.max`; (3) `POST /ISAPI/AccessControl/AcsEventTotalNum?format=json` body `{AcsEventTotalNumCond:{major:0, minor:0}}` → `events.total`; (4) `GET /ISAPI/AccessControl/AcsEventTotalNum/capabilities?format=json` → `events.max`; mapeia campos conforme FR-016 (SOURCED Stats.php)
+- [x] 1.10.3 Escrever testes: `GetDeviceStats` agrega os 4 payloads mock em `DeviceStats` com todos os campos corretos; erro numa das 4 chamadas → retorna erro com indicação de qual falhou
 
 ### 1.11 `client_faceconfig.go`: SetFaceCompareCond, CaptureFaceData `[A]`
 
 Ref: spec.md §FR-017, §FR-018, plan.md §2.1, SOURCED `Hik2go/Face.php`
 
-- [ ] 1.11.1 Criar `internal/hikvision/client_faceconfig.go`
-- [ ] 1.11.2 Implementar `(c *Client) SetFaceCompareCond(ctx context.Context, maxDistance float64) error` — `PUT /ISAPI/AccessControl/FaceCompareCond` com XML `<FaceCompareCond version="2.0">` contendo `maxDistance` e os demais campos com valores fixos: pitch=45, yaw=45, leftBorder=0, rightBorder=0, upBorder=0, bottomBorder=0, faceScore=0, faceScoreThreshold1=0, ROIRegionMode=manual (SOURCED Face.php)
-- [ ] 1.11.3 **Teste de idempotência obrigatório** (Constitution II): `SetFaceCompareCond` com mesma `maxDistance` produz XML idêntico; campos fixos não variam entre chamadas
-- [ ] 1.11.4 Implementar `(c *Client) CaptureFaceData(ctx context.Context) ([]byte, error)` — `POST /ISAPI/AccessControl/CaptureFaceData` com XML body `<CaptureFaceDataCond version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema"><captureInfrared>false</captureInfrared><dataType>url</dataType></CaptureFaceDataCond>`; extrai `faceDataUrl` da resposta; **valida que o host de `faceDataUrl` == host do device** antes de baixar (mitigação SSRF — CHK023); faz download via `downloadImage` + `io.LimitReader` (limitado a 10 MB — mitigação DoS F1); retorna bytes da imagem (SOURCED Face.php)
-- [ ] 1.11.5 Escrever testes: `SetFaceCompareCond(1.5)` produz XML com `maxDistance=1.5` e todos os campos fixos corretos; `CaptureFaceData` com `faceDataUrl` para host diferente do device → retorna erro `ErrSSRFHostMismatch`
+- [x] 1.11.1 Criar `internal/hikvision/client_faceconfig.go`
+- [x] 1.11.2 Implementar `(c *Client) SetFaceCompareCond(ctx context.Context, maxDistance float64) error` — `PUT /ISAPI/AccessControl/FaceCompareCond` com XML `<FaceCompareCond version="2.0">` contendo `maxDistance` e os demais campos com valores fixos: pitch=45, yaw=45, leftBorder=0, rightBorder=0, upBorder=0, bottomBorder=0, faceScore=0, faceScoreThreshold1=0, ROIRegionMode=manual (SOURCED Face.php)
+- [x] 1.11.3 **Teste de idempotência obrigatório** (Constitution II): `SetFaceCompareCond` com mesma `maxDistance` produz XML idêntico; campos fixos não variam entre chamadas
+- [x] 1.11.4 Implementar `(c *Client) CaptureFaceData(ctx context.Context) ([]byte, error)` — `POST /ISAPI/AccessControl/CaptureFaceData` com XML body `<CaptureFaceDataCond version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema"><captureInfrared>false</captureInfrared><dataType>url</dataType></CaptureFaceDataCond>`; extrai `faceDataUrl` da resposta; **valida que o host de `faceDataUrl` == host do device** antes de baixar (mitigação SSRF — CHK023); faz download via `downloadImage` + `io.LimitReader` (limitado a 10 MB — mitigação DoS F1); retorna bytes da imagem (SOURCED Face.php)
+- [x] 1.11.5 Escrever testes: `SetFaceCompareCond(1.5)` produz XML com `maxDistance=1.5` e todos os campos fixos corretos; `CaptureFaceData` com `faceDataUrl` para host diferente do device → retorna erro `ErrSSRFHostMismatch`
 
 ### 1.12 Controles de segurança: cap de body em uploads e LimitReader em downloads `[C]`
 
@@ -188,10 +188,10 @@ Ref: plan.md §6.1 F1 (DoS/leitura ilimitada A04/API4), checklist CHK022/CHK025
 
 Critério de aceite obrigatório e verificável: (a) body dos handlers de upload limitado a **20 MB** via `http.MaxBytesReader` antes de parse multipart; (b) download de `faceDataUrl` limitado a **10 MB** via `io.LimitReader` em `CaptureFaceData` (já coberto por 1.11.4).
 
-- [ ] 1.12.1 Definir constante `maxUploadBodyBytes = 20 * 1024 * 1024` em `admin_device_preferences_handlers.go` (20 MB — teto generoso, sem pré-validar limite por modelo conforme dec-010; apenas barra exaustão de memória)
-- [ ] 1.12.2 Em cada handler de upload (PostDeviceStandbyPictureHandler, PostDeviceBootPictureHandler, PostDeviceMediaHandler): aplicar `http.MaxBytesReader(w, r.Body, maxUploadBodyBytes)` antes de `r.ParseMultipartForm`; retornar `413 Request Entity Too Large` com mensagem acionável se body exceder o teto
-- [ ] 1.12.3 Verificar que `downloadImage` em `client.go` já usa `io.LimitReader` ou adicionar limite de 10 MB no call de `CaptureFaceData` (se `downloadImage` não tiver limite próprio — checar `client.go:384`)
-- [ ] 1.12.4 Escrever testes: POST de standby picture com body > 20 MB → 413 com mensagem acionável; POST de boot picture com body exato de 20 MB → processado normalmente
+- [x] 1.12.1 Definir constante `maxUploadBodyBytes = 20 * 1024 * 1024` em `admin_device_preferences_handlers.go` (20 MB — teto generoso, sem pré-validar limite por modelo conforme dec-010; apenas barra exaustão de memória)
+- [x] 1.12.2 Em cada handler de upload (PostDeviceStandbyPictureHandler, PostDeviceBootPictureHandler, PostDeviceMediaHandler): aplicar `http.MaxBytesReader(w, r.Body, maxUploadBodyBytes)` antes de `r.ParseMultipartForm`; retornar `413 Request Entity Too Large` com mensagem acionável se body exceder o teto
+- [x] 1.12.3 Verificar que `downloadImage` em `client.go` já usa `io.LimitReader` ou adicionar limite de 10 MB no call de `CaptureFaceData` (se `downloadImage` não tiver limite próprio — checar `client.go:384`)
+- [x] 1.12.4 Escrever testes: POST de standby picture com body > 20 MB → 413 com mensagem acionável; POST de boot picture com body exato de 20 MB → processado normalmente
 
 ### 1.13 Controle de segurança: validação de host anti-SSRF em CaptureFaceData `[C]`
 
@@ -199,17 +199,17 @@ Ref: plan.md §6.1 F2 (SSRF API7), checklist CHK023
 
 Critério de aceite obrigatório e verificável: o host de `faceDataUrl` retornada pelo device DEVE corresponder ao host do device (campo `ip` ou `host` em `devices`); host diferente → retornar `ErrSSRFHostMismatch` sem executar o download; teste unitário com URL de host divergente confirma o bloqueio.
 
-- [ ] 1.13.1 Implementar helper `validateFaceDataURL(faceDataURL, deviceHost string) error` em `client_faceconfig.go`: parseia `faceDataURL`, compara `host` (sem porta) com `deviceHost`; retorna `ErrSSRFHostMismatch` se diferente; retorna nil se igual
-- [ ] 1.13.2 Chamar `validateFaceDataURL` em `CaptureFaceData` antes de invocar `downloadImage`; logar a tentativa bloqueada via `log_err` com `device_id` e host inválido (sem URL completa para evitar log de IP interno em contextos auditados)
-- [ ] 1.13.3 Escrever testes: `validateFaceDataURL("http://192.168.68.107/img.jpg", "192.168.68.107")` → nil; `validateFaceDataURL("http://10.0.0.1/img.jpg", "192.168.68.107")` → `ErrSSRFHostMismatch`; `validateFaceDataURL("http://internal-service/secret", "192.168.68.107")` → `ErrSSRFHostMismatch`
+- [x] 1.13.1 Implementar helper `validateFaceDataURL(faceDataURL, deviceHost string) error` em `client_faceconfig.go`: parseia `faceDataURL`, compara `host` (sem porta) com `deviceHost`; retorna `ErrSSRFHostMismatch` se diferente; retorna nil se igual
+- [x] 1.13.2 Chamar `validateFaceDataURL` em `CaptureFaceData` antes de invocar `downloadImage`; logar a tentativa bloqueada via `log_err` com `device_id` e host inválido (sem URL completa para evitar log de IP interno em contextos auditados)
+- [x] 1.13.3 Escrever testes: `validateFaceDataURL("http://192.168.68.107/img.jpg", "192.168.68.107")` → nil; `validateFaceDataURL("http://10.0.0.1/img.jpg", "192.168.68.107")` → `ErrSSRFHostMismatch`; `validateFaceDataURL("http://internal-service/secret", "192.168.68.107")` → `ErrSSRFHostMismatch`
 
 ### 1.14 Validação de tipo de imagem `image/*` nos 3 mecanismos de upload `[A]`
 
 Ref: spec.md §FR-022, plan.md §2.2
 
-- [ ] 1.14.1 Implementar helper `validateImageContentType(contentType string) error` em `admin_device_preferences_handlers.go`: retorna erro se `contentType` não começa com `"image/"`; retorna nil se válido
-- [ ] 1.14.2 Aplicar `validateImageContentType` nos handlers PostDeviceStandbyPictureHandler, PostDeviceBootPictureHandler e PostDeviceMediaHandler: validar o `Content-Type` do part binário após parse multipart; retornar `400 Bad Request` com mensagem `"arquivo deve ser imagem (image/*)"` se inválido
-- [ ] 1.14.3 Escrever testes: upload com `Content-Type: application/octet-stream` → 400; upload com `Content-Type: image/png` → processado; upload com `Content-Type: image/jpeg` → processado
+- [x] 1.14.1 Implementar helper `validateImageContentType(contentType string) error` em `admin_device_preferences_handlers.go`: retorna erro se `contentType` não começa com `"image/"`; retorna nil se válido
+- [x] 1.14.2 Aplicar `validateImageContentType` nos handlers PostDeviceStandbyPictureHandler, PostDeviceBootPictureHandler e PostDeviceMediaHandler: validar o `Content-Type` do part binário após parse multipart; retornar `400 Bad Request` com mensagem `"arquivo deve ser imagem (image/*)"` se inválido
+- [x] 1.14.3 Escrever testes: upload com `Content-Type: application/octet-stream` → 400; upload com `Content-Type: image/png` → processado; upload com `Content-Type: image/jpeg` → processado
 
 ---
 
