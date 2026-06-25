@@ -144,6 +144,32 @@ func NewServer(cfg ServerConfig) *Server {
 //	/admin/api/devices/{id}/faces                      → DeleteDeviceFacesHandler
 //	/admin/api/devices/{id}/webhooks                   → GetDeviceWebhooksHandler (GET) / PostDeviceConfigureWebhookHandler (POST)
 //	/admin/api/devices/{id}/webhooks/{webhook_id}      → DeleteDeviceWebhookHandler
+// adminDevicesRouter routing table (all paths require SessionMiddleware — applied by caller):
+//
+//	/admin/api/devices/{id}                                          → AdminDeviceDetailHandler
+//	/admin/api/devices/{id}/credentials                              → PutDeviceCredentialsHandler
+//	/admin/api/devices/{id}/actions/reboot                          → PostDeviceRebootHandler
+//	/admin/api/devices/{id}/actions/factory-reset                   → PostDeviceFactoryResetHandler
+//	/admin/api/devices/{id}/time                                    → GetDeviceTimeHandler / PutDeviceTimeHandler
+//	/admin/api/devices/{id}/doors                                   → GetDeviceDoorsHandler
+//	/admin/api/devices/{id}/doors/{door_id}/status                  → GetDeviceDoorStatusHandler
+//	/admin/api/devices/{id}/doors/{door_id}/control                 → PostDeviceDoorControlHandler
+//	/admin/api/devices/{id}/users                                   → GetDeviceUsersHandler / DeleteDeviceUsersHandler
+//	/admin/api/devices/{id}/faces                                   → DeleteDeviceFacesHandler
+//	/admin/api/devices/{id}/webhooks                                → GetDeviceWebhooksHandler (GET) / PostDeviceConfigureWebhookHandler (POST)
+//	/admin/api/devices/{id}/webhooks/{webhook_id}                   → DeleteDeviceWebhookHandler
+//	/admin/api/devices/{id}/stats                                   → GetDeviceStatsHandler (FR-016)
+//	/admin/api/devices/{id}/preferences/auth-mode                   → GetDeviceAuthModeHandler / PutDeviceAuthModeHandler (FR-001/002)
+//	/admin/api/devices/{id}/preferences/display                     → GetDeviceDisplayHandler / PutDeviceDisplayHandler (FR-003/004)
+//	/admin/api/devices/{id}/preferences/display/thumbnails          → GetDeviceDisplayThumbnailsHandler (FR-005)
+//	/admin/api/devices/{id}/preferences/standby-pictures            → GetDeviceStandbyPicturesHandler / PostDeviceStandbyPictureHandler (FR-006/007)
+//	/admin/api/devices/{id}/preferences/standby-pictures/{uuid}     → DeleteDeviceStandbyPictureHandler (FR-008)
+//	/admin/api/devices/{id}/preferences/standby-pictures/disable    → PutDeviceStandbyDisableHandler (FR-009)
+//	/admin/api/devices/{id}/preferences/boot-picture                → PostDeviceBootPictureHandler / DeleteDeviceBootPictureHandler (FR-010/011)
+//	/admin/api/devices/{id}/preferences/media                       → GetDeviceMediaHandler / PostDeviceMediaHandler / DeleteDeviceMediaAllHandler (FR-012/013/015)
+//	/admin/api/devices/{id}/preferences/media/{id}                  → DeleteDeviceMediaItemHandler (FR-014)
+//	/admin/api/devices/{id}/preferences/face-config                 → PutDeviceFaceConfigHandler (FR-017)
+//	/admin/api/devices/{id}/preferences/face-capture                → PostDeviceFaceCaptureHandler (FR-018)
 func adminDevicesRouter(apiCfg AdminAPIConfig, dcCfg DeviceConfigConfig) http.Handler {
 	detailHandler := AdminDeviceDetailHandler(apiCfg)
 
@@ -162,6 +188,26 @@ func adminDevicesRouter(apiCfg AdminAPIConfig, dcCfg DeviceConfigConfig) http.Ha
 	getWebhooksH := GetDeviceWebhooksHandler(dcCfg)
 	configureWebhookH := PostDeviceConfigureWebhookHandler(dcCfg)
 	deleteWebhookH := DeleteDeviceWebhookHandler(dcCfg)
+
+	// Device-preferences handlers (FASE 2/3 — device-preferences tasks.md §FASE 2/3)
+	getStatsH := GetDeviceStatsHandler(dcCfg)
+	getAuthModeH := GetDeviceAuthModeHandler(dcCfg)
+	putAuthModeH := PutDeviceAuthModeHandler(dcCfg)
+	getDisplayH := GetDeviceDisplayHandler(dcCfg)
+	putDisplayH := PutDeviceDisplayHandler(dcCfg)
+	getDisplayThumbH := GetDeviceDisplayThumbnailsHandler(dcCfg)
+	getStandbyPicsH := GetDeviceStandbyPicturesHandler(dcCfg)
+	postStandbyPicH := PostDeviceStandbyPictureHandler(dcCfg)
+	deleteStandbyPicH := DeleteDeviceStandbyPictureHandler(dcCfg)
+	putStandbyDisableH := PutDeviceStandbyDisableHandler(dcCfg)
+	postBootPicH := PostDeviceBootPictureHandler(dcCfg)
+	deleteBootPicH := DeleteDeviceBootPictureHandler(dcCfg)
+	getMediaH := GetDeviceMediaHandler(dcCfg)
+	postMediaH := PostDeviceMediaHandler(dcCfg)
+	deleteMediaItemH := DeleteDeviceMediaItemHandler(dcCfg)
+	deleteMediaAllH := DeleteDeviceMediaAllHandler(dcCfg)
+	putFaceConfigH := PutDeviceFaceConfigHandler(dcCfg)
+	postFaceCaptureH := PostDeviceFaceCaptureHandler(dcCfg)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Extract sub-path after /admin/api/devices/{id}/
@@ -240,6 +286,129 @@ func adminDevicesRouter(apiCfg AdminAPIConfig, dcCfg DeviceConfigConfig) http.Ha
 			} else {
 				// DELETE /webhooks/{webhook_id}
 				deleteWebhookH.ServeHTTP(w, r)
+			}
+		case "stats":
+			// GET /admin/api/devices/{id}/stats — device capacity stats (FR-016)
+			if r.Method != http.MethodGet {
+				adminJSONError(w, http.StatusMethodNotAllowed, "método não permitido")
+				return
+			}
+			getStatsH.ServeHTTP(w, r)
+		case "preferences":
+			// /admin/api/devices/{id}/preferences/{sub} — device preference management
+			// (FR-001..015,017,018)
+			if len(segs) < 2 {
+				adminJSONError(w, http.StatusNotFound, "sub-recurso de preferences não especificado")
+				return
+			}
+			switch segs[1] {
+			case "auth-mode":
+				// GET/PUT /preferences/auth-mode (FR-001/002)
+				if r.Method == http.MethodGet {
+					getAuthModeH.ServeHTTP(w, r)
+				} else if r.Method == http.MethodPut {
+					putAuthModeH.ServeHTTP(w, r)
+				} else {
+					adminJSONError(w, http.StatusMethodNotAllowed, "método não permitido")
+				}
+			case "display":
+				if len(segs) == 2 {
+					// GET/PUT /preferences/display (FR-003/004)
+					if r.Method == http.MethodGet {
+						getDisplayH.ServeHTTP(w, r)
+					} else if r.Method == http.MethodPut {
+						putDisplayH.ServeHTTP(w, r)
+					} else {
+						adminJSONError(w, http.StatusMethodNotAllowed, "método não permitido")
+					}
+				} else if len(segs) >= 3 && segs[2] == "thumbnails" {
+					// GET /preferences/display/thumbnails (FR-005)
+					if r.Method != http.MethodGet {
+						adminJSONError(w, http.StatusMethodNotAllowed, "método não permitido")
+						return
+					}
+					getDisplayThumbH.ServeHTTP(w, r)
+				} else {
+					adminJSONError(w, http.StatusNotFound, "endpoint de display não encontrado")
+				}
+			case "standby-pictures":
+				if len(segs) == 2 {
+					// GET/POST /preferences/standby-pictures (FR-006/007)
+					if r.Method == http.MethodGet {
+						getStandbyPicsH.ServeHTTP(w, r)
+					} else if r.Method == http.MethodPost {
+						postStandbyPicH.ServeHTTP(w, r)
+					} else {
+						adminJSONError(w, http.StatusMethodNotAllowed, "método não permitido")
+					}
+				} else if len(segs) >= 3 {
+					sub := segs[2]
+					if sub == "disable" {
+						// PUT /preferences/standby-pictures/disable (FR-009)
+						if r.Method != http.MethodPut {
+							adminJSONError(w, http.StatusMethodNotAllowed, "método não permitido")
+							return
+						}
+						putStandbyDisableH.ServeHTTP(w, r)
+					} else {
+						// DELETE /preferences/standby-pictures/{uuid} (FR-008)
+						if r.Method != http.MethodDelete {
+							adminJSONError(w, http.StatusMethodNotAllowed, "método não permitido")
+							return
+						}
+						deleteStandbyPicH.ServeHTTP(w, r)
+					}
+				} else {
+					adminJSONError(w, http.StatusNotFound, "endpoint de standby-pictures não encontrado")
+				}
+			case "boot-picture":
+				// POST /preferences/boot-picture (FR-010) | DELETE /preferences/boot-picture (FR-011)
+				if r.Method == http.MethodPost {
+					postBootPicH.ServeHTTP(w, r)
+				} else if r.Method == http.MethodDelete {
+					deleteBootPicH.ServeHTTP(w, r)
+				} else {
+					adminJSONError(w, http.StatusMethodNotAllowed, "método não permitido")
+				}
+			case "media":
+				if len(segs) == 2 {
+					// GET /preferences/media (FR-012) | POST /preferences/media (FR-013)
+					// DELETE /preferences/media (FR-015, bulk) — method dispatch
+					if r.Method == http.MethodGet {
+						getMediaH.ServeHTTP(w, r)
+					} else if r.Method == http.MethodPost {
+						postMediaH.ServeHTTP(w, r)
+					} else if r.Method == http.MethodDelete {
+						deleteMediaAllH.ServeHTTP(w, r)
+					} else {
+						adminJSONError(w, http.StatusMethodNotAllowed, "método não permitido")
+					}
+				} else if len(segs) >= 3 {
+					// DELETE /preferences/media/{id} (FR-014)
+					if r.Method != http.MethodDelete {
+						adminJSONError(w, http.StatusMethodNotAllowed, "método não permitido")
+						return
+					}
+					deleteMediaItemH.ServeHTTP(w, r)
+				} else {
+					adminJSONError(w, http.StatusNotFound, "endpoint de media não encontrado")
+				}
+			case "face-config":
+				// PUT /preferences/face-config (FR-017)
+				if r.Method != http.MethodPut {
+					adminJSONError(w, http.StatusMethodNotAllowed, "método não permitido")
+					return
+				}
+				putFaceConfigH.ServeHTTP(w, r)
+			case "face-capture":
+				// POST /preferences/face-capture (FR-018)
+				if r.Method != http.MethodPost {
+					adminJSONError(w, http.StatusMethodNotAllowed, "método não permitido")
+					return
+				}
+				postFaceCaptureH.ServeHTTP(w, r)
+			default:
+				adminJSONError(w, http.StatusNotFound, "recurso de preferences não encontrado")
 			}
 		default:
 			detailHandler.ServeHTTP(w, r)
