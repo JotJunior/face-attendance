@@ -34,6 +34,14 @@ type Config struct {
 	AdminToken        string // ADMIN_TOKEN
 	WebhookPathSecret string // WEBHOOK_PATH_SECRET
 
+	// Endereço público que os terminais HikVision usam para POSTar eventos no
+	// webhook (httpHost). É o IP:porta do app alcançável na LAN pelos leitores —
+	// NÃO é derivável do request (atrás de proxy/NAT), por isso é config explícita.
+	// Necessário para a ação de provisionar/reparar o webhook pelo painel; vazio
+	// → a ação retorna erro pedindo a configuração (nunca inventa o IP).
+	WebhookPublicHost string // WEBHOOK_PUBLIC_HOST (opcional; ex.: 192.168.68.110)
+	WebhookPublicPort int    // WEBHOOK_PUBLIC_PORT (default: 8080)
+
 	// Admin UI authentication
 	AdminUsername          string // ADMIN_USERNAME (required)
 	AdminPassword          string // ADMIN_PASSWORD (required, sensitive — never log)
@@ -128,6 +136,8 @@ func Load() (*Config, error) {
 		GobStateToken:             require("GOB_STATE_TOKEN"),
 		AdminToken:                require("ADMIN_TOKEN"),
 		WebhookPathSecret:         require("WEBHOOK_PATH_SECRET"),
+		WebhookPublicHost:         optionalStr("WEBHOOK_PUBLIC_HOST", ""),
+		WebhookPublicPort:         optionalInt("WEBHOOK_PUBLIC_PORT", 8080),
 		DatabaseURL:               require("DATABASE_URL"),
 		RabbitMQURL:               require("RABBITMQ_URL"),
 		MemberSyncIntervalMinutes: optionalInt("MEMBER_SYNC_INTERVAL_MINUTES", 60),

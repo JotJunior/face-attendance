@@ -150,9 +150,12 @@ func run() error {
 	}
 
 	deviceConfigCfg := httphandler.DeviceConfigConfig{
-		DeviceRepo:  deviceRepo,
-		ISAPICipher: isapiAdminCipher,
-		Logger:      logger,
+		DeviceRepo:        deviceRepo,
+		ISAPICipher:       isapiAdminCipher,
+		Logger:            logger,
+		WebhookPublicHost: cfg.WebhookPublicHost,
+		WebhookPublicPort: cfg.WebhookPublicPort,
+		WebhookPathSecret: cfg.WebhookPathSecret,
 	}
 
 	srv := httphandler.NewServer(httphandler.ServerConfig{

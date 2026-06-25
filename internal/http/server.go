@@ -60,6 +60,7 @@ type ServerConfig struct {
 //	DELETE /admin/api/devices/{id}/users                   — limpar usuários (sessão obrigatória)
 //	DELETE /admin/api/devices/{id}/faces                   — limpar faces (sessão obrigatória)
 //	GET  /admin/api/devices/{id}/webhooks                  — webhooks (sessão obrigatória)
+//	POST /admin/api/devices/{id}/webhooks                  — provisionar/reparar webhook (sessão obrigatória)
 //	DELETE /admin/api/devices/{id}/webhooks/{webhook_id}   — remover webhook (sessão obrigatória)
 //	GET  /admin/api/members        — lista membros paginada (sessão obrigatória)
 //	GET  /admin/api/events         — lista eventos paginada (sessão obrigatória)
@@ -141,7 +142,7 @@ func NewServer(cfg ServerConfig) *Server {
 //	/admin/api/devices/{id}/doors/{door_id}/control    → PostDeviceDoorControlHandler
 //	/admin/api/devices/{id}/users                      → GetDeviceUsersHandler / DeleteDeviceUsersHandler
 //	/admin/api/devices/{id}/faces                      → DeleteDeviceFacesHandler
-//	/admin/api/devices/{id}/webhooks                   → GetDeviceWebhooksHandler
+//	/admin/api/devices/{id}/webhooks                   → GetDeviceWebhooksHandler (GET) / PostDeviceConfigureWebhookHandler (POST)
 //	/admin/api/devices/{id}/webhooks/{webhook_id}      → DeleteDeviceWebhookHandler
 func adminDevicesRouter(apiCfg AdminAPIConfig, dcCfg DeviceConfigConfig) http.Handler {
 	detailHandler := AdminDeviceDetailHandler(apiCfg)
@@ -159,6 +160,7 @@ func adminDevicesRouter(apiCfg AdminAPIConfig, dcCfg DeviceConfigConfig) http.Ha
 	deleteUsersH := DeleteDeviceUsersHandler(dcCfg)
 	deleteFacesH := DeleteDeviceFacesHandler(dcCfg)
 	getWebhooksH := GetDeviceWebhooksHandler(dcCfg)
+	configureWebhookH := PostDeviceConfigureWebhookHandler(dcCfg)
 	deleteWebhookH := DeleteDeviceWebhookHandler(dcCfg)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -229,8 +231,12 @@ func adminDevicesRouter(apiCfg AdminAPIConfig, dcCfg DeviceConfigConfig) http.Ha
 			deleteFacesH.ServeHTTP(w, r)
 		case "webhooks":
 			if len(segs) == 1 {
-				// GET /webhooks
-				getWebhooksH.ServeHTTP(w, r)
+				// GET /webhooks (listar) | POST /webhooks (provisionar/reparar)
+				if r.Method == http.MethodPost {
+					configureWebhookH.ServeHTTP(w, r)
+				} else {
+					getWebhooksH.ServeHTTP(w, r)
+				}
 			} else {
 				// DELETE /webhooks/{webhook_id}
 				deleteWebhookH.ServeHTTP(w, r)

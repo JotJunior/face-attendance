@@ -53,6 +53,12 @@ type DeviceConfigConfig struct {
 		Info(stage, deviceID, cpfRaw, msg string, extra ...any)
 		Error(stage, deviceID, cpfRaw, msg string, err error, extra ...any)
 	}
+
+	// Provisionamento de webhook (POST /webhooks): endereço público que o device
+	// usa para POSTar eventos. WebhookPublicHost vazio → 400 (config ausente).
+	WebhookPublicHost string
+	WebhookPublicPort int    // default 8080 quando <= 0
+	WebhookPathSecret string // compõe o path /webhook/{secret}
 }
 
 // --- ISAPI error mapper ---
@@ -878,6 +884,65 @@ type webhookResponse struct {
 type webhooksListResponse struct {
 	Webhooks []webhookResponse `json:"webhooks"`
 	Total    int               `json:"total"`
+}
+
+// PostDeviceConfigureWebhookHandler serves POST /admin/api/devices/{id}/webhooks.
+// Provisiona/repara o HTTP notification host no device para que ele POSTe eventos
+// no endereço público do app — destrava leitores que não dão heartbeat por estarem
+// sem httpHost (ou apontando para o lugar errado).
+//
+// Requer WebhookPublicHost configurado (env WEBHOOK_PUBLIC_HOST). Vazio → 400, com
+// mensagem explicando a config ausente (nunca inventa o IP — Princípio I).
+// Sucesso: webhook_configured=true no banco; resposta { result:"configured", ... }.
+func PostDeviceConfigureWebhookHandler(cfg DeviceConfigConfig) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			adminJSONError(w, http.StatusMethodNotAllowed, "método não permitido")
+			return
+		}
+
+		deviceID, ok := deviceIDFromPath(r.URL.Path)
+		if !ok {
+			adminJSONError(w, http.StatusBadRequest, "id de dispositivo inválido")
+			return
+		}
+
+		if cfg.WebhookPublicHost == "" {
+			adminJSONError(w, http.StatusBadRequest,
+				"endereço público do webhook não configurado — defina WEBHOOK_PUBLIC_HOST (IP do app alcançável pelos leitores na LAN)")
+			return
+		}
+
+		ctx := r.Context()
+		_, client, httpSt, errMsg := loadDeviceAndISAPIClient(ctx, cfg, deviceID)
+		if httpSt != 0 {
+			adminJSONError(w, httpSt, errMsg)
+			return
+		}
+
+		port := cfg.WebhookPublicPort
+		if port <= 0 {
+			port = 8080
+		}
+		path := "/webhook/" + cfg.WebhookPathSecret
+
+		if err := client.ProvisionWebhook(ctx, cfg.WebhookPublicHost, port, path); err != nil {
+			st, msg := mapISAPIError(err)
+			cfg.logError("device-config", deviceID, "falha ao provisionar webhook no device", err)
+			adminJSONError(w, st, msg)
+			return
+		}
+
+		if err := cfg.DeviceRepo.SetWebhookConfiguredByID(ctx, deviceID, true); err != nil {
+			cfg.logError("device-config", deviceID, "webhook provisionado mas falha ao gravar webhook_configured", err)
+		}
+		cfg.logInfo("device-config", deviceID, "webhook provisionado no device")
+
+		t := true
+		resp := actionResponse{Result: "configured", DeviceID: deviceID, WebhookConfigured: &t}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp) //nolint:errcheck
+	})
 }
 
 // GetDeviceWebhooksHandler serves GET /admin/api/devices/{id}/webhooks.
