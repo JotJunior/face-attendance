@@ -12,10 +12,11 @@ import (
 
 // TestListStandbyPictures_TwoPictures verifies parsing of a non-empty list (tasks 1.6.3).
 func TestListStandbyPictures_TwoPictures(t *testing.T) {
-	payload := `{"CustomStandbyPicList":{"CustomStandbyPic":[` +
+	// Forma REAL do firmware: customStandbyPicList é array direto (não wrapper).
+	payload := `{"customStandbyPicList":[` +
 		`{"uuid":"uuid-1","fileName":"a.jpg"},` +
 		`{"uuid":"uuid-2","fileName":"b.jpg"}` +
-		`]}}`
+		`]}`
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/ISAPI/Publish/StandbyPictureMgr/GetCustomStandbyPicList" {
@@ -45,7 +46,8 @@ func TestListStandbyPictures_TwoPictures(t *testing.T) {
 
 // TestListStandbyPictures_Empty verifies an empty list returns non-nil empty slice (tasks 1.6.3).
 func TestListStandbyPictures_Empty(t *testing.T) {
-	payload := `{"CustomStandbyPicList":{"CustomStandbyPic":[]}}`
+	// Forma REAL verificada no device: {"customStandbyPicList":[]} (array direto).
+	payload := `{"customStandbyPicList":[]}`
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
