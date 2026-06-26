@@ -208,3 +208,45 @@ func TestDeleteAllMaterials_CallsDeleteForEach(t *testing.T) {
 		}
 	}
 }
+
+// TestDeleteMaterial_InUse_DeletesProgramThenRetries verifica que, quando o material
+// está EM USO por um programa (delete direto → 400), o cliente apaga o programa que o
+// referencia (via backgroundPic) e retenta o delete do material com sucesso.
+func TestDeleteMaterial_InUse_DeletesProgramThenRetries(t *testing.T) {
+	var matDeletes, progDeletes int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodDelete && strings.HasSuffix(r.URL.Path, "/MaterialMgr/material/13"):
+			matDeletes++
+			if matDeletes == 1 {
+				w.WriteHeader(http.StatusBadRequest) // em uso
+			} else {
+				w.WriteHeader(http.StatusOK) // liberado após apagar o programa
+			}
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/ProgramMgr/program"):
+			w.Header().Set("Content-Type", "application/xml")
+			w.Write([]byte(`<ProgramList><Program><id>1</id><PageList><Page><PageBasicInfo>` + //nolint:errcheck
+				`<backgroundPic>13</backgroundPic></PageBasicInfo></Page></PageList></Program>` +
+				`<Program><id>9</id><PageList><Page><PageBasicInfo>` +
+				`<backgroundPic>99</backgroundPic></PageBasicInfo></Page></PageList></Program></ProgramList>`))
+		case r.Method == http.MethodDelete && strings.HasSuffix(r.URL.Path, "/ProgramMgr/program/1"):
+			progDeletes++
+			w.WriteHeader(http.StatusOK)
+		default:
+			t.Errorf("chamada inesperada: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}))
+	defer srv.Close()
+
+	c := newTestClient(t, srv)
+	if err := c.DeleteMaterial(context.Background(), "13"); err != nil {
+		t.Fatalf("DeleteMaterial: %v", err)
+	}
+	if matDeletes != 2 {
+		t.Errorf("deletes de material = %d, want 2 (1ª 400 + retry)", matDeletes)
+	}
+	if progDeletes != 1 {
+		t.Errorf("deletes de programa = %d, want 1 (só o programa 1 referencia o material 13)", progDeletes)
+	}
+}
