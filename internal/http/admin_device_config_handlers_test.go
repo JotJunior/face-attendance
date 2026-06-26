@@ -494,7 +494,8 @@ func TestGetDeviceUsers_400_PerPageOutOfRange(t *testing.T) {
 
 func TestGetDeviceUsers_200_Default(t *testing.T) {
 	// Valid paginated response from ISAPI
-	usersBody := `{"UserInfoSearch":{"numOfMatches":1,"totalMatches":1,"UserInfo":[{"employeeNo":"12345678900","name":"Test User","userType":"normal","numOfFace":1,"valid":true,"beginTime":"","endTime":""}]}}`
+	// Forma REAL do firmware: "Valid" é objeto aninhado (não bool flat).
+	usersBody := `{"UserInfoSearch":{"numOfMatches":1,"totalMatches":1,"UserInfo":[{"employeeNo":"12345678900","name":"Test User","userType":"normal","numOfFace":1,"Valid":{"enable":true,"beginTime":"2020-01-01T00:00:00","endTime":"2037-12-31T23:59:59","timeType":"local"}}]}}`
 	ts := testHikServer(t, 200, usersBody)
 	defer ts.Close()
 

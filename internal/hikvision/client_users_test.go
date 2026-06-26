@@ -83,6 +83,46 @@ func TestListUsers_Page2_Position(t *testing.T) {
 	}
 }
 
+// TestListUsers_ParsesNestedValid trava a regressão do bug onde "Valid" vinha como
+// OBJETO aninhado do firmware {enable,beginTime,endTime,timeType} mas o struct
+// esperava bool → json.Unmarshal falhava → 502 no painel. Forma SOURCED do device
+// real DS-K1T673* (POST /ISAPI/AccessControl/UserInfo/Search?format=json).
+func TestListUsers_ParsesNestedValid(t *testing.T) {
+	resp := `{"UserInfoSearch":{"responseStatusStrg":"MORE","numOfMatches":1,"totalMatches":1041,
+		"UserInfo":[{"employeeNo":"08945893776","name":"FÁBIO V","userType":"normal",
+		"Valid":{"enable":true,"beginTime":"2020-01-01T00:00:00","endTime":"2037-12-31T23:59:59","timeType":"local"},
+		"numOfFace":1}]}}`
+	srv, cfg := makeISAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(resp)) //nolint:errcheck
+	})
+	defer srv.Close()
+
+	users, total, err := hikvision.NewWithHTTPClient(cfg, srv.Client()).ListUsers(context.Background(), 1, 5)
+	if err != nil {
+		t.Fatalf("ListUsers: %v", err)
+	}
+	if total != 1041 {
+		t.Errorf("total: got %d, want 1041", total)
+	}
+	if len(users) != 1 {
+		t.Fatalf("got %d users, want 1", len(users))
+	}
+	u := users[0]
+	if u.EmployeeNo != "08945893776" || u.Name != "FÁBIO V" || u.UserType != "normal" {
+		t.Errorf("campos básicos: %+v", u)
+	}
+	if !u.Valid {
+		t.Errorf("Valid: got false, want true (do objeto aninhado .enable)")
+	}
+	if u.BeginTime != "2020-01-01T00:00:00" || u.EndTime != "2037-12-31T23:59:59" {
+		t.Errorf("BeginTime/EndTime não achatados do objeto Valid: %q / %q", u.BeginTime, u.EndTime)
+	}
+	if u.NumOfFace != 1 {
+		t.Errorf("NumOfFace: got %d, want 1", u.NumOfFace)
+	}
+}
+
 // TestClearUsers_SendsPUT verifies ClearUsers sends PUT to the correct endpoint.
 // SOURCED: UserService.php:269-299.
 func TestClearUsers_SendsPUT(t *testing.T) {

@@ -765,6 +765,9 @@ func GetDeviceUsersHandler(cfg DeviceConfigConfig) http.Handler {
 		users, total, err := client.ListUsers(ctx, page, perPage)
 		if err != nil {
 			st, msg := mapISAPIError(err)
+			// Loga a causa subjacente — o 502 genérico esconde erros de parse/ISAPI
+			// que de outra forma ficam impossíveis de diagnosticar pelo painel.
+			cfg.logError("device-config", deviceID, "ListUsers falhou", err)
 			adminJSONError(w, st, msg)
 			return
 		}
