@@ -54,10 +54,14 @@ type StandbyPicture struct {
 }
 
 // standbyPicListResponse is the JSON envelope for GetCustomStandbyPicList.
+// Forma REAL do firmware (verificada no device DS-K1T673*): "customStandbyPicList"
+// é um ARRAY direto de pictures, NÃO um objeto wrapper com "CustomStandbyPic"
+// aninhado. A suposição anterior (wrapper) fazia o json.Unmarshal falhar → 502.
+// NOTA: o shape do ELEMENTO (StandbyPicture) não pôde ser verificado — a lista
+// estava vazia no device. Confirmar as chaves quando houver uma standby pic custom
+// cadastrada (provável customStandbyPicUUID, alinhado ao corpo do delete).
 type standbyPicListResponse struct {
-	CustomStandbyPicList struct {
-		CustomStandbyPic []StandbyPicture `json:"CustomStandbyPic"`
-	} `json:"CustomStandbyPicList"`
+	CustomStandbyPicList []StandbyPicture `json:"customStandbyPicList"`
 }
 
 // ListStandbyPictures returns the list of custom standby pictures on the device.
@@ -80,7 +84,7 @@ func (c *Client) ListStandbyPictures(ctx context.Context) ([]StandbyPicture, err
 		return nil, fmt.Errorf("hikvision: ListStandbyPictures parse: %w", err)
 	}
 
-	pics := resp.CustomStandbyPicList.CustomStandbyPic
+	pics := resp.CustomStandbyPicList
 	if pics == nil {
 		pics = []StandbyPicture{} // guarantee non-nil slice
 	}
