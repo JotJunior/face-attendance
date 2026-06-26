@@ -363,6 +363,31 @@ func (c *Client) CreateAdvertisingMedia(ctx context.Context, filename string, da
 // DeleteMaterial removes a material by its ID.
 // SOURCED: Media.php:delete() — DELETE /ISAPI/Publish/MaterialMgr/material/{id}.
 func (c *Client) DeleteMaterial(ctx context.Context, id string) error {
+	err := c.deleteMaterialDirect(ctx, id)
+	if err == nil {
+		return nil
+	}
+	// O firmware recusa (HTTP 400) deletar um material EM USO por um programa de
+	// propaganda (o backgroundPic de uma página o referencia). Solução: apagar o(s)
+	// programa(s) que o referenciam — o que libera o material — e retentar uma vez.
+	var nre *NonRetriableError
+	if !errors.As(err, &nre) || nre.Status != 400 {
+		return err
+	}
+	progs, lerr := c.programsReferencing(ctx, id)
+	if lerr != nil || len(progs) == 0 {
+		return err // não há programa a liberar (ou falha ao listar) → erro original
+	}
+	for _, pid := range progs {
+		if derr := c.deleteProgram(ctx, pid); derr != nil {
+			return fmt.Errorf("hikvision: DeleteMaterial %s: liberar programa %s: %w", id, pid, derr)
+		}
+	}
+	return c.deleteMaterialDirect(ctx, id)
+}
+
+// deleteMaterialDirect faz o DELETE cru do material (sem tratar dependência de programa).
+func (c *Client) deleteMaterialDirect(ctx context.Context, id string) error {
 	endpoint := fmt.Sprintf("%s/%s", endpointMaterialMgr, id)
 	_, status, err := c.doRequest(ctx, http.MethodDelete, endpoint, nil, "")
 	if err != nil {
@@ -372,6 +397,52 @@ func (c *Client) DeleteMaterial(ctx context.Context, id string) error {
 		return nil // 404 = already gone — idempotent
 	}
 	return retriableOrNot("DeleteMaterial DELETE "+id, status, nil)
+}
+
+// programsReferencing retorna os ids dos programas cujo backgroundPic de alguma
+// página referencia o material dado. Estrutura SOURCED do device DS-K1T673*:
+// ProgramList>Program>PageList>Page>PageBasicInfo>backgroundPic.
+func (c *Client) programsReferencing(ctx context.Context, materialID string) ([]string, error) {
+	body, status, err := c.doRequest(ctx, http.MethodGet, endpointProgramMgr, nil, "")
+	if err != nil {
+		return nil, err
+	}
+	if status != 200 {
+		return nil, retriableOrNot("programsReferencing GET", status, body)
+	}
+	var list struct {
+		Programs []struct {
+			ID            string   `xml:"id"`
+			BackgroundPic []string `xml:"PageList>Page>PageBasicInfo>backgroundPic"`
+		} `xml:"Program"`
+	}
+	if err := xml.Unmarshal(body, &list); err != nil {
+		return nil, fmt.Errorf("hikvision: programsReferencing parse: %w", err)
+	}
+	var ids []string
+	for _, p := range list.Programs {
+		for _, bp := range p.BackgroundPic {
+			if bp == materialID {
+				ids = append(ids, p.ID)
+				break
+			}
+		}
+	}
+	return ids, nil
+}
+
+// deleteProgram remove um programa de propaganda (libera os materiais que ele usa).
+// 404 é idempotente (já removido).
+func (c *Client) deleteProgram(ctx context.Context, programID string) error {
+	endpoint := fmt.Sprintf("%s/%s", endpointProgramMgr, programID)
+	_, status, err := c.doRequest(ctx, http.MethodDelete, endpoint, nil, "")
+	if err != nil {
+		return fmt.Errorf("hikvision: deleteProgram %s: %w", programID, err)
+	}
+	if status == 200 || status == 204 || status == 404 {
+		return nil
+	}
+	return retriableOrNot("deleteProgram DELETE "+programID, status, nil)
 }
 
 // DeleteAllMaterials lists all materials and removes each one.
