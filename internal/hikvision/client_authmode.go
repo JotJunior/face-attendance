@@ -65,25 +65,44 @@ func (c *Client) GetVerifyMode(ctx context.Context) (*VerifyWeekPlan, error) {
 // SetVerifyMode applies verifyMode to ALL week plan entries (read-modify-write).
 // SOURCED: AuthMode.php:19-35 (update method).
 // Idempotent: calling with the same mode twice produces identical payload (Constitution II).
+//
+// O round-trip preserva o corpo CRU do GET (via map[string]any), mexendo só em
+// verifyMode de cada slot. O firmware DS-K1T673* rejeita (HTTP 400) um PUT que não
+// traga o documento INTEGRAL — re-serializar a partir de um struct parcial (abordagem
+// anterior) perdia campos obrigatórios (enable, week, id, TimeSegment, …) → 400.
+// Mesma técnica usada por EnsureFaceVerifyMode (client_verify.go).
 func (c *Client) SetVerifyMode(ctx context.Context, mode string) error {
-	plan, err := c.GetVerifyMode(ctx)
+	body, err := c.GetVerifyWeekPlan(ctx)
 	if err != nil {
 		return fmt.Errorf("hikvision: SetVerifyMode read: %w", err)
 	}
 
-	// Modify all entries — SOURCED: AuthMode.php:22-24 (foreach over WeekPlanCfg).
-	for i := range plan.WeekPlanCfgs {
-		plan.WeekPlanCfgs[i].VerifyMode = mode
+	var doc map[string]any
+	if err := json.Unmarshal(body, &doc); err != nil {
+		return fmt.Errorf("hikvision: SetVerifyMode parse: %w (body: %.120s)", err, string(body))
+	}
+	cfg, ok := doc["VerifyWeekPlanCfg"].(map[string]any)
+	if !ok {
+		return fmt.Errorf("hikvision: SetVerifyMode: resposta sem VerifyWeekPlanCfg (body: %.120s)", string(body))
+	}
+	plans, ok := cfg["WeekPlanCfg"].([]any)
+	if !ok {
+		return fmt.Errorf("hikvision: SetVerifyMode: sem WeekPlanCfg (body: %.120s)", string(body))
+	}
+	// Substitui verifyMode em TODOS os slots — SOURCED: AuthMode.php:22-24.
+	for _, p := range plans {
+		if m, ok := p.(map[string]any); ok {
+			m["verifyMode"] = mode
+		}
 	}
 
-	payload := verifyWeekPlanEnvelope{VerifyWeekPlanCfg: *plan}
-	data, err := json.Marshal(payload)
+	out, err := json.Marshal(doc)
 	if err != nil {
 		return fmt.Errorf("hikvision: SetVerifyMode marshal: %w", err)
 	}
 
 	_, status, err := c.doRequest(ctx, http.MethodPut, endpointVerifyWeekPlan,
-		bytes.NewReader(data), "application/json")
+		bytes.NewReader(out), "application/json")
 	if err != nil {
 		return fmt.Errorf("hikvision: SetVerifyMode PUT: %w", err)
 	}

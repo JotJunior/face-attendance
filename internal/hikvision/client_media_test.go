@@ -82,8 +82,8 @@ func TestCreateAdvertisingMedia_StepCFailReturnsOrphan(t *testing.T) {
 			w.Header().Set("Content-Type", "application/xml")
 			w.WriteHeader(200)
 			xml.NewEncoder(w).Encode(struct { //nolint:errcheck
-				XMLName xml.Name `xml:"Material"`
-				ID      string   `xml:"id"`
+				XMLName xml.Name `xml:"ResponseStatus"`
+				ID      string   `xml:"ID"`
 			}{ID: "orphan-mat-999"})
 		case n == 2 && r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/upload"):
 			// Step (b): upload — success
@@ -124,19 +124,19 @@ func TestCreateAdvertisingMedia_Success(t *testing.T) {
 		n := int(atomic.AddInt32(&callCount, 1))
 		w.Header().Set("Content-Type", "application/xml")
 		switch n {
-		case 1: // Step (a): POST /MaterialMgr/material
+		case 1: // Step (a): POST /MaterialMgr/material — firmware responde ResponseStatus/ID
 			w.WriteHeader(200)
-			w.Write([]byte(`<Material><id>mat-42</id></Material>`)) //nolint:errcheck
+			w.Write([]byte(`<ResponseStatus><ID>mat-42</ID></ResponseStatus>`)) //nolint:errcheck
 		case 2: // Step (b): POST /material/mat-42/upload
 			w.WriteHeader(200)
-		case 3: // Step (c): POST /ProgramMgr/program
+		case 3: // Step (c): POST /ProgramMgr/program — firmware responde ResponseStatus/ID
 			w.WriteHeader(200)
-			w.Write([]byte(`<Program><id>prog-7</id></Program>`)) //nolint:errcheck
+			w.Write([]byte(`<ResponseStatus><ID>prog-7</ID></ResponseStatus>`)) //nolint:errcheck
 		case 4: // Step (d): PUT /program/1/page/1
 			w.WriteHeader(204)
 		case 5: // Step (e): PUT /playSchedule/1
 			w.WriteHeader(200)
-			w.Write([]byte(`<PlaySchedule><id>sched-1</id></PlaySchedule>`)) //nolint:errcheck
+			w.Write([]byte(`<ResponseStatus><ID>sched-1</ID></ResponseStatus>`)) //nolint:errcheck
 		default:
 			t.Errorf("unexpected call %d: %s %s", n, r.Method, r.URL.Path)
 		}
