@@ -4,6 +4,7 @@ legacy/
 tmp/
 .env
 bin/
+.playwright-mcp/
 
 t.txt
 t.json
