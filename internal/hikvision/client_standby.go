@@ -47,10 +47,12 @@ const (
 )
 
 // StandbyPicture represents one entry in the custom standby picture list.
-// SOURCED: StandbyPicture.php — UUID and FileName are the two identifiers.
+// Chaves REAIS verificadas no device DS-K1T673*: o elemento traz
+// "customStandbyPicUUID" (id usado também no delete) e "filePath" (URL da imagem).
+// As tags são de WIRE; o handler mapeia para uuid/fileName na resposta da API.
 type StandbyPicture struct {
-	UUID     string `json:"uuid"`
-	FileName string `json:"fileName"`
+	UUID     string `json:"customStandbyPicUUID"`
+	FileName string `json:"filePath"`
 }
 
 // standbyPicListResponse is the JSON envelope for GetCustomStandbyPicList.
@@ -96,6 +98,13 @@ func (c *Client) ListStandbyPictures(ctx context.Context) ([]StandbyPicture, err
 // Field 1: "UploadCustomStandbyPic" (JSON: {filePathType, filePath})
 // Field 2: "filePath" (binary image data with filename)
 func (c *Client) UploadStandbyPicture(ctx context.Context, filename string, data []byte) error {
+	// Redimensiona para 600x1024 JPEG (resolução da tela; o firmware rejeita tamanhos
+	// fora da medida com HTTP 400). Mesma medida do boot (mesma tela).
+	data, err := resizeImageJPEG(data, 600, 1024)
+	if err != nil {
+		return fmt.Errorf("hikvision: UploadStandbyPicture: %w", err)
+	}
+
 	var buf bytes.Buffer
 	w := multipart.NewWriter(&buf)
 
@@ -119,7 +128,9 @@ func (c *Client) UploadStandbyPicture(ctx context.Context, filename string, data
 	header := make(textproto.MIMEHeader)
 	header.Set("Content-Disposition",
 		fmt.Sprintf(`form-data; name="filePath"; filename=%q`, filename))
-	header.Set("Content-Type", "application/octet-stream")
+	// O firmware exige image/jpeg na parte do arquivo; application/octet-stream →
+	// HTTP 400 badJsonContent (verificado no device DS-K1T673*).
+	header.Set("Content-Type", "image/jpeg")
 	filePart, err := w.CreatePart(header)
 	if err != nil {
 		return fmt.Errorf("hikvision: UploadStandbyPicture create file part: %w", err)

@@ -63,22 +63,29 @@ type materialListResponse struct {
 }
 
 // materialCreateResponse is the XML envelope returned after POST /material.
-// The device assigns an ID; we extract it for subsequent steps.
+// Forma REAL verificada no device DS-K1T673*: o firmware responde
+// <ResponseStatus>…<ID>N</ID></ResponseStatus> (statusCode 1 = OK), NÃO um
+// elemento <Material> com <id>. A suposição anterior (<Material>/<id>) fazia o
+// xml.Unmarshal falhar ("expected <Material> but have <ResponseStatus>").
 type materialCreateResponse struct {
-	XMLName xml.Name `xml:"Material"`
-	ID      string   `xml:"id"`
+	XMLName xml.Name `xml:"ResponseStatus"`
+	ID      string   `xml:"ID"`
 }
 
 // programCreateResponse is the XML envelope returned after POST /program.
+// Como o material create, o firmware DS-K1T673* responde <ResponseStatus><ID>N</ID>
+// (verificado: step c falhava com "expected <Program> but have <ResponseStatus>").
 type programCreateResponse struct {
-	XMLName xml.Name `xml:"Program"`
-	ID      string   `xml:"id"`
+	XMLName xml.Name `xml:"ResponseStatus"`
+	ID      string   `xml:"ID"`
 }
 
 // scheduleUpdateResponse is the XML envelope returned after PUT /playSchedule/1.
+// Firmware responde <ResponseStatus><ID> (consistente com os demais creates). O parse
+// é tolerante (step e não falha se vazio), mas mantemos a forma real por correção.
 type scheduleUpdateResponse struct {
-	XMLName xml.Name `xml:"PlaySchedule"`
-	ID      string   `xml:"id"`
+	XMLName xml.Name `xml:"ResponseStatus"`
+	ID      string   `xml:"ID"`
 }
 
 // AdvertisingMediaResult holds the IDs created during CreateAdvertisingMedia.

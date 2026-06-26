@@ -2,29 +2,59 @@ package hikvision
 
 // client_bootpic.go implements ISAPI boot/initialization picture management.
 //
-// UploadBootPicture — SOURCED from legacy/hik2go/src/Hik2go/Preferences/InitializationScreen.php:9-38 (create method):
-//   Multipart POST /ISAPI/System/powerUpPicture?format=json
-//   Fields: "picture_info" (JSON: {type:"filePathType", faceLibType:"binay"})
-//           "picture_name" (binary with filename "<deviceID>.jpg")
+// UploadBootPicture — POST multipart /ISAPI/System/powerUpPicture?format=json.
+// Contrato REAL verificado no device DS-K1T673* (o port do hik2go estava errado):
+//   - "picture_info" (JSON): {filePathType:"binary", applyType:"powerUpPicture"}
+//     (o port antigo mandava {type:"filePathType", faceLibType:"binay"} → HTTP 400).
+//   - "picture_name" (binary image/jpeg, filename "<deviceID>.jpg").
+//   - capabilities exigem JPG, resolução EXATA 600x1024, fileSize <= 512 KB; por isso
+//     a imagem é redimensionada para 600x1024 JPEG antes do upload (imagem fora da
+//     medida → HTTP 400 badParameters).
 //
-// DeleteBootPicture — SOURCED from InitializationScreen.php:40-49 (delete method):
-//   DELETE /ISAPI/System/powerUpPicture?format=json
+// DeleteBootPicture — DELETE /ISAPI/System/powerUpPicture?format=json.
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/jpeg"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
+
+	"golang.org/x/image/draw"
 )
 
 const (
 	// endpointBootPicture is the ISAPI endpoint for power-up (boot) picture management.
-	// SOURCED: InitializationScreen.php:13 (create) and :43 (delete).
 	endpointBootPicture = "/ISAPI/System/powerUpPicture?format=json"
+
+	// Resolução EXATA exigida pelo firmware para a imagem de boot (capabilities
+	// pictureResolution=["600*1024"]). Imagens fora disso são rejeitadas (HTTP 400).
+	bootPicWidth  = 600
+	bootPicHeight = 1024
 )
+
+// resizeImageJPEG decodifica a imagem enviada e a redimensiona para wxh JPEG.
+// Usado para boot e standby (mesma tela 600x1024) — o firmware exige a medida exata
+// da tela, e imagens fora disso são rejeitadas (HTTP 400). Aceita JPEG/PNG
+// (image.Decode). Distorce o aspecto se necessário — a imagem ocupa a tela inteira.
+// Constituição: nenhum dado fabricado; só transforma o pixel buffer.
+func resizeImageJPEG(data []byte, w, h int) ([]byte, error) {
+	src, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("decode imagem: %w", err)
+	}
+	dst := image.NewRGBA(image.Rect(0, 0, w, h))
+	draw.ApproxBiLinear.Scale(dst, dst.Bounds(), src, src.Bounds(), draw.Over, nil)
+	var out bytes.Buffer
+	if err := jpeg.Encode(&out, dst, &jpeg.Options{Quality: 90}); err != nil {
+		return nil, fmt.Errorf("encode JPEG: %w", err)
+	}
+	return out.Bytes(), nil
+}
 
 // UploadBootPicture uploads a JPEG image to be displayed on device boot.
 // SOURCED: InitializationScreen.php:9-38 (create method).
@@ -32,13 +62,20 @@ const (
 // Part 2: "picture_name" binary field with filename "<deviceID>.jpg".
 // deviceID is used as the filename stem per the PHP source.
 func (c *Client) UploadBootPicture(ctx context.Context, deviceID int64, data []byte) error {
+	// Redimensiona para 600x1024 JPEG (medida exigida pelo firmware; fora disso → 400).
+	data, err := resizeImageJPEG(data, bootPicWidth, bootPicHeight)
+	if err != nil {
+		return fmt.Errorf("hikvision: UploadBootPicture: %w", err)
+	}
+
 	var buf bytes.Buffer
 	w := multipart.NewWriter(&buf)
 
-	// Part 1: JSON metadata — SOURCED: InitializationScreen.php:17-24.
+	// Part 1: JSON metadata — contrato REAL do firmware (capabilities ImportCap:
+	// filePathType ∈ {binary,URL}, applyType=powerUpPicture).
 	meta, err := json.Marshal(map[string]string{
-		"type":        "filePathType",
-		"faceLibType": "binay", // note: intentional firmware typo — SOURCED: InitializationScreen.php:22
+		"filePathType": "binary",
+		"applyType":    "powerUpPicture",
 	})
 	if err != nil {
 		return fmt.Errorf("hikvision: UploadBootPicture marshal meta: %w", err)

@@ -1,8 +1,12 @@
 package hikvision
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -11,6 +15,23 @@ import (
 	"strings"
 	"testing"
 )
+
+// makeTestJPEG gera um JPEG válido e decodificável de wxh para os testes de upload
+// (o UploadBootPicture decodifica + redimensiona, então bytes falsos não servem).
+func makeTestJPEG(t *testing.T, w, h int) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			img.Set(x, y, color.RGBA{uint8(x % 256), uint8(y % 256), 80, 255})
+		}
+	}
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 85}); err != nil {
+		t.Fatalf("makeTestJPEG: %v", err)
+	}
+	return buf.Bytes()
+}
 
 // TestUploadBootPicture_MultipartFields verifies that UploadBootPicture sends
 // the correct multipart fields (tasks 1.8.4): "picture_info" JSON + "picture_name" binary.
@@ -57,27 +78,31 @@ func TestUploadBootPicture_MultipartFields(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	imgData := []byte{0xFF, 0xD8, 0xFF, 0xE0} // minimal JPEG marker
+	imgData := makeTestJPEG(t, 300, 300) // imagem real, será redimensionada p/ 600x1024
 	c := newTestClient(t, srv)
 	if err := c.UploadBootPicture(context.Background(), 42, imgData); err != nil {
 		t.Fatalf("UploadBootPicture: %v", err)
 	}
 
-	// Verify picture_info JSON — SOURCED: InitializationScreen.php:17-24
-	for _, want := range []string{`"type":"filePathType"`, `"faceLibType":"binay"`} {
+	// Verify picture_info JSON — contrato REAL do firmware (filePathType=binary).
+	for _, want := range []string{`"filePathType":"binary"`, `"applyType":"powerUpPicture"`} {
 		if !strings.Contains(gotPictureInfo, want) {
 			t.Errorf("picture_info missing %s; got: %s", want, gotPictureInfo)
 		}
 	}
 
-	// Verify filename is "<deviceID>.jpg" — SOURCED: InitializationScreen.php:29
+	// Verify filename is "<deviceID>.jpg".
 	if gotFilename != "42.jpg" {
 		t.Errorf("expected filename 42.jpg, got %q", gotFilename)
 	}
 
-	// Verify binary content passed through unchanged
-	if string(gotBinary) != string(imgData) {
-		t.Errorf("binary data mismatch: got %v", gotBinary)
+	// O upload redimensiona para 600x1024 JPEG (medida exigida pelo firmware).
+	decoded, _, err := image.Decode(bytes.NewReader(gotBinary))
+	if err != nil {
+		t.Fatalf("binário enviado não é imagem válida: %v", err)
+	}
+	if b := decoded.Bounds(); b.Dx() != bootPicWidth || b.Dy() != bootPicHeight {
+		t.Errorf("dimensões enviadas = %dx%d, esperado %dx%d", b.Dx(), b.Dy(), bootPicWidth, bootPicHeight)
 	}
 }
 
@@ -89,7 +114,7 @@ func TestUploadBootPicture_ErrorStatus(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(t, srv)
-	err := c.UploadBootPicture(context.Background(), 1, []byte{0xFF})
+	err := c.UploadBootPicture(context.Background(), 1, makeTestJPEG(t, 100, 100))
 	if err == nil {
 		t.Fatal("expected error for 500")
 	}

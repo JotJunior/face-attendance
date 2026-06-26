@@ -1,8 +1,10 @@
 package hikvision
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"image"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -12,10 +14,10 @@ import (
 
 // TestListStandbyPictures_TwoPictures verifies parsing of a non-empty list (tasks 1.6.3).
 func TestListStandbyPictures_TwoPictures(t *testing.T) {
-	// Forma REAL do firmware: customStandbyPicList é array direto (não wrapper).
+	// Forma REAL do firmware: array direto; elemento = customStandbyPicUUID + filePath.
 	payload := `{"customStandbyPicList":[` +
-		`{"uuid":"uuid-1","fileName":"a.jpg"},` +
-		`{"uuid":"uuid-2","fileName":"b.jpg"}` +
+		`{"customStandbyPicUUID":"uuid-1","filePath":"a.jpg"},` +
+		`{"customStandbyPicUUID":"uuid-2","filePath":"b.jpg"}` +
 		`]}`
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -75,6 +77,7 @@ func TestUploadStandbyPicture_MultipartFields(t *testing.T) {
 	var gotMetaJSON string
 	var gotFileBytes []byte
 	var gotFileName string
+	var gotFileCT string
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -99,6 +102,7 @@ func TestUploadStandbyPicture_MultipartFields(t *testing.T) {
 			case "filePath":
 				gotFileBytes = data
 				gotFileName = part.FileName()
+				gotFileCT = part.Header.Get("Content-Type")
 			}
 		}
 		w.WriteHeader(200)
@@ -106,8 +110,7 @@ func TestUploadStandbyPicture_MultipartFields(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(t, srv)
-	imgData := []byte("fake-image-data")
-	if err := c.UploadStandbyPicture(context.Background(), "standby.jpg", imgData); err != nil {
+	if err := c.UploadStandbyPicture(context.Background(), "standby.jpg", makeTestJPEG(t, 300, 300)); err != nil {
 		t.Fatalf("UploadStandbyPicture: %v", err)
 	}
 
@@ -123,12 +126,20 @@ func TestUploadStandbyPicture_MultipartFields(t *testing.T) {
 		t.Errorf("filePath = %q, want %q", meta["filePath"], "standby.jpg")
 	}
 
-	// Verify binary data.
-	if string(gotFileBytes) != string(imgData) {
-		t.Errorf("file bytes mismatch")
+	// O file part DEVE ser image/jpeg (octet-stream → HTTP 400 no firmware).
+	if gotFileCT != "image/jpeg" {
+		t.Errorf("file Content-Type = %q, want image/jpeg", gotFileCT)
 	}
 	if gotFileName != "standby.jpg" {
 		t.Errorf("filename = %q, want %q", gotFileName, "standby.jpg")
+	}
+	// A imagem é redimensionada para 600x1024 JPEG antes do upload.
+	decoded, _, err := image.Decode(bytes.NewReader(gotFileBytes))
+	if err != nil {
+		t.Fatalf("binário enviado não é imagem válida: %v", err)
+	}
+	if b := decoded.Bounds(); b.Dx() != 600 || b.Dy() != 1024 {
+		t.Errorf("dimensões enviadas = %dx%d, esperado 600x1024", b.Dx(), b.Dy())
 	}
 }
 
