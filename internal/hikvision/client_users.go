@@ -63,21 +63,43 @@ func (c *Client) ListUsers(ctx context.Context, page, perPage int) ([]DeviceUser
 		return nil, 0, retriableOrNot("ListUsers", status, respBody)
 	}
 
-	// Parse: {"UserInfoSearch":{"responseStatusStrg":"OK","numOfMatches":N,"totalMatches":M,
-	//         "UserInfo":[{"employeeNo":"...","name":"...",...}]}}
+	// Parse usando um struct de WIRE que casa com a forma REAL do firmware
+	// (verificada no device DS-K1T673*): "Valid" é um OBJETO aninhado
+	// {enable,beginTime,endTime,timeType}, não um bool flat. A forma pública de
+	// DeviceUser (Valid bool + BeginTime/EndTime flat) é preservada — só achatamos
+	// aqui — para não quebrar o contrato com a SPA.
+	// SOURCED: resposta real de POST /ISAPI/AccessControl/UserInfo/Search?format=json.
 	var resp struct {
 		UserInfoSearch struct {
-			NumOfMatches  int          `json:"numOfMatches"`
-			TotalMatches  int          `json:"totalMatches"`
-			UserInfo      []DeviceUser `json:"UserInfo"`
+			NumOfMatches int `json:"numOfMatches"`
+			TotalMatches int `json:"totalMatches"`
+			UserInfo     []struct {
+				EmployeeNo string `json:"employeeNo"`
+				Name       string `json:"name"`
+				UserType   string `json:"userType"`
+				NumOfFace  int    `json:"numOfFace"`
+				Valid      struct {
+					Enable    bool   `json:"enable"`
+					BeginTime string `json:"beginTime"`
+					EndTime   string `json:"endTime"`
+				} `json:"Valid"`
+			} `json:"UserInfo"`
 		} `json:"UserInfoSearch"`
 	}
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, 0, fmt.Errorf("hikvision: ListUsers JSON: %w (body: %.120s)", err, string(respBody))
 	}
-	users := resp.UserInfoSearch.UserInfo
-	if users == nil {
-		users = []DeviceUser{}
+	users := make([]DeviceUser, 0, len(resp.UserInfoSearch.UserInfo))
+	for _, u := range resp.UserInfoSearch.UserInfo {
+		users = append(users, DeviceUser{
+			EmployeeNo: u.EmployeeNo,
+			Name:       u.Name,
+			UserType:   u.UserType,
+			NumOfFace:  u.NumOfFace,
+			Valid:      u.Valid.Enable,
+			BeginTime:  u.Valid.BeginTime,
+			EndTime:    u.Valid.EndTime,
+		})
 	}
 	return users, resp.UserInfoSearch.TotalMatches, nil
 }
