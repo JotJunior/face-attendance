@@ -2,6 +2,7 @@ package hikvision_test
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -83,6 +84,60 @@ func TestDeleteWebhook_401_NonRetriable(t *testing.T) {
 	}
 	if !hikvision.IsNonRetriable(err) {
 		t.Errorf("expected NonRetriableError for 401, got %T: %v", err, err)
+	}
+}
+
+// TestProvisionWebhook_PUTContract trava o contrato SOURCED de legacy/hik2go
+// (Notification.php): PUT em httpHosts, envelope <HttpHostNotificationList> e
+// parameterFormatType=JSON (o device passa a postar JSON, que é o que o handler
+// de webhook parseia — XML quebraria). url=path, ipAddress/portNo = alvo público.
+func TestProvisionWebhook_PUTContract(t *testing.T) {
+	var method, path, body string
+	srv, cfg := makeISAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		method = r.Method
+		path = r.URL.Path
+		b, _ := io.ReadAll(r.Body)
+		body = string(b)
+		w.WriteHeader(http.StatusOK)
+	})
+	defer srv.Close()
+
+	err := hikvision.NewWithHTTPClient(cfg, srv.Client()).
+		ProvisionWebhook(context.Background(), "192.168.68.110", 8080, "/webhook/sekret")
+	if err != nil {
+		t.Fatalf("ProvisionWebhook: %v", err)
+	}
+	if method != http.MethodPut {
+		t.Errorf("método: got %s, want PUT", method)
+	}
+	if !strings.Contains(path, "/ISAPI/Event/notification/httpHosts") {
+		t.Errorf("path: got %q", path)
+	}
+	for _, want := range []string{
+		"<HttpHostNotificationList",
+		"<parameterFormatType>JSON</parameterFormatType>",
+		"<url>/webhook/sekret</url>",
+		"<ipAddress>192.168.68.110</ipAddress>",
+		"<portNo>8080</portNo>",
+		"<addressingFormatType>ipaddress</addressingFormatType>",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body sem %q; got:\n%s", want, body)
+		}
+	}
+}
+
+// TestProvisionWebhook_500_Retriable verifica que 5xx vira erro.
+func TestProvisionWebhook_500_Retriable(t *testing.T) {
+	srv, cfg := makeISAPIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+	defer srv.Close()
+
+	err := hikvision.NewWithHTTPClient(cfg, srv.Client()).
+		ProvisionWebhook(context.Background(), "192.168.68.110", 8080, "/webhook/x")
+	if err == nil {
+		t.Fatal("expected error for 500")
 	}
 }
 

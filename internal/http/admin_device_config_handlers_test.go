@@ -620,6 +620,50 @@ func TestGetDeviceWebhooks_200(t *testing.T) {
 	}
 }
 
+func TestPostDeviceConfigureWebhook_400_MissingPublicHost(t *testing.T) {
+	// Sem WEBHOOK_PUBLIC_HOST → 400 (não inventa IP; Princípio I). Não toca ISAPI.
+	device := makeDevice(42, "192.168.68.111:80")
+	cfg, _ := newTestDeviceCfgConfig(t, device, nil)
+	cfg.WebhookPublicHost = "" // explícito: config ausente
+	h := PostDeviceConfigureWebhookHandler(cfg)
+
+	rr := doRequest(t, h, http.MethodPost, "/admin/api/devices/42/webhooks", nil)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestPostDeviceConfigureWebhook_200_ProvisionsAndUpdatesDB(t *testing.T) {
+	ts := testHikServer(t, 200, "")
+	defer ts.Close()
+
+	host := strings.TrimPrefix(ts.URL, "http://")
+	device := makeDevice(42, host)
+	cfg, repo := newTestDeviceCfgConfig(t, device, nil)
+	cfg.WebhookPublicHost = "192.168.68.110"
+	cfg.WebhookPublicPort = 8080
+	cfg.WebhookPathSecret = "sekret"
+	h := PostDeviceConfigureWebhookHandler(cfg)
+
+	rr := doRequest(t, h, http.MethodPost, "/admin/api/devices/42/webhooks", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var resp actionResponse
+	json.Unmarshal(rr.Body.Bytes(), &resp) //nolint:errcheck
+	if resp.Result != "configured" {
+		t.Errorf("result: want configured, got %q", resp.Result)
+	}
+	if resp.WebhookConfigured == nil || !*resp.WebhookConfigured {
+		t.Errorf("webhook_configured: want true, got %v", resp.WebhookConfigured)
+	}
+	if repo.lastSetWebhookID != 42 || !repo.lastSetWebhookConfigured {
+		t.Errorf("SetWebhookConfiguredByID: want (42,true), got (%d,%v)",
+			repo.lastSetWebhookID, repo.lastSetWebhookConfigured)
+	}
+}
+
 func TestDeleteDeviceWebhook_400_EmptyID(t *testing.T) {
 	// CHK048: webhook_id must be non-empty
 	ts := testHikServer(t, 200, "")
