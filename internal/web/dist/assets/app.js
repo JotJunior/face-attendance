@@ -1913,7 +1913,7 @@ function wireCfgMediaFull(dev) {
     const body = $('media-list-body');
     if (!body) return;
     body.innerHTML = loadingState();
-    apiGet(`devices/${dev.id}/media`).then(async res => {
+    apiGet(`devices/${dev.id}/preferences/media`).then(async res => {
       if (!body) return;
       if (res.status === 401) return;
       if (!res.ok) {
@@ -1941,7 +1941,7 @@ function wireCfgMediaFull(dev) {
           const id = btn.dataset.mediaDel;
           btn.disabled = true;
           try {
-            const res = await apiDelete(`devices/${dev.id}/media/${id}`);
+            const res = await apiDelete(`devices/${dev.id}/preferences/media/${id}`);
             if (res.status === 401) return;
             if (res.ok) {
               showToast('success', 'Material removido.');
@@ -1977,7 +1977,7 @@ function wireCfgMediaFull(dev) {
       try {
         const ctrl = new AbortController();
         const timer = setTimeout(() => ctrl.abort(), 120_000);
-        const res = await fetch(`/admin/api/devices/${dev.id}/media`, {
+        const res = await fetch(`/admin/api/devices/${dev.id}/preferences/media`, {
           method: 'POST', body: fd, credentials: 'same-origin', signal: ctrl.signal,
         });
         clearTimeout(timer);
@@ -2009,7 +2009,7 @@ function wireCfgMediaFull(dev) {
         target: cfgTargetOf(dev),
         onConfirm: async () => {
           try {
-            const res = await apiDelete(`devices/${dev.id}/media`);
+            const res = await apiDelete(`devices/${dev.id}/preferences/media`);
             if (res.status === 401) return;
             if (res.ok) { showToast('success', 'Todos os materiais removidos.'); loadMediaList(); }
             else { let msg = `Erro (status ${res.status}).`; try { const d = await res.json(); if (d.error) msg = d.error; } catch {} showToast('error', msg); }
