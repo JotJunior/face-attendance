@@ -67,9 +67,14 @@ services:
       # DSNs apontam para os service names da rede do compose (não localhost).
       DATABASE_URL: "postgres://presenca:${POSTGRES_PASSWORD:-presenca_dev}@postgres:5432/presenca_facial?sslmode=disable"
       RABBITMQ_URL: "amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASS:-guest}@rabbitmq:5672/"
+      # Imagens de fundo dos fluxos (face-flow) — persistidas no volume bg_images.
+      BACKGROUND_IMAGES_DIR: "/data/background-images"
     ports:
       - "8080:8080"
+    volumes:
+      - bg_images:/data/background-images
     restart: unless-stopped
 
 volumes:
   postgres_data:
+  bg_images:
