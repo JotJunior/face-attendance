@@ -3277,7 +3277,7 @@ function openBgModal() {
     if (file.size > 5*1024*1024) { showToast('error','Arquivo muito grande (máx 5 MB).'); return; }
     const btn = $('img-send-btn'); btn.disabled=true; btn.textContent='Enviando…';
     try {
-      const fd = new FormData(); fd.append('file', file);
+      const fd = new FormData(); fd.append('image', file);
       const r = await apiFetch('/admin/api/background-images', { method:'POST', body:fd });
       if (r.status===201||r.ok) {
         const img = await r.json();
