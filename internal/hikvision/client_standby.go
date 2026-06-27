@@ -100,7 +100,7 @@ func (c *Client) ListStandbyPictures(ctx context.Context) ([]StandbyPicture, err
 func (c *Client) UploadStandbyPicture(ctx context.Context, filename string, data []byte) error {
 	// Redimensiona para 600x1024 JPEG (resolução da tela; o firmware rejeita tamanhos
 	// fora da medida com HTTP 400). Mesma medida do boot (mesma tela).
-	data, err := resizeImageJPEG(data, 600, 1024)
+	data, err := ResizeImageJPEG(data, 600, 1024)
 	if err != nil {
 		return fmt.Errorf("hikvision: UploadStandbyPicture: %w", err)
 	}

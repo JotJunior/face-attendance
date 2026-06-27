@@ -18,6 +18,14 @@ type Config struct {
 	GobStateURL   string // GOB_STATE_URL
 	GobStateToken string // GOB_STATE_TOKEN
 
+	// API de disparo de mensagem (nó send_message do face-flow).
+	// Contrato multipart fornecido pelo operador: POST <URL> com campos
+	// appkey/authkey/to/message. Opcionais — sem eles, o nó send_message falha
+	// (circuit-break) com mensagem clara. AppKey/AuthKey são SEGREDOS: nunca logar.
+	SenderURL     string // SENDER_URL
+	SenderAppKey  string // SENDER_APP_KEY (sensitive — never log)
+	SenderAuthKey string // SENDER_AUTH_KEY (sensitive — never log)
+
 	// Scheduler
 	MemberSyncIntervalMinutes int // MEMBER_SYNC_INTERVAL_MINUTES (default: 60)
 
@@ -78,6 +86,11 @@ type Config struct {
 	// Env: ISAPI_CRED_KEY (hex de 64 chars ou base64). Opcional: vazio mantém o
 	// comportamento legado (credenciais do .env, sem persistir/cifrar no banco).
 	ISAPICredKey []byte
+
+	// BackgroundImagesDir é o diretório local onde as imagens de fundo dos fluxos são
+	// armazenadas. Env: BACKGROUND_IMAGES_DIR (default: ./data/background-images).
+	// Criado automaticamente na inicialização se não existir (tasks.md §4.3.2).
+	BackgroundImagesDir string
 }
 
 // ISAPIDeviceConfig holds credentials for one HikVision device.
@@ -134,6 +147,9 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		GobStateURL:               require("GOB_STATE_URL"),
 		GobStateToken:             require("GOB_STATE_TOKEN"),
+		SenderURL:                 optionalStr("SENDER_URL", ""),
+		SenderAppKey:              optionalStr("SENDER_APP_KEY", ""),
+		SenderAuthKey:             optionalStr("SENDER_AUTH_KEY", ""),
 		AdminToken:                require("ADMIN_TOKEN"),
 		WebhookPathSecret:         require("WEBHOOK_PATH_SECRET"),
 		WebhookPublicHost:         optionalStr("WEBHOOK_PUBLIC_HOST", ""),
@@ -165,6 +181,8 @@ func Load() (*Config, error) {
 
 	// Load per-device ISAPI configs: ISAPI_DEVICE_1_HOST, ISAPI_DEVICE_2_HOST, ...
 	cfg.ISAPIDevices = loadISAPIDevices(optionalStr)
+
+	cfg.BackgroundImagesDir = optionalStr("BACKGROUND_IMAGES_DIR", "./data/background-images")
 
 	// Chave de cifragem das credenciais ISAPI (opcional). Se setada mas inválida,
 	// é um erro de configuração (não silenciamos um segredo malformado).

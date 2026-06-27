@@ -37,12 +37,12 @@ const (
 	bootPicHeight = 1024
 )
 
-// resizeImageJPEG decodifica a imagem enviada e a redimensiona para wxh JPEG.
+// ResizeImageJPEG decodifica a imagem enviada e a redimensiona para wxh JPEG.
 // Usado para boot e standby (mesma tela 600x1024) — o firmware exige a medida exata
 // da tela, e imagens fora disso são rejeitadas (HTTP 400). Aceita JPEG/PNG
 // (image.Decode). Distorce o aspecto se necessário — a imagem ocupa a tela inteira.
 // Constituição: nenhum dado fabricado; só transforma o pixel buffer.
-func resizeImageJPEG(data []byte, w, h int) ([]byte, error) {
+func ResizeImageJPEG(data []byte, w, h int) ([]byte, error) {
 	src, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("decode imagem: %w", err)
@@ -63,7 +63,7 @@ func resizeImageJPEG(data []byte, w, h int) ([]byte, error) {
 // deviceID is used as the filename stem per the PHP source.
 func (c *Client) UploadBootPicture(ctx context.Context, deviceID int64, data []byte) error {
 	// Redimensiona para 600x1024 JPEG (medida exigida pelo firmware; fora disso → 400).
-	data, err := resizeImageJPEG(data, bootPicWidth, bootPicHeight)
+	data, err := ResizeImageJPEG(data, bootPicWidth, bootPicHeight)
 	if err != nil {
 		return fmt.Errorf("hikvision: UploadBootPicture: %w", err)
 	}
