@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/jotjunior/face-attendance/internal/domain"
 	"github.com/jotjunior/face-attendance/internal/flow"
 	"github.com/jotjunior/face-attendance/internal/flowengine"
+	"github.com/jotjunior/face-attendance/internal/hikvision"
 	"github.com/jotjunior/face-attendance/internal/repository"
 )
 
@@ -403,9 +405,116 @@ func TestEngine_DecisionInvalid(t *testing.T) {
 	}
 }
 
-// TestEngine_BlockedNode_Camera: nó camera_on → circuit-break com BLOCKED_ISAPI.
-// Ref: tasks.md §6.2.6.
-func TestEngine_BlockedNode_Camera(t *testing.T) {
+// sampleIdentityTerminalXML é um corpo mínimo válido de IdentityTerminal para o
+// GET do device simulado (campos suficientes para o round-trip de showMode).
+const sampleIdentityTerminalXML = `<?xml version="1.0" encoding="UTF-8"?>
+<IdentityTerminal version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema">
+<camera>1</camera>
+<fingerPrintModule>0</fingerPrintModule>
+<faceAlgorithm>hisign</faceAlgorithm>
+<saveCertifiedImage>true</saveCertifiedImage>
+<readInfoOfCard>false</readInfoOfCard>
+<workMode>normal</workMode>
+<enableScreenOff>true</enableScreenOff>
+<popUpPreviewWindow>false</popUpPreviewWindow>
+<screenOffTimeout>600</screenOffTimeout>
+<showMode>normal</showMode>
+<previewShowTime>10</previewShowTime>
+<standbyTimeout>30</standbyTimeout>
+<advertisingDisplayType>full</advertisingDisplayType>
+</IdentityTerminal>`
+
+// sampleWeekPlanJSON monta um plano semanal de verificação com o modo dado em todos os slots.
+func sampleWeekPlanJSON(mode string) []byte {
+	slots := make([]map[string]any, 7)
+	for i := range slots {
+		slots[i] = map[string]any{"weekNo": i + 1, "verifyMode": mode, "enable": true}
+	}
+	doc := map[string]any{
+		"VerifyWeekPlanCfg": map[string]any{"WeekPlanCfg": slots},
+	}
+	b, _ := json.Marshal(doc)
+	return b
+}
+
+// xmlTagValue extrai o conteúdo de <tag>...</tag> de um corpo XML simples (teste).
+func xmlTagValue(body, tag string) string {
+	open, closeT := "<"+tag+">", "</"+tag+">"
+	i := strings.Index(body, open)
+	if i < 0 {
+		return ""
+	}
+	i += len(open)
+	j := strings.Index(body[i:], closeT)
+	if j < 0 {
+		return ""
+	}
+	return body[i : i+j]
+}
+
+// faceReaderTestServer simula os endpoints ISAPI tocados pelos nós de leitor facial
+// e captura o verifyMode (PUT VerifyWeekPlanCfg) e o showMode (PUT IdentityTerminal).
+func faceReaderTestServer(t *testing.T, gotVerifyMode, gotShowMode *string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/ISAPI/AccessControl/VerifyWeekPlanCfg/1" && r.Method == http.MethodGet:
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(sampleWeekPlanJSON("card")) //nolint:errcheck
+		case r.URL.Path == "/ISAPI/AccessControl/VerifyWeekPlanCfg/1" && r.Method == http.MethodPut:
+			var doc map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&doc)
+			cfg, _ := doc["VerifyWeekPlanCfg"].(map[string]any)
+			plans, _ := cfg["WeekPlanCfg"].([]any)
+			if len(plans) > 0 {
+				if m, ok := plans[0].(map[string]any); ok {
+					*gotVerifyMode, _ = m["verifyMode"].(string)
+				}
+			}
+			w.WriteHeader(200)
+		case r.URL.Path == "/ISAPI/AccessControl/IdentityTerminal" && r.Method == http.MethodGet:
+			w.Header().Set("Content-Type", "application/xml")
+			w.Write([]byte(sampleIdentityTerminalXML)) //nolint:errcheck
+		case r.URL.Path == "/ISAPI/AccessControl/IdentityTerminal" && r.Method == http.MethodPut:
+			body, _ := io.ReadAll(r.Body)
+			*gotShowMode = xmlTagValue(string(body), "showMode")
+			w.WriteHeader(200)
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+}
+
+// testEngineWithHik cria um Engine com HikClientFor apontando para o client dado.
+func testEngineWithHik(activeFlow *flow.Flow, logRepo *fakeLogRepo, hikFor func(*domain.Device) (*hikvision.Client, error)) *flowengine.Engine {
+	return flowengine.New(flowengine.Config{
+		FlowRepo:     &fakeFlowRepo{activeFlow: activeFlow},
+		LogRepo:      logRepo,
+		BgImageRepo:  &fakeBgImageRepo{},
+		HTTPClient:   &http.Client{Timeout: 5 * time.Second},
+		SSRFChecker:  noSSRF,
+		HikClientFor: hikFor,
+	})
+}
+
+// hikClientForServer constrói um *hikvision.Client apontado para o httptest server.
+func hikClientForServer(srv *httptest.Server) func(*domain.Device) (*hikvision.Client, error) {
+	host := srv.URL[len("http://"):]
+	c := hikvision.NewWithHTTPClient(
+		hikvision.DeviceConfig{Host: host, Username: "admin", Password: "test"},
+		srv.Client(),
+	)
+	return func(*domain.Device) (*hikvision.Client, error) { return c, nil }
+}
+
+// TestEngine_CameraOn_EnablesFaceReader: nó camera_on (sem config) habilita o leitor
+// facial — verifyMode default "cardOrFace" + showMode "normal" — e o fluxo completa.
+// Contrato SOURCED: legacy/hik2go/examples/1-device/face-enable.php.
+func TestEngine_CameraOn_EnablesFaceReader(t *testing.T) {
+	var gotVerifyMode, gotShowMode string
+	srv := faceReaderTestServer(t, &gotVerifyMode, &gotShowMode)
+	defer srv.Close()
+
 	f := &flow.Flow{
 		ID: 40,
 		Nodes: []flow.FlowNode{
@@ -415,15 +524,47 @@ func TestEngine_BlockedNode_Camera(t *testing.T) {
 		Edges: []flow.FlowEdge{edge("s", "c")},
 	}
 	logRepo := newFakeLogRepo()
-	e := testEngine(f, logRepo)
+	e := testEngineWithHik(f, logRepo, hikClientForServer(srv))
 	triggerAndWait(e, testEvent("k7", "authorized"), testDevice())
 
 	entry := logRepo.lastEntry()
-	if entry == nil || entry.Status != "circuit_break" {
-		t.Fatalf("esperado circuit_break; got %v", entry)
+	if entry == nil || entry.Status != "completed" {
+		t.Fatalf("esperado completed; got %v", entry)
 	}
-	if !strings.Contains(*entry.Error, "BLOCKED_ISAPI") {
-		t.Fatalf("esperado BLOCKED_ISAPI no erro; got %q", *entry.Error)
+	if gotVerifyMode != "cardOrFace" {
+		t.Fatalf("verifyMode aplicado = %q; want cardOrFace", gotVerifyMode)
+	}
+	if gotShowMode != "normal" {
+		t.Fatalf("showMode aplicado = %q; want normal", gotShowMode)
+	}
+}
+
+// TestEngine_CameraOff_ConfigurableVerifyMode: nó camera_off com verify_mode
+// configurado no nó usa o valor do operador (não o default "card").
+// Contrato SOURCED: legacy/hik2go/examples/1-device/face-disable.php.
+func TestEngine_CameraOff_ConfigurableVerifyMode(t *testing.T) {
+	var gotVerifyMode, gotShowMode string
+	srv := faceReaderTestServer(t, &gotVerifyMode, &gotShowMode)
+	defer srv.Close()
+
+	f := &flow.Flow{
+		ID: 41,
+		Nodes: []flow.FlowNode{
+			node("s", flow.NodeTypeStart, nil),
+			node("c", flow.NodeTypeCameraOff, flow.CameraConfig{VerifyMode: "cardOrFpOrPw"}),
+		},
+		Edges: []flow.FlowEdge{edge("s", "c")},
+	}
+	logRepo := newFakeLogRepo()
+	e := testEngineWithHik(f, logRepo, hikClientForServer(srv))
+	triggerAndWait(e, testEvent("k7b", "authorized"), testDevice())
+
+	entry := logRepo.lastEntry()
+	if entry == nil || entry.Status != "completed" {
+		t.Fatalf("esperado completed; got %v", entry)
+	}
+	if gotVerifyMode != "cardOrFpOrPw" {
+		t.Fatalf("verifyMode aplicado = %q; want cardOrFpOrPw (override do nó)", gotVerifyMode)
 	}
 }
 

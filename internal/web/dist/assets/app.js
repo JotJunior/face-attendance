@@ -2407,8 +2407,8 @@ else init();
 // Node type registry (9 tipos conforme spec.md §FR-001 e domain/flow.go)
 const ND = {
   start:             { label:'Início',         blocked:false,   h:52, inputs:0, out:1, outLabels:[''],               cv:'--green'  },
-  camera_on:         { label:'Câmera ON',       blocked:'ISAPI', h:52, inputs:1, out:1, outLabels:[''],               cv:'--text-3' },
-  camera_off:        { label:'Câmera OFF',      blocked:'ISAPI', h:52, inputs:1, out:1, outLabels:[''],               cv:'--text-3' },
+  camera_on:         { label:'Leitor facial ON', blocked:false,   h:52, inputs:1, out:1, outLabels:[''],               cv:'--green'  },
+  camera_off:        { label:'Leitor facial OFF',blocked:false,   h:52, inputs:1, out:1, outLabels:[''],               cv:'--warn'   },
   wait:              { label:'Aguardar',        blocked:false,   h:52, inputs:1, out:1, outLabels:[''],               cv:'--blue'   },
   change_background: { label:'Trocar fundo',    blocked:false,   h:52, inputs:1, out:1, outLabels:[''],               cv:'--accent' },
   https_call:        { label:'HTTPS Call',      blocked:false,   h:52, inputs:1, out:1, outLabels:[''],               cv:'--blue'   },
@@ -2782,8 +2782,15 @@ function renderCfgPanel() {
   const cfg = (node.config && typeof node.config === 'object') ? node.config : {};
   let fields = '';
 
-  if (def.blocked === 'ISAPI') {
-    fields = `<div class="pending-note" style="margin-top:8px;">${ICON.warnTri}<span><strong>BLOCKED_ISAPI</strong> — Execução aguarda contrato ISAPI verificado. Nó pode ser posicionado e conectado no canvas.</span></div>`;
+  if (node.type === 'camera_on' || node.type === 'camera_off') {
+    const isOn = node.type === 'camera_on';
+    const defMode = isOn ? 'cardOrFace' : 'card';
+    fields = `
+      <div class="pal-section">Leitor facial</div>
+      <div style="font-size:12px;color:var(--text-2);margin-bottom:6px;">${isOn ? 'Habilita' : 'Desabilita'} o leitor facial: ajusta o <code>verifyMode</code> aceito (VerifyWeekPlanCfg) e o modo de tela (${isOn ? 'normal' : 'standby'}).</div>
+      <label class="label" for="cfg-vmode">verifyMode (opcional)</label>
+      <input class="input" id="cfg-vmode" type="text" value="${escHtml(cfg.verify_mode||'')}" placeholder="${defMode} (padrão)" />
+      <div style="font-size:11px;color:var(--text-3);margin-top:4px;">Vazio usa o padrão <code>${defMode}</code>. Ex.: cardOrFace, card, faceOrFpOrCardOrPw.</div>`;
   } else if (def.blocked === 'API') {
     fields = `
       <div class="pal-section">Mensagem</div>
@@ -2878,6 +2885,7 @@ function nodeSummary(node) {
     case 'https_call': return cfg.url ? (cfg.url.length>24?cfg.url.slice(0,24)+'…':cfg.url) : '';
     case 'qrcode_background': return cfg.content_template ? cfg.content_template.slice(0,22)+'…' : '';
     case 'send_message': return cfg.message_template ? cfg.message_template.slice(0,22)+'…' : '';
+    case 'camera_on': case 'camera_off': return cfg.verify_mode || '';
     default: return '';
   }
 }
@@ -2963,6 +2971,12 @@ function applyCfg(node) {
       cfg = { content_template: $('cfg-qr')?.value||'' }; break;
     case 'send_message':
       cfg = { message_template: $('cfg-msg')?.value||'' }; break;
+    case 'camera_on':
+    case 'camera_off': {
+      const vm = $('cfg-vmode')?.value?.trim()||'';
+      cfg = vm ? { verify_mode: vm } : {}; // vazio = usa o default do tipo no motor
+      break;
+    }
   }
   node.config = cfg;
   ES.dirty = true;

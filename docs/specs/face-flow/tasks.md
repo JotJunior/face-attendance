@@ -231,7 +231,7 @@ Ref: plan.md §7, spec.md §FR-012/FR-014/FR-016/FR-020
 - [x] 5.3.4 `https_call`: campos url, method (select GET/POST/PUT/PATCH), lista de headers key-value (adicionar/remover par), body (textarea), timeout_seconds; valores de header com checkbox "secreto" (envia como `__secret__:valor`)
 - [x] 5.3.5 `qrcode_background`: textarea `content_template` com hint do vocabulario de variaveis disponivel (user.name, user.document, etc.)
 - [x] 5.3.6 `send_message`: textarea `message_template` + aviso "contrato de API pendente — BLOCKED_API"
-- [x] 5.3.7 `camera_on`, `camera_off`: aviso "contrato ISAPI pendente — BLOCKED_ISAPI"
+- [x] 5.3.7 `camera_on`, `camera_off`: form de leitor facial com campo `verify_mode` opcional (placeholder mostra o default cardOrFace/card) — desbloqueado (ver §7.1/§7.2)
 
 ### 5.4 Botao Publicar e validacao inline `[C]`
 
@@ -305,21 +305,22 @@ Ref: plan.md §8.4; build tag `integration`; requer DB ativo
 
 ## FASE 7 - Bloqueados: Aguardando Contrato Externo
 
-> Tasks NAO implementaveis nesta release. Nos 1, 2 e 8 tem placeholder visual
-> no editor (tarefa 5.3) e executeBlocked no engine (tarefa 3.5). Ficam no
-> backlog como `[!]` ate o operador fornecer os contratos verificados.
+> Atualizacao: o operador esclareceu que "camera" = LEITOR FACIAL e apontou o
+> contrato no hik2go (face-enable/face-disable). Os nos 1/2 foram DESBLOQUEADOS
+> e implementados (ver node_camera.go). Resta o no 8 (send_message), ainda sem
+> contrato de API.
 
-### 7.1 No camera_on — implementacao ISAPI `[M]`
+### 7.1 No camera_on — leitor facial ON `[M]` — CONCLUIDO
 
-Ref: spec.md §FR-010, plan.md §BLOQUEIO B-001
+Ref: spec.md §FR-010 · SOURCED: legacy/hik2go/examples/1-device/face-enable.php
 
-- [!] 7.1.1 **[BLOCKED_ISAPI]** Implementar chamada ISAPI real para habilitar camera no device DS-K1T673*; aguarda operador fornecer endpoint verificado (XML ou JSON), metodo e payload — nenhum endpoint encontrado em `t.txt`, `legacy/hik-api/` ou `internal/hikvision/`
+- [x] 7.1.1 Implementar `executeCameraOn` (internal/flowengine/node_camera.go): habilita o leitor facial via `SetVerifyMode` (verifyMode default `cardOrFace`, configuravel por no) + `PutIdentityTerminal` (showMode `normal`). Reusa operacoes ISAPI verificadas (client_authmode.go / client_display.go). verifyMode configuravel via `CameraConfig.verify_mode`.
 
-### 7.2 No camera_off — implementacao ISAPI `[M]`
+### 7.2 No camera_off — leitor facial OFF `[M]` — CONCLUIDO
 
-Ref: spec.md §FR-011, plan.md §BLOQUEIO B-001
+Ref: spec.md §FR-011 · SOURCED: legacy/hik2go/examples/1-device/face-disable.php
 
-- [!] 7.2.1 **[BLOCKED_ISAPI]** Implementar chamada ISAPI real para desabilitar camera; mesma dependencia de contrato que 7.1.1
+- [x] 7.2.1 Implementar `executeCameraOff`: desabilita o leitor facial via `SetVerifyMode` (default `card`, configuravel) + `PutIdentityTerminal` (showMode `full`/standby). Mesma reutilizacao de operacoes verificadas.
 
 ### 7.3 No send_message — implementacao API externa `[M]`
 

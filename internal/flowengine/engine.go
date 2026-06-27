@@ -293,7 +293,11 @@ func (e *Engine) executeNode(
 		return e.executeQRCodeBackground(ctx, node, execCtx, device)
 	case flow.NodeTypeDecision:
 		return nil // decision: nenhuma ação; nextNodeFor cuida do roteamento pelo label
-	case flow.NodeTypeCameraOn, flow.NodeTypeCameraOff, flow.NodeTypeSendMessage:
+	case flow.NodeTypeCameraOn:
+		return e.executeCameraOn(ctx, node, device)
+	case flow.NodeTypeCameraOff:
+		return e.executeCameraOff(ctx, node, device)
+	case flow.NodeTypeSendMessage:
 		return e.executeBlocked(node)
 	default:
 		return fmt.Errorf("tipo de nó desconhecido: %q", node.Type)

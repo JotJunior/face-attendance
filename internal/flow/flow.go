@@ -12,8 +12,8 @@ type NodeType string
 
 const (
 	NodeTypeStart            NodeType = "start"
-	NodeTypeCameraOn         NodeType = "camera_on"          // BLOCKED_ISAPI
-	NodeTypeCameraOff        NodeType = "camera_off"         // BLOCKED_ISAPI
+	NodeTypeCameraOn         NodeType = "camera_on"          // habilita leitor facial (verifyMode + showMode)
+	NodeTypeCameraOff        NodeType = "camera_off"         // desabilita leitor facial (verifyMode + showMode)
 	NodeTypeWait             NodeType = "wait"
 	NodeTypeChangeBackground NodeType = "change_background"
 	NodeTypeHTTPSCall        NodeType = "https_call"
@@ -88,6 +88,16 @@ type QRCodeBackgroundConfig struct {
 // SendMessageConfig é a configuração do nó send_message (BLOCKED_API).
 type SendMessageConfig struct {
 	MessageTemplate string `json:"message_template"`
+}
+
+// CameraConfig é a configuração dos nós de leitor facial (camera_on / camera_off).
+// VerifyMode sobrescreve o verifyMode aplicado a TODOS os slots do VerifyWeekPlanCfg;
+// quando vazio, o motor usa o default do tipo de nó (camera_on→"cardOrFace",
+// camera_off→"card").
+// SOURCED: legacy/hik2go/examples/1-device/face-{enable,disable}.php
+//   (AuthMode->update($mode)).
+type CameraConfig struct {
+	VerifyMode string `json:"verify_mode,omitempty"`
 }
 
 // FindNodeByType retorna o primeiro nó do tipo t, ou nil se não encontrado.
