@@ -237,7 +237,7 @@ function modalEsc(e) { if (e.key === 'Escape') closeConfirm(); }
 function closeConfirm() { $('modal-root').innerHTML = ''; modalCtx = null; document.removeEventListener('keydown', modalEsc); }
 
 // ─── ROUTING ──────────────────────────────────────────────────
-const ROUTES = ['dashboard','devices','device-config','members','member-profile','events','login'];
+const ROUTES = ['dashboard','devices','device-config','members','member-profile','events','login','flows','flows-edit','flows-logs'];
 const TITLES = {
   dashboard:      ['Visão geral', 'Panorama da operação · presença, dispositivos e provisão'],
   devices:        ['Dispositivos', 'Terminais HikVision na rede local'],
@@ -245,6 +245,9 @@ const TITLES = {
   members:        ['Membros', 'Membros sincronizados do GOB'],
   'member-profile':['Perfil do membro', 'Dados, provisão e histórico de acessos'],
   events:         ['Eventos', 'Log cronológico de reconhecimentos'],
+  flows:          ['Fluxos', 'Automação pós-reconhecimento facial'],
+  'flows-edit':   ['Editor de fluxo', 'Editor visual de automação de presença'],
+  'flows-logs':   ['Logs de execução', 'Histórico de execuções do fluxo'],
 };
 
 function parseHash() {
@@ -272,8 +275,8 @@ function renderRoute() {
   $('page-title').textContent = title;
   $('page-sub').textContent = sub;
 
-  // active nav (device-config counts as devices; member-profile as members)
-  const navKey = route === 'device-config' ? 'devices' : route === 'member-profile' ? 'members' : route;
+  // active nav (device-config counts as devices; member-profile as members; flows-edit/logs as flows)
+  const navKey = route === 'device-config' ? 'devices' : route === 'member-profile' ? 'members' : (route === 'flows-edit' || route === 'flows-logs') ? 'flows' : route;
   document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.route === navKey));
 
   window.scrollTo(0, 0);
@@ -285,6 +288,9 @@ function renderRoute() {
     case 'members':         mountMembers(); break;
     case 'member-profile':  mountMemberProfile(params); break;
     case 'events':          mountEvents(); break;
+    case 'flows':           mountFlowsList(); break;
+    case 'flows-edit':      mountFlowsEditor(params); break;
+    case 'flows-logs':      mountFlowsLogs(params); break;
   }
 }
 
@@ -294,9 +300,11 @@ function renderLogin(params) {
     <div class="login-wrap">
       <div class="login-box">
         <div class="login-brand">
-          <div class="mark"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1"><circle cx="12" cy="9" r="3.6"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/></svg></div>
+          <div class="brand-lockup">
+            <img class="brand-icon" src="/admin/assets/acceno-icon.png" alt="" />
+            <span class="brand-name">Acceno</span>
+          </div>
           <div style="text-align:center;">
-            <div class="t1">Presença Facial</div>
             <div class="t2">Painel administrativo · on-premise</div>
           </div>
         </div>
@@ -2390,3 +2398,925 @@ function init() {
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
 else init();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FLOWS MODULE — Tasks 5.1 (lista), 5.2–5.4 (editor canvas), 5.5 (bg images), 5.6 (logs)
+// APIs: /admin/api/flows*, /admin/api/background-images*
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Node type registry (9 tipos conforme spec.md §FR-001 e domain/flow.go)
+const ND = {
+  start:             { label:'Início',         blocked:false,   h:52, inputs:0, out:1, outLabels:[''],               cv:'--green'  },
+  camera_on:         { label:'Câmera ON',       blocked:'ISAPI', h:52, inputs:1, out:1, outLabels:[''],               cv:'--text-3' },
+  camera_off:        { label:'Câmera OFF',      blocked:'ISAPI', h:52, inputs:1, out:1, outLabels:[''],               cv:'--text-3' },
+  wait:              { label:'Aguardar',        blocked:false,   h:52, inputs:1, out:1, outLabels:[''],               cv:'--blue'   },
+  change_background: { label:'Trocar fundo',    blocked:false,   h:52, inputs:1, out:1, outLabels:[''],               cv:'--accent' },
+  https_call:        { label:'HTTPS Call',      blocked:false,   h:52, inputs:1, out:1, outLabels:[''],               cv:'--blue'   },
+  qrcode_background: { label:'QR Code fundo',   blocked:false,   h:52, inputs:1, out:1, outLabels:[''],               cv:'--cyan'   },
+  decision:          { label:'Decisão',         blocked:false,   h:70, inputs:1, out:2, outLabels:['valid','invalid'], cv:'--warn'   },
+  send_message:      { label:'Enviar mensagem', blocked:'API',   h:52, inputs:1, out:1, outLabels:[''],               cv:'--text-3' },
+};
+
+const FLOW_NODE_W = 160;
+const FLOW_PORT_R = 6;
+const FLOW_CANVAS_W = 2400;
+const FLOW_CANVAS_H = 1400;
+
+// Variáveis de interpolação disponíveis (de internal/flow/interpolator.go — vocabulário fechado)
+const FLOW_VARS = [
+  '[user.name]','[user.document]','[user.status]','[user.mobile]',
+  '[device.id]','[device.identifier]','[device.ip]','[device.mac]',
+  '[event.authorized]','[event.datetime]',
+];
+
+// ─── Estado do editor (singleton, null quando não está na tela do editor) ───
+let ES = null;
+let _edDocHandlers = null;
+
+function genNodeId() { return 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2,5); }
+
+function flIcon(sz) {
+  return `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 12h4m0 0 2-4 4 8 2-4h4"/><circle cx="4" cy="12" r="2"/><circle cx="20" cy="8" r="2"/><circle cx="20" cy="16" r="2"/></svg>`;
+}
+function flowBadge(s) { return s === 'active' ? badge('ok','Ativo') : badge('muted','Inativo'); }
+
+// ─── 5.1 Lista de fluxos ─────────────────────────────────────────────────────
+
+async function mountFlowsList() {
+  cleanupEditor();
+  setView(loadingState());
+  try {
+    const res = await apiGet('flows');
+    if (res.status === 401) return;
+    if (!res.ok) { setView(emptyState(flIcon(32),'Erro ao carregar fluxos',`Status ${res.status}.`)); return; }
+    const data = await res.json();
+    renderFlowsList(data.flows || []);
+  } catch(err) {
+    setView(emptyState(flIcon(32),'Falha de conexão','Tente novamente.'));
+    netError(err);
+  }
+}
+
+function renderFlowsList(flows) {
+  const cols = '50px 1fr 110px 120px 180px';
+  const rows = flows.map(f => {
+    const devLabel = f.device_id ? `#${f.device_id}` : '—';
+    return `
+      <div class="trow" style="grid-template-columns:${cols};">
+        <div class="mono" style="font-size:11px;color:var(--text-3);">#${f.id}</div>
+        <div style="font-size:13px;font-weight:500;">${escHtml(f.name)}</div>
+        <div>${flowBadge(f.status)}</div>
+        <div style="font-size:12px;color:var(--text-2);">${escHtml(devLabel)}</div>
+        <div style="display:flex;gap:5px;justify-content:flex-end;">
+          <button class="btn btn-ghost sm" data-fl-edit="${f.id}">Editar</button>
+          ${f.status==='inactive'
+            ? `<button class="btn btn-soft sm" data-fl-act="${f.id}">Ativar</button>`
+            : `<button class="btn btn-ghost sm" data-fl-deact="${f.id}">Pausar</button>`}
+          <button class="icon-btn sm" data-fl-del="${f.id}" title="Excluir">${ICON.trash}</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  setView(`
+    <div class="screen" style="max-width:900px;">
+      <div class="toolbar" style="margin-bottom:14px;">
+        <div style="font-size:15px;font-weight:600;">Fluxos de automação</div>
+        <div class="spacer"></div>
+        <button class="btn btn-accent" id="fl-new-btn">${ICON.plus} Novo fluxo</button>
+      </div>
+      <div class="card flush">
+        <div class="thead" style="grid-template-columns:${cols};">
+          <div>#</div><div>Nome</div><div>Status</div><div>Dispositivo</div><div></div>
+        </div>
+        ${flows.length ? rows : `<div style="padding:18px;">${emptyState(flIcon(36),'Nenhum fluxo criado','Crie seu primeiro fluxo de automação pós-reconhecimento facial.')}</div>`}
+      </div>
+    </div>`);
+
+  $('fl-new-btn')?.addEventListener('click', flCreateNew);
+  document.querySelectorAll('[data-fl-edit]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); navigate(`flows-edit?id=${b.dataset.flEdit}`); }));
+  document.querySelectorAll('[data-fl-act]').forEach(b => b.addEventListener('click', async e => {
+    e.stopPropagation(); b.disabled = true;
+    try {
+      const r = await apiPut(`flows/${b.dataset.flAct}/activate`, undefined);
+      if (r.status === 422) { const d = await r.json(); showToast('error',`Validação: ${(d.errors||[]).map(e=>e.message).join('; ')}`); }
+      else if (r.ok) { showToast('success','Fluxo ativado.'); mountFlowsList(); }
+      else showToast('error',`Erro ${r.status}`);
+    } catch(err) { netError(err); } finally { b.disabled = false; }
+  }));
+  document.querySelectorAll('[data-fl-deact]').forEach(b => b.addEventListener('click', async e => {
+    e.stopPropagation(); b.disabled = true;
+    try {
+      const r = await apiPut(`flows/${b.dataset.flDeact}/deactivate`, undefined);
+      if (r.ok) { showToast('success','Fluxo pausado.'); mountFlowsList(); }
+      else showToast('error',`Erro ${r.status}`);
+    } catch(err) { netError(err); } finally { b.disabled = false; }
+  }));
+  document.querySelectorAll('[data-fl-del]').forEach(b => b.addEventListener('click', async e => {
+    e.stopPropagation();
+    if (!confirm('Excluir este fluxo? Esta ação não pode ser desfeita.')) return;
+    b.disabled = true;
+    try {
+      const r = await apiDelete(`flows/${b.dataset.flDel}`);
+      if (r.ok || r.status === 204) { showToast('success','Fluxo excluído.'); mountFlowsList(); }
+      else showToast('error',`Erro ${r.status}`);
+    } catch(err) { netError(err); } finally { b.disabled = false; }
+  }));
+}
+
+async function flCreateNew() {
+  const name = prompt('Nome do novo fluxo:');
+  if (!name?.trim()) return;
+  try {
+    const res = await apiPost('flows', { name: name.trim() });
+    if (res.status === 201 || res.ok) {
+      const flow = await res.json();
+      navigate(`flows-edit?id=${flow.id}`);
+    } else {
+      const d = await res.json().catch(() => ({}));
+      showToast('error', d.error || `Erro ${res.status}`);
+    }
+  } catch(err) { netError(err); }
+}
+
+// ─── 5.2 + 5.3 + 5.4 + 5.5 Editor de fluxo ──────────────────────────────────
+
+async function mountFlowsEditor(params) {
+  cleanupEditor();
+  const id = params.id;
+  if (!id) { navigate('flows'); return; }
+  setView(loadingState());
+  try {
+    const [fRes, imgRes] = await Promise.all([apiGet(`flows/${id}`), apiGet('background-images')]);
+    if (fRes.status === 401) return;
+    if (!fRes.ok) { setView(emptyState(flIcon(32),'Fluxo não encontrado',`Status ${fRes.status}.`)); return; }
+    const flow = await fRes.json();
+    ES = {
+      id: flow.id, name: flow.name, status: flow.status,
+      nodes: (flow.nodes || []).map(n => ({
+        id: n.id, type: n.type,
+        config: (n.config && typeof n.config === 'object') ? n.config : {},
+        x: typeof n.x === 'number' ? n.x : 80,
+        y: typeof n.y === 'number' ? n.y : 80,
+      })),
+      edges: (flow.edges || []).map(e => ({ from: e.from, to: e.to, label: e.label || '' })),
+      selectedId: null, palette_drag: null, node_drag: null, connecting: null,
+      bgImages: imgRes.ok ? (await imgRes.json()).images || [] : [],
+      valErrors: [], dirty: false,
+    };
+    renderEditor();
+  } catch(err) {
+    setView(emptyState(flIcon(32),'Falha ao carregar editor','Tente novamente.'));
+    netError(err);
+  }
+}
+
+function renderEditor() {
+  if (!ES) return;
+  const valBanner = ES.valErrors.length ? `
+    <div class="val-errors" style="margin-bottom:12px;">
+      <div class="ve-title">Erros de validação</div>
+      ${ES.valErrors.map(e => `<div class="ve-item">· ${escHtml(e.message)}${e.node_id ? ` <span class="mono" style="font-size:10px;color:var(--text-3);">(${escHtml(e.node_id)})</span>` : ''}</div>`).join('')}
+    </div>` : '';
+
+  setView(`
+    ${valBanner}
+    <div class="ed-shell" id="ed-shell">
+      <div class="ed-palette" id="ed-palette">
+        <div class="pal-section">Tipos de nó</div>
+        ${Object.entries(ND).map(([type, def]) => `
+          <div class="pal-item${def.blocked ? ' pal-blocked' : ''}" data-pal="${type}"
+               title="${def.blocked ? `Aguardando contrato ${def.blocked} — pode posicionar e conectar` : def.label}">
+            <span class="pal-dot" style="background:var(${def.cv});"></span>
+            <span class="pal-label">${escHtml(def.label)}</span>
+            ${def.blocked ? `<span class="pal-badge">${def.blocked}</span>` : ''}
+          </div>`).join('')}
+        <div class="pal-section" style="margin-top:8px;">Variáveis</div>
+        <div style="padding:2px 7px 8px;font-size:10.5px;color:var(--text-3);line-height:1.9;">
+          ${FLOW_VARS.map(v => `<span class="var-chip" data-palvar="${escHtml(v)}">${escHtml(v)}</span>`).join(' ')}
+        </div>
+      </div>
+      <div class="ed-middle">
+        <div class="ed-bar">
+          <button class="btn-back" id="ed-back-btn">${ICON.back} Fluxos</button>
+          <span class="ed-name">${escHtml(ES.name)}</span>
+          ${flowBadge(ES.status)}
+          <div class="spacer"></div>
+          <button class="btn btn-ghost sm" id="ed-images-btn">Imagens de fundo</button>
+          <button class="btn btn-soft sm" id="ed-save-btn">Salvar</button>
+          <button class="btn btn-accent sm" id="ed-pub-btn">Publicar (Ativar)</button>
+        </div>
+        <div class="ed-canvas-wrap" id="ed-canvas-wrap">
+          <div class="ed-canvas-inner" id="ed-canvas-inner"
+               style="position:relative;width:${FLOW_CANVAS_W}px;height:${FLOW_CANVAS_H}px;">
+            <svg id="ed-svg" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;">
+              <defs>
+                <marker id="arr" markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto">
+                  <polygon points="0 0,7 2.5,0 5" fill="var(--text-3)"/>
+                </marker>
+                <marker id="arr-v" markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto">
+                  <polygon points="0 0,7 2.5,0 5" fill="var(--green)"/>
+                </marker>
+                <marker id="arr-i" markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto">
+                  <polygon points="0 0,7 2.5,0 5" fill="var(--red)"/>
+                </marker>
+              </defs>
+              <g id="ed-edges-g"></g>
+              <path id="ed-conn" stroke="var(--accent)" stroke-width="1.5" fill="none" stroke-dasharray="5,4" style="display:none;"/>
+            </svg>
+            <div id="ed-nodes-g" style="position:absolute;inset:0;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="ed-panel">
+        <div class="ep-head">Configuração do nó</div>
+        <div class="ep-body" id="ep-body">${renderCfgPanel()}</div>
+      </div>
+    </div>`);
+
+  renderNodes();
+  renderEdges();
+  wireEditorShell();
+}
+
+// ─── Canvas rendering ─────────────────────────────────────────────────────────
+
+function portOutY(def, label) {
+  if (def.out === 1) return def.h / 2;
+  return label === 'valid' ? def.h * 0.28 : def.h * 0.72;
+}
+
+function renderNodes() {
+  const layer = $('ed-nodes-g'); if (!layer || !ES) return;
+  layer.innerHTML = ES.nodes.map(n => {
+    const def = ND[n.type] || ND.start;
+    const h = def.h;
+    const sel = ES.selectedId === n.id;
+    const hasErr = ES.valErrors.some(e => e.node_id === n.id);
+    const summary = nodeSummary(n);
+
+    const inPort = def.inputs > 0
+      ? `<div class="ed-port ed-port-in" style="top:${h/2-FLOW_PORT_R}px;" data-ptype="in" data-nid="${n.id}"></div>` : '';
+
+    let outPorts = '';
+    if (def.out === 1) {
+      outPorts = `<div class="ed-port ed-port-out" style="top:${h/2-FLOW_PORT_R}px;" data-ptype="out" data-nid="${n.id}" data-plbl="" title="Saída"></div>`;
+    } else {
+      outPorts = `
+        <div class="ed-port ed-port-out" style="top:${h*0.28-FLOW_PORT_R}px;" data-ptype="out" data-nid="${n.id}" data-plbl="valid" title="Saída: válido"></div>
+        <div class="ed-port ed-port-out" style="top:${h*0.72-FLOW_PORT_R}px;" data-ptype="out" data-nid="${n.id}" data-plbl="invalid" title="Saída: inválido"></div>
+        <div class="ed-port-lbl" style="right:-50px;top:${h*0.28-6}px;color:var(--green);">válido</div>
+        <div class="ed-port-lbl" style="right:-54px;top:${h*0.72-6}px;color:var(--red);">inválido</div>`;
+    }
+
+    return `<div class="ed-node${sel?' ed-node-sel':''}${hasErr?' ed-node-err':''}${def.blocked?' ed-node-blocked':''}"
+         style="left:${n.x}px;top:${n.y}px;height:${h}px;"
+         data-nid="${n.id}">
+      <div class="ed-node-head" style="border-left:3px solid var(${def.cv});">
+        <span class="pal-dot" style="background:var(${def.cv});flex:none;"></span>
+        <span class="ed-node-label">${escHtml(def.label)}</span>
+        ${def.blocked ? `<span class="pal-badge" style="margin-left:auto;">${def.blocked}</span>` : ''}
+        <button class="ed-node-del" data-ndel="${n.id}" title="Remover nó">×</button>
+      </div>
+      ${summary ? `<div class="ed-node-sub">${escHtml(summary)}</div>` : ''}
+      ${inPort}${outPorts}
+    </div>`;
+  }).join('');
+
+  wireNodeHandlers();
+}
+
+function renderEdges() {
+  const g = $('ed-edges-g'); if (!g || !ES) return;
+  g.innerHTML = ES.edges.map(e => {
+    const fn = ES.nodes.find(n => n.id === e.from);
+    const tn = ES.nodes.find(n => n.id === e.to);
+    if (!fn || !tn) return '';
+    const fd = ND[fn.type] || ND.start;
+    const td = ND[tn.type] || ND.start;
+    const sy = fn.y + portOutY(fd, e.label);
+    const sx = fn.x + FLOW_NODE_W;
+    const ty = tn.y + td.h / 2;
+    const tx = tn.x;
+    const cx = Math.max(40, Math.abs(tx - sx) * 0.5);
+    const d = `M${sx},${sy} C${sx+cx},${sy} ${tx-cx},${ty} ${tx},${ty}`;
+    let clr = 'var(--text-3)', mEnd = 'url(#arr)';
+    if (e.label === 'valid') { clr = 'var(--green)'; mEnd = 'url(#arr-v)'; }
+    if (e.label === 'invalid') { clr = 'var(--red)'; mEnd = 'url(#arr-i)'; }
+    const lx = (sx + tx) / 2, ly = (sy + ty) / 2 - 10;
+    const lbl = e.label ? `<text x="${lx}" y="${ly}" fill="${clr}" font-size="10" text-anchor="middle" font-family="Inter,sans-serif">${e.label}</text>` : '';
+    return `<g class="ed-edge" data-efrom="${e.from}" data-eto="${e.to}" data-elbl="${e.label}">
+      <path d="${d}" stroke="${clr}" stroke-width="1.8" fill="none" marker-end="${mEnd}" style="pointer-events:stroke;"/>
+      <path d="${d}" stroke="transparent" stroke-width="10" fill="none" style="pointer-events:stroke;cursor:pointer;" title="Clique para remover aresta"/>
+      ${lbl}
+    </g>`;
+  }).join('');
+
+  // Click-to-remove edge
+  setTimeout(() => {
+    const eg = $('ed-edges-g'); if (!eg) return;
+    eg.querySelectorAll('.ed-edge').forEach(el => {
+      el.addEventListener('click', () => {
+        if (!ES) return;
+        ES.edges = ES.edges.filter(e => !(e.from===el.dataset.efrom && e.to===el.dataset.eto && e.label===el.dataset.elbl));
+        ES.dirty = true;
+        renderEdges();
+      });
+    });
+  }, 0);
+}
+
+function wireNodeHandlers() {
+  const layer = $('ed-nodes-g'); if (!layer) return;
+  layer.querySelectorAll('[data-ndel]').forEach(btn => {
+    btn.addEventListener('mousedown', e => e.stopPropagation());
+    btn.addEventListener('click', e => { e.stopPropagation(); removeEdNode(btn.dataset.ndel); });
+  });
+  layer.querySelectorAll('.ed-node').forEach(el => {
+    el.addEventListener('mousedown', e => {
+      if (e.target.closest('[data-ptype]') || e.target.closest('[data-ndel]')) return;
+      const id = el.dataset.nid;
+      const node = ES?.nodes.find(n => n.id === id); if (!node) return;
+      selectEdNode(id);
+      ES.node_drag = { id, sx: e.clientX, sy: e.clientY, nx: node.x, ny: node.y };
+      e.preventDefault();
+    });
+  });
+  layer.querySelectorAll('[data-ptype="out"]').forEach(port => {
+    port.addEventListener('mousedown', e => {
+      e.stopPropagation(); e.preventDefault();
+      if (ES) ES.connecting = { fromId: port.dataset.nid, portLabel: port.dataset.plbl || '' };
+      redrawConnPath(e);
+    });
+  });
+}
+
+function removeEdNode(id) {
+  if (!ES) return;
+  ES.nodes = ES.nodes.filter(n => n.id !== id);
+  ES.edges = ES.edges.filter(e => e.from !== id && e.to !== id);
+  if (ES.selectedId === id) { ES.selectedId = null; refreshCfg(); }
+  ES.dirty = true;
+  renderNodes(); renderEdges();
+}
+
+function selectEdNode(id) {
+  if (!ES) return;
+  ES.selectedId = id;
+  refreshCfg();
+  $('ed-nodes-g')?.querySelectorAll('.ed-node').forEach(el => el.classList.toggle('ed-node-sel', el.dataset.nid === id));
+}
+
+function refreshCfg() {
+  const body = $('ep-body'); if (!body) return;
+  body.innerHTML = renderCfgPanel();
+  wireCfg();
+}
+
+// ─── Config panel per node type (5.3) ────────────────────────────────────────
+
+function renderCfgPanel() {
+  if (!ES?.selectedId) return `<div class="ep-empty">${flIcon(26)}<div>Clique num nó no canvas para configurá-lo</div></div>`;
+  const node = ES.nodes.find(n => n.id === ES.selectedId);
+  if (!node) { ES.selectedId = null; return renderCfgPanel(); }
+  const def = ND[node.type] || ND.start;
+  const cfg = (node.config && typeof node.config === 'object') ? node.config : {};
+  let fields = '';
+
+  if (def.blocked === 'ISAPI') {
+    fields = `<div class="pending-note" style="margin-top:8px;">${ICON.warnTri}<span><strong>BLOCKED_ISAPI</strong> — Execução aguarda contrato ISAPI verificado. Nó pode ser posicionado e conectado no canvas.</span></div>`;
+  } else if (def.blocked === 'API') {
+    fields = `
+      <div class="pal-section">Mensagem</div>
+      <label class="label" for="cfg-msg">Template da mensagem</label>
+      <textarea class="input" id="cfg-msg" rows="4" placeholder="Olá [user.name], presença registrada em [event.datetime].">${escHtml(cfg.message_template||'')}</textarea>
+      ${varHintHtml('cfg-msg')}
+      <div class="pending-note" style="margin-top:10px;">${ICON.warnTri}<span><strong>BLOCKED_API</strong> — Envio aguarda contrato de API. Template pode ser configurado; o envio não ocorrerá até o contrato ser fornecido.</span></div>`;
+  } else if (node.type === 'wait') {
+    fields = `
+      <div class="pal-section">Espera</div>
+      <label class="label" for="cfg-secs">Duração (segundos)</label>
+      <input class="input" id="cfg-secs" type="number" min="1" max="3600" value="${escHtml(String(cfg.duration_seconds||5))}" />
+      <div style="font-size:11px;color:var(--text-3);margin-top:4px;">Entre 1 e 3600 segundos.</div>`;
+  } else if (node.type === 'change_background') {
+    const opts = (ES.bgImages||[]).map(img =>
+      `<option value="${img.id}"${String(cfg.image_id)===String(img.id)?' selected':''}>${escHtml(img.name||img.file_path||String(img.id))}</option>`
+    ).join('');
+    fields = `
+      <div class="pal-section">Imagem de fundo</div>
+      <label class="label" for="cfg-img">Imagem</label>
+      <select class="select" id="cfg-img">
+        <option value="">— Selecione —</option>
+        ${opts}
+      </select>
+      ${!ES.bgImages.length ? `<div style="font-size:11px;color:var(--text-3);margin-top:4px;">Nenhuma imagem cadastrada. Clique em "Imagens de fundo" para fazer upload.</div>` : ''}`;
+  } else if (node.type === 'https_call') {
+    const headers = (cfg.headers && typeof cfg.headers === 'object') ? cfg.headers : {};
+    const hdrPairs = Object.entries(headers);
+    const hdrRows = hdrPairs.map(([k,v],i) => {
+      const isSealed = v === '__sealed__' || String(v).startsWith('__secret__:');
+      return `<div class="hdr-row" data-hdr-i="${i}">
+        <input class="input" placeholder="Chave" value="${escHtml(k)}" data-hk="${i}" />
+        <div style="position:relative;">
+          <input class="input" type="${isSealed?'password':'text'}" placeholder="${isSealed?'(secreto — digite novo valor para alterar)':'Valor'}"
+            value="${isSealed?'':escHtml(v)}" data-hv="${i}" style="padding-right:76px;" />
+          <label style="position:absolute;right:7px;top:50%;transform:translateY(-50%);display:flex;align-items:center;gap:3px;font-size:10px;color:var(--text-3);cursor:pointer;white-space:nowrap;">
+            <input type="checkbox" data-hsec="${i}" ${isSealed?'checked':''} style="margin:0;" /> secreto
+          </label>
+        </div>
+        <button class="icon-btn sm" data-hdel="${i}" title="Remover">${ICON.trash}</button>
+      </div>`;
+    }).join('');
+    fields = `
+      <div class="pal-section">URL e método</div>
+      <label class="label" for="cfg-url">URL</label>
+      <input class="input" id="cfg-url" placeholder="https://..." value="${escHtml(cfg.url||'')}" />
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+        <div><label class="label" for="cfg-mth">Método</label>
+          <select class="select" id="cfg-mth">${['GET','POST','PUT','PATCH'].map(m=>`<option${(cfg.method||'POST')===m?' selected':''}>${m}</option>`).join('')}</select></div>
+        <div><label class="label" for="cfg-to">Timeout (s)</label>
+          <input class="input" id="cfg-to" type="number" min="1" max="300" value="${escHtml(String(cfg.timeout_seconds||30))}" /></div>
+      </div>
+      <div class="pal-section" style="margin-top:10px;">Headers</div>
+      <div id="hdr-list" style="display:flex;flex-direction:column;gap:6px;">${hdrRows}</div>
+      <button class="btn btn-ghost sm" id="add-hdr-btn" style="margin-top:6px;">${ICON.plus} Header</button>
+      <div class="pal-section" style="margin-top:10px;">Body</div>
+      <textarea class="input mono" id="cfg-body" rows="4" placeholder='{"key":"[user.name]"}'>${escHtml(cfg.body||'')}</textarea>
+      ${varHintHtml('cfg-body')}`;
+  } else if (node.type === 'qrcode_background') {
+    fields = `
+      <div class="pal-section">QR Code</div>
+      <label class="label" for="cfg-qr">Conteúdo (template)</label>
+      <textarea class="input" id="cfg-qr" rows="4" placeholder="CPF: [user.document]">${escHtml(cfg.content_template||'')}</textarea>
+      ${varHintHtml('cfg-qr')}`;
+  } else {
+    // start, decision — sem config adicional
+    fields = `<div style="font-size:12px;color:var(--text-3);margin-top:10px;line-height:1.6;">Este nó não possui configuração adicional.</div>`;
+  }
+
+  return `
+    <div style="display:flex;align-items:center;gap:7px;margin-bottom:12px;">
+      <span style="width:10px;height:10px;border-radius:50%;background:var(${def.cv});flex:none;display:inline-block;"></span>
+      <span style="font-size:13px;font-weight:600;">${escHtml(def.label)}</span>
+      <span class="mono" style="font-size:10px;color:var(--text-3);margin-left:auto;">${escHtml(node.id)}</span>
+    </div>
+    ${fields}
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button class="btn btn-soft sm" id="cfg-apply-btn">Aplicar</button>
+      <button class="btn btn-ghost sm" id="cfg-del-btn" style="margin-left:auto;color:var(--red);">${ICON.trash} Remover</button>
+    </div>`;
+}
+
+function varHintHtml(targetId) {
+  return `<div class="var-hint">Variáveis disponíveis (clique para inserir):<br>${FLOW_VARS.map(v=>`<span class="var-chip" data-v="${escHtml(v)}" data-vtgt="${targetId}">${escHtml(v)}</span>`).join('')}</div>`;
+}
+
+function nodeSummary(node) {
+  const cfg = node.config || {};
+  switch(node.type) {
+    case 'wait': return cfg.duration_seconds ? `${cfg.duration_seconds}s` : '';
+    case 'change_background': return cfg.image_id ? `img #${cfg.image_id}` : '';
+    case 'https_call': return cfg.url ? (cfg.url.length>24?cfg.url.slice(0,24)+'…':cfg.url) : '';
+    case 'qrcode_background': return cfg.content_template ? cfg.content_template.slice(0,22)+'…' : '';
+    case 'send_message': return cfg.message_template ? cfg.message_template.slice(0,22)+'…' : '';
+    default: return '';
+  }
+}
+
+function wireCfg() {
+  if (!ES?.selectedId) return;
+  const node = ES.nodes.find(n => n.id === ES.selectedId); if (!node) return;
+
+  $('cfg-apply-btn')?.addEventListener('click', () => applyCfg(node));
+  $('cfg-del-btn')?.addEventListener('click', () => removeEdNode(node.id));
+
+  // Variable chips — insert into target textarea/input
+  document.querySelectorAll('[data-v][data-vtgt]').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const el = $(chip.dataset.vtgt); if (!el) return;
+      const v = chip.dataset.v;
+      const s = el.selectionStart ?? el.value.length;
+      const e2 = el.selectionEnd ?? s;
+      el.value = el.value.slice(0,s) + v + el.value.slice(e2);
+      el.selectionStart = el.selectionEnd = s + v.length;
+      el.focus();
+    });
+  });
+
+  $('add-hdr-btn')?.addEventListener('click', () => {
+    const hdrs = { ...((node.config||{}).headers||{}), '': '' };
+    node.config = { ...(node.config||{}), headers: hdrs };
+    refreshCfg();
+  });
+
+  document.querySelectorAll('[data-hdel]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const i = parseInt(btn.dataset.hdel);
+      const hdrs = { ...((node.config||{}).headers||{}) };
+      const keys = Object.keys(hdrs);
+      if (keys[i] !== undefined) delete hdrs[keys[i]];
+      node.config = { ...(node.config||{}), headers: hdrs };
+      refreshCfg();
+    });
+  });
+}
+
+function applyCfg(node) {
+  let cfg = {};
+  switch(node.type) {
+    case 'wait': {
+      const v = parseInt($('cfg-secs')?.value||'5');
+      cfg = { duration_seconds: Math.min(3600, Math.max(1, isNaN(v)?5:v)) };
+      break;
+    }
+    case 'change_background': {
+      const v = $('cfg-img')?.value;
+      if (v) cfg = { image_id: parseInt(v) };
+      break;
+    }
+    case 'https_call': {
+      const url = $('cfg-url')?.value?.trim()||'';
+      const method = $('cfg-mth')?.value||'POST';
+      const timeout = parseInt($('cfg-to')?.value||'30')||30;
+      const body = $('cfg-body')?.value||'';
+      const hdrs = {};
+      const hdrList = $('hdr-list');
+      if (hdrList) {
+        hdrList.querySelectorAll('.hdr-row').forEach((_,i) => {
+          const k = hdrList.querySelector(`[data-hk="${i}"]`)?.value?.trim();
+          const vEl = hdrList.querySelector(`[data-hv="${i}"]`);
+          const secEl = hdrList.querySelector(`[data-hsec="${i}"]`);
+          if (!k) return;
+          const v = vEl?.value?.trim()||'';
+          const isSecret = secEl?.checked;
+          if (isSecret && v) hdrs[k] = `__secret__:${v}`;
+          else if (isSecret && !v) {
+            // Keep existing sealed value for this key
+            const existing = ((node.config||{}).headers||{})[k];
+            hdrs[k] = existing||'';
+          } else hdrs[k] = v;
+        });
+      }
+      cfg = { url, method, timeout_seconds: Math.min(300, Math.max(1,timeout)), headers: hdrs, body };
+      break;
+    }
+    case 'qrcode_background':
+      cfg = { content_template: $('cfg-qr')?.value||'' }; break;
+    case 'send_message':
+      cfg = { message_template: $('cfg-msg')?.value||'' }; break;
+  }
+  node.config = cfg;
+  ES.dirty = true;
+  // Update summary in the node card without full re-render
+  const subEl = document.querySelector(`[data-nid="${node.id}"] .ed-node-sub`);
+  const sum = nodeSummary(node);
+  if (subEl) subEl.textContent = sum;
+  else if (sum) {
+    const head = document.querySelector(`[data-nid="${node.id}"] .ed-node-head`);
+    if (head) head.insertAdjacentHTML('afterend', `<div class="ed-node-sub">${escHtml(sum)}</div>`);
+  }
+  showToast('success','Configuração aplicada.');
+  refreshCfg();
+}
+
+// ─── Editor shell wiring ──────────────────────────────────────────────────────
+
+function wireEditorShell() {
+  $('ed-back-btn')?.addEventListener('click', () => navigate('flows'));
+  $('ed-save-btn')?.addEventListener('click', () => saveFlow(false));
+  $('ed-pub-btn')?.addEventListener('click', () => saveFlow(true));
+  $('ed-images-btn')?.addEventListener('click', openBgModal);
+
+  // Palette drag
+  document.querySelectorAll('[data-pal]').forEach(item => {
+    item.addEventListener('mousedown', e => { e.preventDefault(); startPalDrag(item.dataset.pal, e); });
+  });
+
+  // Palette var chips → copy to clipboard
+  document.querySelectorAll('[data-palvar]').forEach(chip => {
+    chip.addEventListener('click', () => {
+      navigator.clipboard?.writeText(chip.dataset.palvar).catch(()=>{});
+      showToast('success', `Copiado: ${chip.dataset.palvar}`);
+    });
+  });
+
+  // Document-level mouse/key handlers
+  const mm = onEdMM, mu = onEdMU, kd = onEdKD;
+  document.addEventListener('mousemove', mm);
+  document.addEventListener('mouseup', mu);
+  document.addEventListener('keydown', kd);
+  _edDocHandlers = { mm, mu, kd };
+
+  wireCfg();
+}
+
+function cleanupEditor() {
+  if (ES?.palette_drag?.ghostEl) ES.palette_drag.ghostEl.remove();
+  if (_edDocHandlers) {
+    document.removeEventListener('mousemove', _edDocHandlers.mm);
+    document.removeEventListener('mouseup', _edDocHandlers.mu);
+    document.removeEventListener('keydown', _edDocHandlers.kd);
+    _edDocHandlers = null;
+  }
+  ES = null;
+}
+
+function startPalDrag(type, e) {
+  const def = ND[type]; if (!def || !ES) return;
+  const ghost = document.createElement('div');
+  ghost.className = 'ed-node ed-ghost';
+  ghost.style.cssText = `width:${FLOW_NODE_W}px;height:${def.h}px;left:${e.clientX-FLOW_NODE_W/2}px;top:${e.clientY-def.h/2}px;`;
+  ghost.innerHTML = `<div class="ed-node-head" style="border-left:3px solid var(${def.cv});"><span class="pal-dot" style="background:var(${def.cv});flex:none;"></span><span class="ed-node-label">${escHtml(def.label)}</span></div>`;
+  document.body.appendChild(ghost);
+  ES.palette_drag = { type, ghostEl: ghost };
+}
+
+function redrawConnPath(e) {
+  const path = $('ed-conn'); if (!path || !ES?.connecting) return;
+  const wrap = $('ed-canvas-wrap'); if (!wrap) return;
+  const rect = wrap.getBoundingClientRect();
+  const mx = e.clientX - rect.left + wrap.scrollLeft;
+  const my = e.clientY - rect.top + wrap.scrollTop;
+  const fn = ES.nodes.find(n => n.id === ES.connecting.fromId); if (!fn) return;
+  const fd = ND[fn.type]||ND.start;
+  const sy = fn.y + portOutY(fd, ES.connecting.portLabel);
+  const sx = fn.x + FLOW_NODE_W;
+  const cx = Math.max(30, Math.abs(mx-sx)*0.5);
+  path.setAttribute('d',`M${sx},${sy} C${sx+cx},${sy} ${mx-cx},${my} ${mx},${my}`);
+  path.style.display='';
+}
+
+function onEdMM(e) {
+  if (!ES || !$('ed-shell')) return;
+  if (ES.palette_drag?.ghostEl) {
+    ES.palette_drag.ghostEl.style.left=(e.clientX-FLOW_NODE_W/2)+'px';
+    ES.palette_drag.ghostEl.style.top=(e.clientY-20)+'px';
+  }
+  if (ES.node_drag) {
+    const {id,sx,sy,nx,ny} = ES.node_drag;
+    const node = ES.nodes.find(n=>n.id===id); if (!node) return;
+    node.x = Math.max(0, nx + e.clientX - sx);
+    node.y = Math.max(0, ny + e.clientY - sy);
+    const el = document.querySelector(`[data-nid="${id}"]`);
+    if (el) { el.style.left=node.x+'px'; el.style.top=node.y+'px'; }
+    renderEdges();
+  }
+  if (ES.connecting) redrawConnPath(e);
+}
+
+function onEdMU(e) {
+  if (!ES || !$('ed-shell')) return;
+
+  if (ES.palette_drag) {
+    const {type, ghostEl} = ES.palette_drag;
+    if (ghostEl) ghostEl.remove();
+    ES.palette_drag = null;
+    const wrap = $('ed-canvas-wrap');
+    if (wrap) {
+      const rect = wrap.getBoundingClientRect();
+      if (e.clientX>=rect.left&&e.clientX<=rect.right&&e.clientY>=rect.top&&e.clientY<=rect.bottom) {
+        const x = Math.max(10, e.clientX - rect.left + wrap.scrollLeft - FLOW_NODE_W/2);
+        const y = Math.max(10, e.clientY - rect.top + wrap.scrollTop - (ND[type]||ND.start).h/2);
+        addCanvasNode(type, x, y);
+      }
+    }
+    return;
+  }
+
+  if (ES.node_drag) { ES.node_drag = null; ES.dirty = true; }
+
+  if (ES.connecting) {
+    const cp = $('ed-conn'); if (cp) cp.style.display='none';
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const inPort = el?.closest('[data-ptype="in"]');
+    if (inPort) {
+      const toId = inPort.dataset.nid, fromId = ES.connecting.fromId, label = ES.connecting.portLabel||'';
+      if (fromId !== toId) {
+        const exists = ES.edges.some(e2 => e2.from===fromId && e2.to===toId && e2.label===label);
+        if (!exists) { ES.edges.push({from:fromId,to:toId,label}); ES.dirty=true; renderEdges(); }
+      }
+    }
+    ES.connecting = null;
+  }
+}
+
+function onEdKD(e) {
+  if (!ES || !$('ed-shell')) return;
+  if ((e.key==='Delete'||e.key==='Backspace') && ES.selectedId) {
+    const tag = document.activeElement?.tagName?.toLowerCase();
+    if (tag==='input'||tag==='textarea'||tag==='select') return;
+    removeEdNode(ES.selectedId);
+  }
+}
+
+function addCanvasNode(type, x, y) {
+  const def = ND[type]; if (!def || !ES) return;
+  if (type==='start' && ES.nodes.some(n=>n.type==='start')) { showToast('error','Só pode existir um nó de início.'); return; }
+  const defCfg = type==='wait' ? {duration_seconds:5} : type==='https_call' ? {url:'',method:'POST',headers:{},body:'',timeout_seconds:30} : {};
+  const node = { id: genNodeId(), type, config: defCfg, x, y };
+  ES.nodes.push(node);
+  ES.dirty = true;
+  renderNodes();
+  selectEdNode(node.id);
+}
+
+// ─── 5.4 Salvar / Publicar ───────────────────────────────────────────────────
+
+async function saveFlow(andActivate) {
+  if (!ES) return;
+  const saveBtn=$('ed-save-btn'), pubBtn=$('ed-pub-btn');
+  if (saveBtn) saveBtn.disabled=true;
+  if (pubBtn) pubBtn.disabled=true;
+  try {
+    const payload = {
+      name: ES.name,
+      nodes: ES.nodes.map(n => ({ id:n.id, type:n.type, config:n.config||{}, x:n.x, y:n.y })),
+      edges: ES.edges,
+    };
+    const r = await apiPut(`flows/${ES.id}`, payload);
+    if (r.status === 422) {
+      const d = await r.json();
+      ES.valErrors = d.errors || [];
+      renderEditor();
+      showToast('error','Erros de validação. Corrija os nós destacados em vermelho.');
+      return;
+    }
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      showToast('error', d.error || `Salvar falhou (${r.status}).`);
+      return;
+    }
+    ES.valErrors = []; ES.dirty = false;
+    showToast('success','Fluxo salvo.');
+    if (andActivate) {
+      const ar = await apiPut(`flows/${ES.id}/activate`, undefined);
+      if (ar.status === 422) {
+        const d = await ar.json();
+        ES.valErrors = d.errors || [];
+        renderEditor();
+        showToast('error','Erros de validação ao ativar. Corrija e tente novamente.');
+        return;
+      }
+      if (!ar.ok) {
+        const d = await ar.json().catch(() => ({}));
+        showToast('error', d.error || `Ativar falhou (${ar.status}).`);
+        return;
+      }
+      ES.status = 'active';
+      showToast('success','Fluxo publicado e ativado!');
+      renderEditor();
+    }
+  } catch(err) { netError(err); }
+  finally {
+    const s=$('ed-save-btn'), p=$('ed-pub-btn');
+    if (s) s.disabled=false; if (p) p.disabled=false;
+  }
+}
+
+// ─── 5.5 Imagens de fundo (modal) ────────────────────────────────────────────
+
+function openBgModal() {
+  const imgs = ES?.bgImages || [];
+  const rows = imgs.map(img => `
+    <div class="trow" style="grid-template-columns:1fr auto;align-items:center;">
+      <div style="font-size:12.5px;">${escHtml(img.name||img.file_path||String(img.id))}</div>
+      <button class="icon-btn sm" data-imgdel="${img.id}" title="Remover">${ICON.trash}</button>
+    </div>`).join('');
+
+  $('modal-root').innerHTML = `
+    <div class="modal-overlay" id="modal-overlay" role="dialog" aria-modal="true" aria-label="Imagens de fundo">
+      <div class="modal" id="modal-card" style="max-width:520px;">
+        <div class="modal-body">
+          <div class="modal-title">Imagens de fundo</div>
+          <div class="modal-text">Imagens disponíveis para o nó "Trocar fundo". Formatos: JPEG e PNG. Máximo 5 MB.</div>
+          <div style="margin-top:14px;">
+            <label class="label">Enviar nova imagem</label>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <input type="file" id="img-file" accept="image/jpeg,image/png" class="input" style="flex:1;min-width:0;" />
+              <button class="btn btn-soft sm" id="img-send-btn">${ICON.upload} Enviar</button>
+            </div>
+          </div>
+          <div style="margin-top:14px;">
+            <div class="card flush" style="max-height:220px;overflow-y:auto;">
+              ${imgs.length ? rows : `<div style="padding:14px;">${emptyState(flIcon(24),'Nenhuma imagem','Faça upload de uma imagem JPEG ou PNG.')}</div>`}
+            </div>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn btn-ghost" id="bg-modal-close">Fechar</button>
+        </div>
+      </div>
+    </div>`;
+
+  $('modal-overlay').addEventListener('click', e => { if (e.target.id==='modal-overlay') closeBgModal(); });
+  $('bg-modal-close').addEventListener('click', closeBgModal);
+
+  $('img-send-btn')?.addEventListener('click', async () => {
+    const fi = $('img-file'); const file = fi?.files?.[0];
+    if (!file) { showToast('error','Selecione um arquivo.'); return; }
+    if (file.size > 5*1024*1024) { showToast('error','Arquivo muito grande (máx 5 MB).'); return; }
+    const btn = $('img-send-btn'); btn.disabled=true; btn.textContent='Enviando…';
+    try {
+      const fd = new FormData(); fd.append('file', file);
+      const r = await apiFetch('/admin/api/background-images', { method:'POST', body:fd });
+      if (r.status===201||r.ok) {
+        const img = await r.json();
+        if (ES) ES.bgImages.push(img);
+        showToast('success','Imagem enviada.');
+        openBgModal(); // re-render modal with updated list
+      } else if (r.status===415) {
+        showToast('error','Formato não suportado. Use JPEG ou PNG.');
+      } else { showToast('error',`Upload falhou (${r.status}).`); }
+    } catch(err) { netError(err); }
+    finally { const b=$('img-send-btn'); if(b){b.disabled=false; b.innerHTML=`${ICON.upload} Enviar`;} }
+  });
+
+  document.querySelectorAll('[data-imgdel]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.imgdel; btn.disabled=true;
+      try {
+        const r = await apiDelete(`background-images/${id}`);
+        if (r.ok||r.status===204) {
+          if (ES) ES.bgImages = ES.bgImages.filter(i => String(i.id)!==String(id));
+          showToast('success','Imagem removida.'); openBgModal();
+        } else { showToast('error',`Erro ${r.status}`); btn.disabled=false; }
+      } catch(err) { netError(err); btn.disabled=false; }
+    });
+  });
+}
+
+function closeBgModal() {
+  $('modal-root').innerHTML='';
+  if (ES?.selectedId && ES.nodes.find(n=>n.id===ES.selectedId)?.type==='change_background') refreshCfg();
+}
+
+// ─── 5.6 Logs de execução ────────────────────────────────────────────────────
+
+let _logsId=null, _logsOff=0;
+const LOGS_LIM=20;
+
+async function mountFlowsLogs(params) {
+  cleanupEditor();
+  const id = params.id; if (!id){navigate('flows');return;}
+  _logsId=id; _logsOff=0;
+  setView(loadingState());
+  try {
+    const r = await apiGet(`flows/${id}/logs?limit=${LOGS_LIM}&offset=0`);
+    if (r.status===401) return;
+    if (!r.ok){setView(emptyState(flIcon(28),'Erro ao carregar logs',`Status ${r.status}.`));return;}
+    renderLogsView(id, await r.json());
+  } catch(err){setView(emptyState(flIcon(28),'Falha de conexão','Tente novamente.'));netError(err);}
+}
+
+function logBadge(s) { return s==='completed'?badge('ok','Concluído'):badge('off','Circuit break'); }
+
+function renderLogsView(flowId, data) {
+  const logs = data.logs||[];
+  const hasMore = logs.length >= LOGS_LIM;
+
+  function logRow(l) {
+    return `<div class="trow" style="grid-template-columns:1.4fr 1fr 100px 1fr;">
+      <div>
+        <div style="font-size:12.5px;font-weight:500;">${fmtDateTime(l.started_at)}</div>
+        <div class="mono" style="font-size:10.5px;color:var(--text-3);">→ ${fmtDateTime(l.finished_at)}</div>
+      </div>
+      <div>${logBadge(l.status)}</div>
+      <div class="mono" style="font-size:11px;color:var(--text-3);">dev #${l.device_id}</div>
+      <div style="font-size:11.5px;">
+        ${l.failed_node_id?`<div>nó: <span class="mono">${escHtml(l.failed_node_id)}</span></div>`:''}
+        ${l.error?`<div class="mono" style="font-size:10px;color:var(--red);">${escHtml(l.error)}</div>`:''}
+      </div>
+    </div>`;
+  }
+
+  setView(`
+    <div class="screen" style="max-width:860px;">
+      <div class="toolbar" style="margin-bottom:14px;">
+        <button class="btn-back" id="logs-back-btn">${ICON.back} Editor</button>
+        <span style="font-size:15px;font-weight:600;margin-left:10px;">Logs de execução — fluxo #${flowId}</span>
+      </div>
+      <div class="card flush">
+        <div class="thead" style="grid-template-columns:1.4fr 1fr 100px 1fr;">
+          <div>Início / Término</div><div>Status</div><div>Dispositivo</div><div>Detalhes</div>
+        </div>
+        <div id="logs-rows">
+          ${logs.length ? logs.map(logRow).join('') : `<div style="padding:18px;">${emptyState(flIcon(28),'Nenhuma execução registrada','O fluxo ainda não foi executado.')}</div>`}
+        </div>
+        ${hasMore?`<div class="table-foot" id="logs-foot"><button class="btn btn-soft sm" id="logs-more">Carregar mais</button></div>`:''}
+      </div>
+    </div>`);
+
+  $('logs-back-btn')?.addEventListener('click', () => navigate(`flows-edit?id=${flowId}`));
+  $('logs-more')?.addEventListener('click', async () => {
+    _logsOff += LOGS_LIM;
+    const btn=$('logs-more'); btn.disabled=true; btn.textContent='Carregando…';
+    try {
+      const r = await apiGet(`flows/${_logsId}/logs?limit=${LOGS_LIM}&offset=${_logsOff}`);
+      if (!r.ok) return;
+      const d = await r.json();
+      const newLogs = d.logs||[];
+      $('logs-rows').insertAdjacentHTML('beforeend', newLogs.map(logRow).join(''));
+      if (newLogs.length<LOGS_LIM) { const f=$('logs-foot');if(f)f.style.display='none'; }
+      else { btn.disabled=false; btn.textContent='Carregar mais'; }
+    } catch(err) { netError(err); btn.disabled=false; btn.textContent='Carregar mais'; }
+  });
+}
