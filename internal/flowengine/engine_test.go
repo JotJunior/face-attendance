@@ -568,27 +568,86 @@ func TestEngine_CameraOff_ConfigurableVerifyMode(t *testing.T) {
 	}
 }
 
-// TestEngine_BlockedNode_Message: nó send_message → circuit-break com BLOCKED_API.
-// Ref: tasks.md §6.2.6.
-func TestEngine_BlockedNode_Message(t *testing.T) {
+// testEngineWithSender cria um Engine com MessageSender + HTTPClient configurados.
+func testEngineWithSender(activeFlow *flow.Flow, logRepo *fakeLogRepo, sender *flowengine.MessageSenderConfig) *flowengine.Engine {
+	return flowengine.New(flowengine.Config{
+		FlowRepo:      &fakeFlowRepo{activeFlow: activeFlow},
+		LogRepo:       logRepo,
+		BgImageRepo:   &fakeBgImageRepo{},
+		HTTPClient:    &http.Client{Timeout: 5 * time.Second},
+		MessageSender: sender,
+	})
+}
+
+// TestEngine_SendMessage_PostsMultipart: nó send_message envia POST multipart com
+// appkey/authkey/to/message corretos (to/message interpolados) e o fluxo completa.
+// Contrato SOURCED: curl multipart fornecido pelo operador.
+func TestEngine_SendMessage_PostsMultipart(t *testing.T) {
+	var gotAppKey, gotAuthKey, gotTo, gotMsg string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			t.Errorf("ParseMultipartForm: %v", err)
+		}
+		gotAppKey = r.FormValue("appkey")
+		gotAuthKey = r.FormValue("authkey")
+		gotTo = r.FormValue("to")
+		gotMsg = r.FormValue("message")
+		w.WriteHeader(200)
+	}))
+	defer srv.Close()
+
 	f := &flow.Flow{
 		ID: 41,
 		Nodes: []flow.FlowNode{
 			node("s", flow.NodeTypeStart, nil),
-			node("m", flow.NodeTypeSendMessage, nil),
+			node("m", flow.NodeTypeSendMessage, flow.SendMessageConfig{To: "[user.mobile]", MessageTemplate: "Olá [user.name]"}),
 		},
 		Edges: []flow.FlowEdge{edge("s", "m")},
 	}
 	logRepo := newFakeLogRepo()
-	e := testEngine(f, logRepo)
-	triggerAndWait(e, testEvent("k8", "authorized"), testDevice())
+	e := testEngineWithSender(f, logRepo, &flowengine.MessageSenderConfig{URL: srv.URL, AppKey: "APP", AuthKey: "AUTH"})
+
+	mobile := "+5511988887777"
+	member := &domain.Member{Name: "Maria", MobileNumber: &mobile}
+	e.TriggerForDevice("", testEvent("k8", "authorized"), member, testDevice())
+	time.Sleep(50 * time.Millisecond)
+
+	entry := logRepo.lastEntry()
+	if entry == nil || entry.Status != "completed" {
+		t.Fatalf("esperado completed; got %v", entry)
+	}
+	if gotAppKey != "APP" || gotAuthKey != "AUTH" {
+		t.Fatalf("credenciais enviadas: appkey=%q authkey=%q", gotAppKey, gotAuthKey)
+	}
+	if gotTo != mobile {
+		t.Fatalf("to enviado = %q; want %q (interpolação de [user.mobile])", gotTo, mobile)
+	}
+	if gotMsg != "Olá Maria" {
+		t.Fatalf("message enviada = %q; want %q", gotMsg, "Olá Maria")
+	}
+}
+
+// TestEngine_SendMessage_NotConfigured: sem credenciais (.env ausente) → circuit-break
+// com erro claro, sem fabricar endpoint (Princípio I).
+func TestEngine_SendMessage_NotConfigured(t *testing.T) {
+	f := &flow.Flow{
+		ID: 42,
+		Nodes: []flow.FlowNode{
+			node("s", flow.NodeTypeStart, nil),
+			node("m", flow.NodeTypeSendMessage, flow.SendMessageConfig{To: "+5511999", MessageTemplate: "oi"}),
+		},
+		Edges: []flow.FlowEdge{edge("s", "m")},
+	}
+	logRepo := newFakeLogRepo()
+	e := testEngine(f, logRepo) // sem MessageSender
+	triggerAndWait(e, testEvent("k8b", "authorized"), testDevice())
 
 	entry := logRepo.lastEntry()
 	if entry == nil || entry.Status != "circuit_break" {
 		t.Fatalf("esperado circuit_break; got %v", entry)
 	}
-	if !strings.Contains(*entry.Error, "BLOCKED_API") {
-		t.Fatalf("esperado BLOCKED_API no erro; got %q", *entry.Error)
+	if !strings.Contains(*entry.Error, "não configurada") {
+		t.Fatalf("esperado erro de API não configurada; got %q", *entry.Error)
 	}
 }
 

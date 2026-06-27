@@ -164,12 +164,17 @@ func run() error {
 	if cfg.RunHTTP {
 		flowEngine = flowengine.New(flowengine.Config{
 			HikClientFor: hikClientFor,
-			FlowRepo:     flowRepo,
-			LogRepo:      flowLogRepo,
-			BgImageRepo:  bgImageRepo,
-			BgImagesDir:  cfg.BackgroundImagesDir,
-			Cipher:       flowCipher,
-			Logger:       logger,
+			MessageSender: &flowengine.MessageSenderConfig{
+				URL:     cfg.SenderURL,
+				AppKey:  cfg.SenderAppKey,
+				AuthKey: cfg.SenderAuthKey,
+			},
+			FlowRepo:    flowRepo,
+			LogRepo:     flowLogRepo,
+			BgImageRepo: bgImageRepo,
+			BgImagesDir: cfg.BackgroundImagesDir,
+			Cipher:      flowCipher,
+			Logger:      logger,
 		})
 	}
 

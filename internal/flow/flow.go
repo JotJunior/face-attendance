@@ -85,8 +85,13 @@ type QRCodeBackgroundConfig struct {
 	ContentTemplate string `json:"content_template"`
 }
 
-// SendMessageConfig é a configuração do nó send_message (BLOCKED_API).
+// SendMessageConfig é a configuração do nó send_message.
+// To é o destinatário (telefone) — suporta variáveis (ex.: "[user.mobile]").
+// MessageTemplate é o texto, também com variáveis. As credenciais/endpoint da API
+// (appkey/authkey/URL) vêm do .env (instance-level), não do fluxo.
+// SOURCED: contrato multipart fornecido pelo operador (appkey/authkey/to/message).
 type SendMessageConfig struct {
+	To              string `json:"to"`
 	MessageTemplate string `json:"message_template"`
 }
 

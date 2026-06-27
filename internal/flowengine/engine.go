@@ -42,11 +42,26 @@ type BackgroundImageRepo interface {
 	FindByID(ctx context.Context, id int64) (*repository.BackgroundImage, error)
 }
 
+// MessageSenderConfig são as credenciais/endpoint da API de disparo de mensagem,
+// usadas pelo nó send_message. Contrato (multipart): POST URL com campos
+// appkey/authkey/to/message. Valores vêm do .env (SENDER_URL/SENDER_APP_KEY/
+// SENDER_AUTH_KEY). AppKey/AuthKey são SEGREDOS — nunca devem ser logados.
+// SOURCED: contrato fornecido pelo operador (curl multipart).
+type MessageSenderConfig struct {
+	URL     string
+	AppKey  string
+	AuthKey string
+}
+
 // Config agrupa as dependências do Engine para injeção no construtor.
 type Config struct {
 	// HikClientFor retorna um cliente ISAPI para o device fornecido.
 	// Usado pelos nós change_background e qrcode_background.
 	HikClientFor func(device *domain.Device) (*hikvision.Client, error)
+
+	// MessageSender são as credenciais da API de mensagem (nó send_message).
+	// Se nil ou com URL vazia, o nó send_message falha com erro claro (não fabrica).
+	MessageSender *MessageSenderConfig
 
 	FlowRepo    FlowRepo
 	LogRepo     ExecutionLogRepo
@@ -79,16 +94,17 @@ type Config struct {
 // Engine executa fluxos disparados por eventos de reconhecimento facial.
 // Ref: docs/specs/face-flow/plan.md §3.1, tasks.md §3.1.
 type Engine struct {
-	hikClientFor func(device *domain.Device) (*hikvision.Client, error)
-	flowRepo     FlowRepo
-	logRepo      ExecutionLogRepo
-	bgImageRepo  BackgroundImageRepo
-	bgImagesDir  string
-	httpClient   *http.Client
-	sema         chan struct{} // semáforo de goroutines (bound de concorrência)
-	cipher       *secrets.Cipher
-	ssrfChecker  func(rawURL string) error
-	logger       *logging.Logger
+	hikClientFor  func(device *domain.Device) (*hikvision.Client, error)
+	messageSender *MessageSenderConfig
+	flowRepo      FlowRepo
+	logRepo       ExecutionLogRepo
+	bgImageRepo   BackgroundImageRepo
+	bgImagesDir   string
+	httpClient    *http.Client
+	sema          chan struct{} // semáforo de goroutines (bound de concorrência)
+	cipher        *secrets.Cipher
+	ssrfChecker   func(rawURL string) error
+	logger        *logging.Logger
 }
 
 // New cria um Engine com as dependências fornecidas em cfg.
@@ -107,16 +123,17 @@ func New(cfg Config) *Engine {
 		ssrfFn = checkSSRF // implementação padrão em node_https.go
 	}
 	return &Engine{
-		hikClientFor: cfg.HikClientFor,
-		flowRepo:     cfg.FlowRepo,
-		logRepo:      cfg.LogRepo,
-		bgImageRepo:  cfg.BgImageRepo,
-		bgImagesDir:  cfg.BgImagesDir,
-		httpClient:   client,
-		sema:         make(chan struct{}, size),
-		cipher:       cfg.Cipher,
-		ssrfChecker:  ssrfFn,
-		logger:       cfg.Logger,
+		hikClientFor:  cfg.HikClientFor,
+		messageSender: cfg.MessageSender,
+		flowRepo:      cfg.FlowRepo,
+		logRepo:       cfg.LogRepo,
+		bgImageRepo:   cfg.BgImageRepo,
+		bgImagesDir:   cfg.BgImagesDir,
+		httpClient:    client,
+		sema:          make(chan struct{}, size),
+		cipher:        cfg.Cipher,
+		ssrfChecker:   ssrfFn,
+		logger:        cfg.Logger,
 	}
 }
 
@@ -298,7 +315,7 @@ func (e *Engine) executeNode(
 	case flow.NodeTypeCameraOff:
 		return e.executeCameraOff(ctx, node, device)
 	case flow.NodeTypeSendMessage:
-		return e.executeBlocked(node)
+		return e.executeSendMessage(ctx, node, execCtx)
 	default:
 		return fmt.Errorf("tipo de nó desconhecido: %q", node.Type)
 	}

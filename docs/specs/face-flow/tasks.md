@@ -305,10 +305,11 @@ Ref: plan.md §8.4; build tag `integration`; requer DB ativo
 
 ## FASE 7 - Bloqueados: Aguardando Contrato Externo
 
-> Atualizacao: o operador esclareceu que "camera" = LEITOR FACIAL e apontou o
-> contrato no hik2go (face-enable/face-disable). Os nos 1/2 foram DESBLOQUEADOS
-> e implementados (ver node_camera.go). Resta o no 8 (send_message), ainda sem
-> contrato de API.
+> Atualizacao: TODOS os nos desta fase foram DESBLOQUEADOS e implementados.
+> Nos 1/2 (leitor facial): contrato no hik2go (face-enable/face-disable) →
+> node_camera.go. No 8 (send_message): contrato multipart fornecido pelo
+> operador (appkey/authkey/to/message) → node_message.go. Nenhum no bloqueado
+> restante; node_blocked.go foi removido.
 
 ### 7.1 No camera_on — leitor facial ON `[M]` — CONCLUIDO
 
@@ -322,11 +323,11 @@ Ref: spec.md §FR-011 · SOURCED: legacy/hik2go/examples/1-device/face-disable.p
 
 - [x] 7.2.1 Implementar `executeCameraOff`: desabilita o leitor facial via `SetVerifyMode` (default `card`, configuravel) + `PutIdentityTerminal` (showMode `full`/standby). Mesma reutilizacao de operacoes verificadas.
 
-### 7.3 No send_message — implementacao API externa `[M]`
+### 7.3 No send_message — envio via API externa `[M]` — CONCLUIDO
 
-Ref: spec.md §FR-017, plan.md §BLOQUEIO B-002
+Ref: spec.md §FR-017 · SOURCED: contrato multipart fornecido pelo operador
 
-- [!] 7.3.1 **[BLOCKED_API]** Implementar envio real via API externa; aguarda operador fornecer endpoint, metodo HTTP, headers (incl. auth), schema do payload e mapeamento do message_template — zero fabricacao (Constituicao §I)
+- [x] 7.3.1 Implementar `executeSendMessage` (internal/flowengine/node_message.go): POST multipart para SENDER_URL com campos `appkey`/`authkey` (do .env), `to` e `message` (config do no, interpoladas). Credenciais via config (SENDER_URL/SENDER_APP_KEY/SENDER_AUTH_KEY); segredos nunca logados. Sem config → circuit-break com erro claro (zero fabricacao, §I). Destinatario configuravel (ex.: `[user.mobile]`).
 
 ---
 

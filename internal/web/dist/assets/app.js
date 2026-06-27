@@ -2414,7 +2414,7 @@ const ND = {
   https_call:        { label:'HTTPS Call',      blocked:false,   h:52, inputs:1, out:1, outLabels:[''],               cv:'--blue'   },
   qrcode_background: { label:'QR Code fundo',   blocked:false,   h:52, inputs:1, out:1, outLabels:[''],               cv:'--cyan'   },
   decision:          { label:'Decisão',         blocked:false,   h:70, inputs:1, out:2, outLabels:['valid','invalid'], cv:'--warn'   },
-  send_message:      { label:'Enviar mensagem', blocked:'API',   h:52, inputs:1, out:1, outLabels:[''],               cv:'--text-3' },
+  send_message:      { label:'Enviar mensagem', blocked:false,   h:52, inputs:1, out:1, outLabels:[''],               cv:'--accent' },
 };
 
 const FLOW_NODE_W = 160;
@@ -2791,13 +2791,16 @@ function renderCfgPanel() {
       <label class="label" for="cfg-vmode">verifyMode (opcional)</label>
       <input class="input" id="cfg-vmode" type="text" value="${escHtml(cfg.verify_mode||'')}" placeholder="${defMode} (padrão)" />
       <div style="font-size:11px;color:var(--text-3);margin-top:4px;">Vazio usa o padrão <code>${defMode}</code>. Ex.: cardOrFace, card, faceOrFpOrCardOrPw.</div>`;
-  } else if (def.blocked === 'API') {
+  } else if (node.type === 'send_message') {
     fields = `
       <div class="pal-section">Mensagem</div>
-      <label class="label" for="cfg-msg">Template da mensagem</label>
+      <label class="label" for="cfg-to">Destinatário (telefone)</label>
+      <input class="input" id="cfg-to" type="text" value="${escHtml(cfg.to||'')}" placeholder="[user.mobile]" />
+      ${varHintHtml('cfg-to')}
+      <label class="label" for="cfg-msg" style="margin-top:10px;">Template da mensagem</label>
       <textarea class="input" id="cfg-msg" rows="4" placeholder="Olá [user.name], presença registrada em [event.datetime].">${escHtml(cfg.message_template||'')}</textarea>
       ${varHintHtml('cfg-msg')}
-      <div class="pending-note" style="margin-top:10px;">${ICON.warnTri}<span><strong>BLOCKED_API</strong> — Envio aguarda contrato de API. Template pode ser configurado; o envio não ocorrerá até o contrato ser fornecido.</span></div>`;
+      <div style="font-size:11px;color:var(--text-3);margin-top:6px;">Credenciais da API (SENDER_URL/APP_KEY/AUTH_KEY) são configuradas no servidor (.env).</div>`;
   } else if (node.type === 'wait') {
     fields = `
       <div class="pal-section">Espera</div>
@@ -2970,7 +2973,7 @@ function applyCfg(node) {
     case 'qrcode_background':
       cfg = { content_template: $('cfg-qr')?.value||'' }; break;
     case 'send_message':
-      cfg = { message_template: $('cfg-msg')?.value||'' }; break;
+      cfg = { to: $('cfg-to')?.value?.trim()||'', message_template: $('cfg-msg')?.value||'' }; break;
     case 'camera_on':
     case 'camera_off': {
       const vm = $('cfg-vmode')?.value?.trim()||'';
