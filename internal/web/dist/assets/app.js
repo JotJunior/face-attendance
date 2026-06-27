@@ -2546,12 +2546,14 @@ async function mountFlowsEditor(params) {
   if (!id) { navigate('flows'); return; }
   setView(loadingState());
   try {
-    const [fRes, imgRes] = await Promise.all([apiGet(`flows/${id}`), apiGet('background-images')]);
+    const [fRes, imgRes, devRes] = await Promise.all([apiGet(`flows/${id}`), apiGet('background-images'), apiGet('devices')]);
     if (fRes.status === 401) return;
     if (!fRes.ok) { setView(emptyState(flIcon(32),'Fluxo não encontrado',`Status ${fRes.status}.`)); return; }
     const flow = await fRes.json();
     ES = {
       id: flow.id, name: flow.name, status: flow.status,
+      deviceId: flow.device_id || null,
+      devices: devRes.ok ? ((await devRes.json()).devices || []) : [],
       nodes: (flow.nodes || []).map(n => ({
         id: n.id, type: n.type,
         config: (n.config && typeof n.config === 'object') ? n.config : {},
@@ -2601,6 +2603,11 @@ function renderEditor() {
           <span class="ed-name">${escHtml(ES.name)}</span>
           ${flowBadge(ES.status)}
           <div class="spacer"></div>
+          <label class="label" for="ed-device" style="margin:0 6px 0 0;font-size:11px;color:var(--text-2);">Dispositivo</label>
+          <select class="select sm" id="ed-device" title="Vincular este fluxo a um dispositivo (1:1)">
+            <option value="">— Nenhum —</option>
+            ${(ES.devices||[]).map(d => `<option value="${escHtml(String(d.id))}"${String(d.id)===String(ES.deviceId||'')?' selected':''}>${escHtml(d.device_identifier || ('#'+d.id))}${d.ip_address?' · '+escHtml(d.ip_address):''}</option>`).join('')}
+          </select>
           <button class="btn btn-ghost sm" id="ed-images-btn">Imagens de fundo</button>
           <button class="btn btn-soft sm" id="ed-save-btn">Salvar</button>
           <button class="btn btn-accent sm" id="ed-pub-btn">Publicar (Ativar)</button>
@@ -2858,8 +2865,19 @@ function renderCfgPanel() {
       <label class="label" for="cfg-qr">Conteúdo (template)</label>
       <textarea class="input" id="cfg-qr" rows="4" placeholder="CPF: [user.document]">${escHtml(cfg.content_template||'')}</textarea>
       ${varHintHtml('cfg-qr')}`;
+  } else if (node.type === 'decision') {
+    fields = `
+      <div class="pal-section">Decisão</div>
+      <div style="font-size:12px;color:var(--text-2);line-height:1.6;">
+        Ramifica pelo resultado do <strong>nó anterior</strong> (true/false):
+        <ul style="margin:6px 0 0 16px;padding:0;color:var(--text-2);">
+          <li><strong>válido</strong>: face reconhecida/autorizada, ou chamada HTTPS anterior retornou <strong>200–204</strong>.</li>
+          <li><strong>inválido</strong>: face não reconhecida, ou HTTPS retornou status fora de 200–204.</li>
+        </ul>
+        <div style="margin-top:6px;color:var(--text-3);">Conecte as saídas <span style="color:var(--green);">válido</span> e <span style="color:var(--red);">inválido</span> aos próximos nós.</div>
+      </div>`;
   } else {
-    // start, decision — sem config adicional
+    // start — sem config adicional
     fields = `<div style="font-size:12px;color:var(--text-3);margin-top:10px;line-height:1.6;">Este nó não possui configuração adicional.</div>`;
   }
 
@@ -3002,6 +3020,32 @@ function wireEditorShell() {
   $('ed-save-btn')?.addEventListener('click', () => saveFlow(false));
   $('ed-pub-btn')?.addEventListener('click', () => saveFlow(true));
   $('ed-images-btn')?.addEventListener('click', openBgModal);
+
+  // Vínculo device↔fluxo (1:1) — PUT /flows/{id}/device | DELETE p/ desvincular.
+  $('ed-device')?.addEventListener('change', async e => {
+    const sel = e.target;
+    const prev = ES.deviceId;
+    const val = sel.value;
+    sel.disabled = true;
+    try {
+      let res;
+      if (val) res = await apiPut(`flows/${ES.id}/device`, { device_id: parseInt(val) });
+      else     res = await apiDelete(`flows/${ES.id}/device`);
+      if (res.status === 401) return;
+      if (res.ok || res.status === 204) {
+        ES.deviceId = val ? parseInt(val) : null;
+        showToast('success', val ? 'Dispositivo vinculado.' : 'Dispositivo desvinculado.');
+      } else if (res.status === 409) {
+        sel.value = prev ? String(prev) : '';
+        showToast('error', 'Este dispositivo já está vinculado a outro fluxo.');
+      } else {
+        sel.value = prev ? String(prev) : '';
+        const d = await res.json().catch(() => ({}));
+        showToast('error', d.error || `Erro ${res.status}`);
+      }
+    } catch(err) { sel.value = prev ? String(prev) : ''; netError(err); }
+    finally { sel.disabled = false; }
+  });
 
   // Palette drag
   document.querySelectorAll('[data-pal]').forEach(item => {

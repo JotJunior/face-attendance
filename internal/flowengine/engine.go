@@ -252,6 +252,13 @@ func (e *Engine) execute(
 
 	currentNodeID := startNode.ID
 
+	// decisionValue é o RESULTADO AVALIÁVEL corrente que um nó de decisão consome.
+	// Default: reconhecimento facial (evento autorizado). É sobrescrito pelo
+	// resultado do nó anterior quando este produz um booleano — hoje, o https_call
+	// (true se 200-204, false caso contrário). Assim a decisão ramifica tanto por
+	// "face não reconhecida" quanto por "webhook não retornou 200-204".
+	decisionValue := event != nil && event.IsAuthorized()
+
 	for {
 		// Verificar cancelamento/timeout antes de cada nó.
 		if ctx.Err() != nil {
@@ -269,12 +276,16 @@ func (e *Engine) execute(
 			return
 		}
 
-		if err := e.executeNode(ctx, node, execCtx, device, snapshot); err != nil {
+		result, err := e.executeNode(ctx, node, execCtx, device, snapshot)
+		if err != nil {
 			e.circuitBreak(ctx, snapshot, device, event, node.ID, err, start)
 			return
 		}
+		if result != nil {
+			decisionValue = *result // nó produziu booleano (ex.: https_call 200-204)
+		}
 
-		nextID, err := nextNodeFor(snapshot, node, execCtx)
+		nextID, err := nextNodeFor(snapshot, node, decisionValue)
 		if err != nil {
 			e.circuitBreak(ctx, snapshot, device, event, node.ID, err, start)
 			return
@@ -290,43 +301,50 @@ func (e *Engine) execute(
 
 // executeNode despacha a execução de um nó pelo seu tipo.
 // snapshot é passado para acesso ao SealedConfig (nó https_call com segredos).
+// executeNode executa o nó e retorna, opcionalmente, um RESULTADO AVALIÁVEL
+// (*bool) que alimenta o próximo nó de decisão. Hoje só o nó https_call produz
+// esse resultado (true se a resposta foi 200-204; false caso contrário); os
+// demais nós retornam nil (não alteram o valor de decisão corrente).
 func (e *Engine) executeNode(
 	ctx context.Context,
 	node *flow.FlowNode,
 	execCtx flow.ExecutionContext,
 	device *domain.Device,
 	snapshot *flow.Flow,
-) error {
+) (*bool, error) {
 	switch node.Type {
 	case flow.NodeTypeStart:
-		return nil // nó start: nenhuma ação, apenas ponto de entrada
+		return nil, nil // nó start: nenhuma ação, apenas ponto de entrada
 	case flow.NodeTypeWait:
-		return e.executeWait(ctx, node)
+		return nil, e.executeWait(ctx, node)
 	case flow.NodeTypeHTTPSCall:
 		return e.executeHTTPSCall(ctx, node, execCtx, snapshot)
 	case flow.NodeTypeChangeBackground:
-		return e.executeChangeBackground(ctx, node, device)
+		return nil, e.executeChangeBackground(ctx, node, device)
 	case flow.NodeTypeQRCodeBackground:
-		return e.executeQRCodeBackground(ctx, node, execCtx, device)
+		return nil, e.executeQRCodeBackground(ctx, node, execCtx, device)
 	case flow.NodeTypeDecision:
-		return nil // decision: nenhuma ação; nextNodeFor cuida do roteamento pelo label
+		return nil, nil // decision: nenhuma ação; nextNodeFor cuida do roteamento pelo label
 	case flow.NodeTypeCameraOn:
-		return e.executeCameraOn(ctx, node, device)
+		return nil, e.executeCameraOn(ctx, node, device)
 	case flow.NodeTypeCameraOff:
-		return e.executeCameraOff(ctx, node, device)
+		return nil, e.executeCameraOff(ctx, node, device)
 	case flow.NodeTypeSendMessage:
-		return e.executeSendMessage(ctx, node, execCtx)
+		return nil, e.executeSendMessage(ctx, node, execCtx)
 	default:
-		return fmt.Errorf("tipo de nó desconhecido: %q", node.Type)
+		return nil, fmt.Errorf("tipo de nó desconhecido: %q", node.Type)
 	}
 }
 
 // nextNodeFor determina o ID do próximo nó a ser executado.
 // Para nós decision, consulta AttendanceEvent.IsAuthorized() para escolher o ramo.
-func nextNodeFor(snapshot *flow.Flow, node *flow.FlowNode, execCtx flow.ExecutionContext) (string, error) {
+// nextNodeFor resolve o próximo nó. Para o nó de decisão, ramifica pelo
+// decisionValue corrente (resultado do nó anterior): true → aresta "valid",
+// false → aresta "invalid".
+func nextNodeFor(snapshot *flow.Flow, node *flow.FlowNode, decisionValue bool) (string, error) {
 	switch node.Type {
 	case flow.NodeTypeDecision:
-		if execCtx.Event != nil && execCtx.Event.IsAuthorized() {
+		if decisionValue {
 			return snapshot.NextNodeIDByLabel(node.ID, "valid")
 		}
 		return snapshot.NextNodeIDByLabel(node.ID, "invalid")
