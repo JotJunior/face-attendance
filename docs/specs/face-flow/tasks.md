@@ -208,52 +208,52 @@ Ref: plan.md §6, spec.md §FR-018/FR-019
 
 Ref: plan.md §7, spec.md §FR-001/FR-006
 
-- [ ] 5.1.1 Adicionar rota `#/flows` no router hash da SPA; link no menu de navegacao existente
-- [ ] 5.1.2 Tabela com colunas: id, nome, status (badge ativo/inativo), dispositivo vinculado; acoes: editar (#/flows/{id}/edit), ativar/desativar, excluir
-- [ ] 5.1.3 Botao "Novo Fluxo": POST /admin/api/flows + redirecionar para editor
+- [x] 5.1.1 Adicionar rota `#/flows` no router hash da SPA; link no menu de navegacao existente
+- [x] 5.1.2 Tabela com colunas: id, nome, status (badge ativo/inativo), dispositivo vinculado; acoes: editar (#/flows/{id}/edit), ativar/desativar, excluir
+- [x] 5.1.3 Botao "Novo Fluxo": POST /admin/api/flows + redirecionar para editor
 
 ### 5.2 Editor de canvas SVG `[C]`
 
 Ref: plan.md §7, spec.md §FR-002/FR-003
 
-- [ ] 5.2.1 Adicionar rota `#/flows/{id}/edit`; layout 3 colunas: paleta (tipos de no), canvas SVG (layer de arestas + layer de nos), painel de configuracao
-- [ ] 5.2.2 Paleta de nos: arrastar do palette para canvas via mousedown/mousemove/mouseup; nos BLOCKED (camera_on, camera_off, send_message) renderizados em cinza com icone de aviso "aguardando contrato"
-- [ ] 5.2.3 Nos no canvas: divs arrastaveis; porta(s) de saida clicareis para iniciar conexao; no decision com 2 portas rotuladas "valid" e "invalid"; botao de remover no
-- [ ] 5.2.4 Arestas como `<path>` bezier SVG entre portas; recalcular ao mover no; clicar na aresta + Delete remove a aresta; aresta de decision exibe label "valid"/"invalid"
+- [x] 5.2.1 Adicionar rota `#/flows/{id}/edit`; layout 3 colunas: paleta (tipos de no), canvas SVG (layer de arestas + layer de nos), painel de configuracao
+- [x] 5.2.2 Paleta de nos: arrastar do palette para canvas via mousedown/mousemove/mouseup; nos BLOCKED (camera_on, camera_off, send_message) renderizados em cinza com icone de aviso "aguardando contrato"
+- [x] 5.2.3 Nos no canvas: divs arrastaveis; porta(s) de saida clicareis para iniciar conexao; no decision com 2 portas rotuladas "valid" e "invalid"; botao de remover no
+- [x] 5.2.4 Arestas como `<path>` bezier SVG entre portas; recalcular ao mover no; clicar na aresta + Delete remove a aresta; aresta de decision exibe label "valid"/"invalid"
 
 ### 5.3 Painel de configuracao por tipo de no `[C]`
 
 Ref: plan.md §7, spec.md §FR-012/FR-014/FR-016/FR-020
 
-- [ ] 5.3.1 `start`, `decision`: sem campos no painel
-- [ ] 5.3.2 `wait`: campo numerico `duration_seconds` (1–3600); validacao client-side
-- [ ] 5.3.3 `change_background`: dropdown de imagens populado de GET /admin/api/background-images; link para upload de nova imagem
-- [ ] 5.3.4 `https_call`: campos url, method (select GET/POST/PUT/PATCH), lista de headers key-value (adicionar/remover par), body (textarea), timeout_seconds; valores de header com checkbox "secreto" (envia como `__secret__:valor`)
-- [ ] 5.3.5 `qrcode_background`: textarea `content_template` com hint do vocabulario de variaveis disponivel (user.name, user.document, etc.)
-- [ ] 5.3.6 `send_message`: textarea `message_template` + aviso "contrato de API pendente — BLOCKED_API"
-- [ ] 5.3.7 `camera_on`, `camera_off`: aviso "contrato ISAPI pendente — BLOCKED_ISAPI"
+- [x] 5.3.1 `start`, `decision`: sem campos no painel
+- [x] 5.3.2 `wait`: campo numerico `duration_seconds` (1–3600); validacao client-side
+- [x] 5.3.3 `change_background`: dropdown de imagens populado de GET /admin/api/background-images; link para upload de nova imagem
+- [x] 5.3.4 `https_call`: campos url, method (select GET/POST/PUT/PATCH), lista de headers key-value (adicionar/remover par), body (textarea), timeout_seconds; valores de header com checkbox "secreto" (envia como `__secret__:valor`)
+- [x] 5.3.5 `qrcode_background`: textarea `content_template` com hint do vocabulario de variaveis disponivel (user.name, user.document, etc.)
+- [x] 5.3.6 `send_message`: textarea `message_template` + aviso "contrato de API pendente — BLOCKED_API"
+- [x] 5.3.7 `camera_on`, `camera_off`: aviso "contrato ISAPI pendente — BLOCKED_ISAPI"
 
 ### 5.4 Botao Publicar e validacao inline `[C]`
 
 Ref: plan.md §7, spec.md §FR-005/SC-006
 
-- [ ] 5.4.1 Botao "Salvar": PUT /admin/api/flows/{id} com nodes+edges atuais (sem ativar)
-- [ ] 5.4.2 Botao "Publicar (Ativar)": PUT /admin/api/flows/{id} + PUT /admin/api/flows/{id}/activate em sequencia
-- [ ] 5.4.3 Em caso de 422: exibir lista de ValidationError; quando node_id disponivel, destacar o no errado no canvas com borda vermelha; exibir painel de erros agregado
+- [x] 5.4.1 Botao "Salvar": PUT /admin/api/flows/{id} com nodes+edges atuais (sem ativar)
+- [x] 5.4.2 Botao "Publicar (Ativar)": PUT /admin/api/flows/{id} + PUT /admin/api/flows/{id}/activate em sequencia
+- [x] 5.4.3 Em caso de 422: exibir lista de ValidationError; quando node_id disponivel, destacar o no errado no canvas com borda vermelha; exibir painel de erros agregado
 
 ### 5.5 Upload de imagens de background `[A]`
 
 Ref: plan.md §7, spec.md §FR-024
 
-- [ ] 5.5.1 Secao/modal acessivel no editor (botao "Gerenciar Imagens"); `<input type="file" accept="image/jpeg,image/png">`; POST para /admin/api/background-images multipart
-- [ ] 5.5.2 Listar imagens existentes com miniatura e botao remover (DELETE /admin/api/background-images/{id})
+- [x] 5.5.1 Secao/modal acessivel no editor (botao "Gerenciar Imagens"); `<input type="file" accept="image/jpeg,image/png">`; POST para /admin/api/background-images multipart
+- [x] 5.5.2 Listar imagens existentes com miniatura e botao remover (DELETE /admin/api/background-images/{id})
 
 ### 5.6 Tela de logs de execucao `[A]`
 
 Ref: plan.md §7, spec.md §CL-001
 
-- [ ] 5.6.1 Adicionar rota `#/flows/{id}/logs`: tabela com started_at, finished_at, status (badge completed/circuit_break), device_id, failed_node_id, error
-- [ ] 5.6.2 Paginacao simples (Next/Prev); GET /admin/api/flows/{id}/logs?limit=20&offset=N
+- [x] 5.6.1 Adicionar rota `#/flows/{id}/logs`: tabela com started_at, finished_at, status (badge completed/circuit_break), device_id, failed_node_id, error
+- [x] 5.6.2 Paginacao simples (Next/Prev); GET /admin/api/flows/{id}/logs?limit=20&offset=N
 
 ---
 
