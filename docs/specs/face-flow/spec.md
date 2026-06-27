@@ -377,8 +377,8 @@ disponível — bloqueio humano pendente`).
 
 ## Clarifications
 
-> Resolvidas na fase clarify (onda-002). Itens marcados PENDING_HUMAN aguardam
-> resposta do operador antes de avançar para plan.
+> Resolvidas na fase clarify (onda-002). CL-004 e CL-005, antes PENDING_HUMAN,
+> foram firmadas no plan (onda-003) e estão marcadas [RESOLVED] com a fonte.
 
 ### CL-001 — FlowExecutionLog: tabela PostgreSQL + slog complementar (dec-009, score 2)
 
@@ -413,27 +413,28 @@ durante execução.
 a desvinculação só afeta execuções subsequentes") + goroutine captura o fluxo ao
 iniciar (nota de infraestrutura).
 
-### CL-004 — Mecanismo de identificação do nó de início [PENDING_HUMAN] (block-001)
+### CL-004 — Mecanismo de identificação do nó de início [RESOLVED] (block-001)
 
-**Aguardando resposta do operador.** A spec exige "nó de início" (FR-005, FR-022)
-mas `FlowNode` não tem campo `is_start` nem tipo especial de início. Três opções:
+**Resolvido (opção C).** Adotado um tipo de nó dedicado `start` — o 9.º tipo da
+enumeração. A validação exige **exatamente um** nó `start` por fluxo (erros
+`no_start_node` / `multiple_start_nodes`). O motor inicia a execução a partir do
+nó `start`.
 
-- **(A)** Flag booleano `is_start` na entidade FlowNode — exige campo DB novo.
-- **(B)** Nó topológico = nó sem arestas de entrada — derivado de FlowEdge, zero
-  custo de schema, exige exatamente um root.
-- **(C)** Tipo de nó dedicado `start` — seria o 9.º tipo, exigiria atualizar
-  a enumeração de tipos.
+**Fonte**: plan.md §2.2 (`validator.go`: "Contar nós com `type=='start'`: deve ser
+exatamente 1") + §3.1 (`snapshot.FindNodeByType(flow.NodeTypeStart)`).
 
-Responder com A, B ou C para desbloquear o plan.
+> As opções descartadas eram (A) flag `is_start` na entidade e (B) nó topológico
+> sem arestas de entrada.
 
-### CL-005 — Timeout HTTPS do nó 5 [PENDING_HUMAN] (block-002)
+### CL-005 — Timeout HTTPS do nó 5 [RESOLVED] (block-002)
 
-**Aguardando resposta do operador.** FR-021 cita "timeout de HTTPS" como gatilho de
-circuit-break mas não define o valor. Três opções:
+**Resolvido (opção B).** O timeout do nó HTTPS é **configurável por nó** via campo
+`timeout_seconds` no JSON de config do FlowNode, com **default de 30s** quando
+ausente/≤0 e cap defensivo de 300s. O estouro do timeout aciona circuit-break
+(FR-021).
 
-- **(A)** Default fixo no código (ex.: 30s) — sem config de usuário.
-- **(B)** Configurável por nó no editor — campo `timeout_seconds` no JSON de config
-  do FlowNode.
-- **(C)** Configurável globalmente via env var `HTTPS_NODE_TIMEOUT_SECONDS`.
+**Fonte**: plan.md §3.3 (`node_https.go`: `timeout := cfg.TimeoutSeconds; if
+timeout <= 0 { timeout = 30 }; if timeout > 300 { timeout = 300 }`).
 
-Responder com opção e valor default para desbloquear o plan.
+> As opções descartadas eram (A) default fixo no código sem config e (C) env var
+> global `HTTPS_NODE_TIMEOUT_SECONDS`.
