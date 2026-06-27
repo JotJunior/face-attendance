@@ -248,7 +248,7 @@ func run() error {
 	}
 
 	srv := httphandler.NewServer(httphandler.ServerConfig{
-		Addr:                    ":8080",
+		Addr:                    cfg.HTTPAddr,
 		WebhookPathSecret:       cfg.WebhookPathSecret,
 		AdminToken:              cfg.AdminToken,
 		WebhookRateLimitPerMin:  cfg.WebhookRateLimitPerIPPerMin,
@@ -406,7 +406,7 @@ func run() error {
 
 	if cfg.RunHTTP {
 		go func() {
-			logger.Info("http_server_started", "", "", "listening on :8080")
+			logger.Info("http_server_started", "", "", "listening on "+cfg.HTTPAddr)
 			if listenErr := srv.ListenAndServe(); listenErr != nil {
 				logger.Error("http_server_started", "", "", "server error", listenErr)
 				rootCancel()

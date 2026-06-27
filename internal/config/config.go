@@ -38,6 +38,10 @@ type Config struct {
 	RunScheduler  bool // RUN_SCHEDULER (default: true)
 	RunWorkers    bool // RUN_WORKERS (default: true)
 
+	// Endereço de escuta do servidor HTTP (default ":8080"). Permite rodar local
+	// numa porta alternativa quando a 8080 está ocupada (ex.: HTTP_ADDR=":8090").
+	HTTPAddr string // HTTP_ADDR
+
 	// Security
 	AdminToken        string // ADMIN_TOKEN
 	WebhookPathSecret string // WEBHOOK_PATH_SECRET
@@ -150,6 +154,7 @@ func Load() (*Config, error) {
 		SenderURL:                 optionalStr("SENDER_URL", ""),
 		SenderAppKey:              optionalStr("SENDER_APP_KEY", ""),
 		SenderAuthKey:             optionalStr("SENDER_AUTH_KEY", ""),
+		HTTPAddr:                  optionalStr("HTTP_ADDR", ":8080"),
 		AdminToken:                require("ADMIN_TOKEN"),
 		WebhookPathSecret:         require("WEBHOOK_PATH_SECRET"),
 		WebhookPublicHost:         optionalStr("WEBHOOK_PUBLIC_HOST", ""),
