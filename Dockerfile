@@ -16,7 +16,12 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" \
 # --- Runtime stage ---
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata wget \
-    && adduser -D -u 10001 app
+    && adduser -D -u 10001 app \
+    && mkdir -p /data/background-images \
+    && chown -R app:app /data
+# /data/background-images: armazém das imagens de fundo dos fluxos (face-flow).
+# Criado com dono app (uid 10001) para que um volume nomeado montado aqui herde
+# a permissão de escrita (BACKGROUND_IMAGES_DIR aponta para cá no compose).
 USER app
 COPY --from=build /out/presenca-facial /usr/local/bin/presenca-facial
 EXPOSE 8080
