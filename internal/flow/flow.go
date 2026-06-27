@@ -50,6 +50,13 @@ type Flow struct {
 	Edges     []FlowEdge `json:"edges"`
 	CreatedAt time.Time  `json:"created_at"`
 	UpdatedAt time.Time  `json:"updated_at"`
+
+	// SealedConfig armazena segredos cifrados (AES-256-GCM) de headers sensíveis do nó https_call.
+	// Chave: "<node_id>.<header_name>" — valor: bytes cifrados codificados em base64.
+	// Persistido em flows.sealed_config (JSONB). Nunca serializado em JSON de resposta da API
+	// (o handler mascara com "__secret__:***" antes de retornar — tasks.md §3.8.2).
+	// Ref: tasks.md §3.8, migration 000009.
+	SealedConfig map[string]string `json:"sealed_config,omitempty"`
 }
 
 // Configs tipadas para decode seguro no motor de execução:

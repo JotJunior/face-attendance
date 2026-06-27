@@ -50,11 +50,18 @@ func (r *PgxFlowRepository) Create(ctx context.Context, f *flow.Flow) (*flow.Flo
 	if err != nil {
 		return nil, err
 	}
+	var sealedJSON []byte
+	if len(f.SealedConfig) > 0 {
+		sealedJSON, err = json.Marshal(f.SealedConfig)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	query := `
-		INSERT INTO flows (name, status, device_id, nodes, edges, created_at, updated_at)
-		VALUES ($1, COALESCE(NULLIF($2, ''), 'inactive'), $3, $4, $5, now(), now())
-		RETURNING id, name, status, device_id, nodes, edges, created_at, updated_at
+		INSERT INTO flows (name, status, device_id, nodes, edges, sealed_config, created_at, updated_at)
+		VALUES ($1, COALESCE(NULLIF($2, ''), 'inactive'), $3, $4, $5, $6, now(), now())
+		RETURNING id, name, status, device_id, nodes, edges, sealed_config, created_at, updated_at
 	`
 	row := r.pool.QueryRow(ctx, query,
 		f.Name,
@@ -62,6 +69,7 @@ func (r *PgxFlowRepository) Create(ctx context.Context, f *flow.Flow) (*flow.Flo
 		f.DeviceID,
 		nodesJSON,
 		edgesJSON,
+		sealedJSON,
 	)
 	return scanFlowRow(row)
 }
@@ -70,7 +78,7 @@ func (r *PgxFlowRepository) Create(ctx context.Context, f *flow.Flow) (*flow.Flo
 // Retorna pgx.ErrNoRows se não encontrado.
 func (r *PgxFlowRepository) FindByID(ctx context.Context, id int64) (*flow.Flow, error) {
 	query := `
-		SELECT id, name, status, device_id, nodes, edges, created_at, updated_at
+		SELECT id, name, status, device_id, nodes, edges, sealed_config, created_at, updated_at
 		FROM flows
 		WHERE id = $1
 	`
@@ -81,7 +89,7 @@ func (r *PgxFlowRepository) FindByID(ctx context.Context, id int64) (*flow.Flow,
 // FindAll retorna todos os fluxos ordenados por id.
 func (r *PgxFlowRepository) FindAll(ctx context.Context) ([]*flow.Flow, error) {
 	query := `
-		SELECT id, name, status, device_id, nodes, edges, created_at, updated_at
+		SELECT id, name, status, device_id, nodes, edges, sealed_config, created_at, updated_at
 		FROM flows
 		ORDER BY id
 	`
@@ -97,7 +105,7 @@ func (r *PgxFlowRepository) FindAll(ctx context.Context) ([]*flow.Flow, error) {
 // Apenas um fluxo pode estar ativo por device (device_id é UNIQUE na tabela).
 func (r *PgxFlowRepository) FindActiveByDeviceID(ctx context.Context, deviceID int64) (*flow.Flow, error) {
 	query := `
-		SELECT id, name, status, device_id, nodes, edges, created_at, updated_at
+		SELECT id, name, status, device_id, nodes, edges, sealed_config, created_at, updated_at
 		FROM flows
 		WHERE device_id = $1 AND status = 'active'
 		LIMIT 1
@@ -110,7 +118,7 @@ func (r *PgxFlowRepository) FindActiveByDeviceID(ctx context.Context, deviceID i
 	return f, err
 }
 
-// Update persiste alterações em nome, nodes e edges de um fluxo existente.
+// Update persiste alterações em nome, nodes, edges e sealed_config de um fluxo existente.
 func (r *PgxFlowRepository) Update(ctx context.Context, f *flow.Flow) (*flow.Flow, error) {
 	nodesJSON, err := json.Marshal(f.Nodes)
 	if err != nil {
@@ -120,14 +128,21 @@ func (r *PgxFlowRepository) Update(ctx context.Context, f *flow.Flow) (*flow.Flo
 	if err != nil {
 		return nil, err
 	}
+	var sealedJSON []byte
+	if len(f.SealedConfig) > 0 {
+		sealedJSON, err = json.Marshal(f.SealedConfig)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	query := `
 		UPDATE flows
-		SET name = $2, nodes = $3, edges = $4, updated_at = now()
+		SET name = $2, nodes = $3, edges = $4, sealed_config = $5, updated_at = now()
 		WHERE id = $1
-		RETURNING id, name, status, device_id, nodes, edges, created_at, updated_at
+		RETURNING id, name, status, device_id, nodes, edges, sealed_config, created_at, updated_at
 	`
-	row := r.pool.QueryRow(ctx, query, f.ID, f.Name, nodesJSON, edgesJSON)
+	row := r.pool.QueryRow(ctx, query, f.ID, f.Name, nodesJSON, edgesJSON, sealedJSON)
 	return scanFlowRow(row)
 }
 
@@ -166,12 +181,13 @@ func (r *PgxFlowRepository) Delete(ctx context.Context, id int64) error {
 // scanFlowRow lê um único registro de fluxo de um pgx.Row.
 func scanFlowRow(row pgx.Row) (*flow.Flow, error) {
 	var (
-		f          flow.Flow
-		nodesJSON  []byte
-		edgesJSON  []byte
-		deviceID   *int64
-		createdAt  time.Time
-		updatedAt  time.Time
+		f           flow.Flow
+		nodesJSON   []byte
+		edgesJSON   []byte
+		sealedJSON  []byte
+		deviceID    *int64
+		createdAt   time.Time
+		updatedAt   time.Time
 	)
 	if err := row.Scan(
 		&f.ID,
@@ -180,6 +196,7 @@ func scanFlowRow(row pgx.Row) (*flow.Flow, error) {
 		&deviceID,
 		&nodesJSON,
 		&edgesJSON,
+		&sealedJSON,
 		&createdAt,
 		&updatedAt,
 	); err != nil {
@@ -202,6 +219,11 @@ func scanFlowRow(row pgx.Row) (*flow.Flow, error) {
 	if f.Edges == nil {
 		f.Edges = []flow.FlowEdge{}
 	}
+	if len(sealedJSON) > 0 {
+		if err := json.Unmarshal(sealedJSON, &f.SealedConfig); err != nil {
+			return nil, err
+		}
+	}
 	return &f, nil
 }
 
@@ -210,12 +232,13 @@ func scanFlowRows(rows pgx.Rows) ([]*flow.Flow, error) {
 	var flows []*flow.Flow
 	for rows.Next() {
 		var (
-			f         flow.Flow
-			nodesJSON []byte
-			edgesJSON []byte
-			deviceID  *int64
-			createdAt time.Time
-			updatedAt time.Time
+			f          flow.Flow
+			nodesJSON  []byte
+			edgesJSON  []byte
+			sealedJSON []byte
+			deviceID   *int64
+			createdAt  time.Time
+			updatedAt  time.Time
 		)
 		if err := rows.Scan(
 			&f.ID,
@@ -224,6 +247,7 @@ func scanFlowRows(rows pgx.Rows) ([]*flow.Flow, error) {
 			&deviceID,
 			&nodesJSON,
 			&edgesJSON,
+			&sealedJSON,
 			&createdAt,
 			&updatedAt,
 		); err != nil {
@@ -245,6 +269,11 @@ func scanFlowRows(rows pgx.Rows) ([]*flow.Flow, error) {
 		}
 		if f.Edges == nil {
 			f.Edges = []flow.FlowEdge{}
+		}
+		if len(sealedJSON) > 0 {
+			if err := json.Unmarshal(sealedJSON, &f.SealedConfig); err != nil {
+				return nil, err
+			}
 		}
 		flows = append(flows, &f)
 	}

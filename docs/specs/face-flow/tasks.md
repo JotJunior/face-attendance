@@ -94,55 +94,55 @@ Ref: plan.md §4.3, spec.md §CL-001
 
 Ref: plan.md §3.1
 
-- [ ] 3.1.1 Criar `internal/flowengine/engine.go`: struct `Engine` com dependencias (hikClientFor, memberRepo, logRepo, bgImageRepo, flowRepo, httpClient); construtor `New(Config) *Engine`
-- [ ] 3.1.2 Implementar `TriggerForDevice(macAddress string, event, member, device)`: (1) buscar fluxo ativo por MAC, (2) se ausente retornar imediatamente (passthrough silencioso FR-019), (3) copiar snapshot, (4) disparar `go e.execute(snapshot, ...)`
-- [ ] 3.1.3 Implementar `execute(ctx, snapshot, event, member, device)`: validar snapshot via `flow.Validate()`; loop de nos iniciando em NodeTypeStart; despachar `executeNode` por tipo; chamar `nextNodeFor` para avanco; detectar fim de fluxo (nextID == "")
-- [ ] 3.1.4 Implementar `circuitBreak`: logar via `internal/logging` (campos device_id, flow_id, node_id, error_code sem body/CPF) + persistir FlowExecutionLog{status:"circuit_break"} — ignorar violacao UNIQUE (FR-023)
-- [ ] 3.1.5 Implementar `logCompleted`: persistir FlowExecutionLog{status:"completed"} — idem para UNIQUE
-- [ ] 3.1.6 Criar `internal/flowengine/doc.go`
+- [x] 3.1.1 Criar `internal/flowengine/engine.go`: struct `Engine` com dependencias (hikClientFor, memberRepo, logRepo, bgImageRepo, flowRepo, httpClient); construtor `New(Config) *Engine`
+- [x] 3.1.2 Implementar `TriggerForDevice(macAddress string, event, member, device)`: (1) buscar fluxo ativo por MAC, (2) se ausente retornar imediatamente (passthrough silencioso FR-019), (3) copiar snapshot, (4) disparar `go e.execute(snapshot, ...)`
+- [x] 3.1.3 Implementar `execute(ctx, snapshot, event, member, device)`: validar snapshot via `flow.Validate()`; loop de nos iniciando em NodeTypeStart; despachar `executeNode` por tipo; chamar `nextNodeFor` para avanco; detectar fim de fluxo (nextID == "")
+- [x] 3.1.4 Implementar `circuitBreak`: logar via `internal/logging` (campos device_id, flow_id, node_id, error_code sem body/CPF) + persistir FlowExecutionLog{status:"circuit_break"} — ignorar violacao UNIQUE (FR-023)
+- [x] 3.1.5 Implementar `logCompleted`: persistir FlowExecutionLog{status:"completed"} — idem para UNIQUE
+- [x] 3.1.6 Criar `internal/flowengine/doc.go`
 
 ### 3.2 No wait `[C]`
 
 Ref: plan.md §3.2, spec.md §FR-012
 
-- [ ] 3.2.1 Criar `internal/flowengine/node_wait.go`: `executeWait(ctx, node)` com decode de `WaitConfig`; validar `duration_seconds` em [1, 3600] (retornar erro → circuit-break se fora)
-- [ ] 3.2.2 Implementar espera via `select { case <-time.After(...): return nil; case <-ctx.Done(): return ctx.Err() }` para cancelamento limpo
+- [x] 3.2.1 Criar `internal/flowengine/node_wait.go`: `executeWait(ctx, node)` com decode de `WaitConfig`; validar `duration_seconds` em [1, 3600] (retornar erro → circuit-break se fora)
+- [x] 3.2.2 Implementar espera via `select { case <-time.After(...): return nil; case <-ctx.Done(): return ctx.Err() }` para cancelamento limpo
 
 ### 3.3 No https_call `[C]`
 
 Ref: plan.md §3.3, spec.md §FR-014, security CHK001
 
-- [ ] 3.3.1 Criar `internal/flowengine/node_https.go`: `executeHTTPSCall(ctx, node, execCtx)` com decode de `HTTPSCallConfig`; interpolar body e headers via `flow.InterpolateVariables`
-- [ ] 3.3.2 Aplicar timeout por no: default 30s, cap 300s (CL-005); drenar body da resposta; aceitar qualquer HTTP status (FR-014)
-- [ ] 3.3.3 **[SEC-SSRF]** Antes de disparar: resolver hostname da URL; bloquear IPs RFC 1918 (10.x, 172.16-31.x, 192.168.x), link-local (169.254.x), loopback (127.x) e IPv6 (::1); retornar erro `"https_call: SSRF bloqueado: alvo em range proibido"` → circuit-break (security CHK001)
+- [x] 3.3.1 Criar `internal/flowengine/node_https.go`: `executeHTTPSCall(ctx, node, execCtx)` com decode de `HTTPSCallConfig`; interpolar body e headers via `flow.InterpolateVariables`
+- [x] 3.3.2 Aplicar timeout por no: default 30s, cap 300s (CL-005); drenar body da resposta; aceitar qualquer HTTP status (FR-014)
+- [x] 3.3.3 **[SEC-SSRF]** Antes de disparar: resolver hostname da URL; bloquear IPs RFC 1918 (10.x, 172.16-31.x, 192.168.x), link-local (169.254.x), loopback (127.x) e IPv6 (::1); retornar erro `"https_call: SSRF bloqueado: alvo em range proibido"` → circuit-break (security CHK001)
 
 ### 3.4 Nos background `[C]`
 
 Ref: plan.md §3.4, spec.md §FR-013/FR-015
 
-- [ ] 3.4.1 Exportar `ResizeImageJPEG` em `internal/hikvision/client_bootpic.go` (renomear de minuscula para maiuscula; ajustar referencias internas ao pacote)
-- [ ] 3.4.2 Criar `internal/flowengine/node_background.go`: `executeChangeBackground(ctx, node, device)` — ler imagem de disco via `bgImageRepo.FindByID` + `os.ReadFile`, redimensionar 600x1024 JPEG, `UploadStandbyPicture`, `EnableCustomStandby`
-- [ ] 3.4.3 Implementar `executeQRCodeBackground(ctx, node, execCtx, device)` — gerar QR PNG via `github.com/skip2/go-qrcode`, interpolar content_template, redimensionar, upload via mesmo caminho do no 4
+- [x] 3.4.1 Exportar `ResizeImageJPEG` em `internal/hikvision/client_bootpic.go` (renomear de minuscula para maiuscula; ajustar referencias internas ao pacote)
+- [x] 3.4.2 Criar `internal/flowengine/node_background.go`: `executeChangeBackground(ctx, node, device)` — ler imagem de disco via `bgImageRepo.FindByID` + `os.ReadFile`, redimensionar 600x1024 JPEG, `UploadStandbyPicture`, `EnableCustomStandby`
+- [x] 3.4.3 Implementar `executeQRCodeBackground(ctx, node, execCtx, device)` — gerar QR PNG via `github.com/skip2/go-qrcode`, interpolar content_template, redimensionar, upload via mesmo caminho do no 4
 
 ### 3.5 Nos bloqueados placeholder `[A]`
 
 Ref: plan.md §3.5, spec.md §Dependencias
 
-- [ ] 3.5.1 Criar `internal/flowengine/node_blocked.go`: `executeBlocked(node) error` para camera_on, camera_off e send_message; retornar erro descritivo (BLOCKED_ISAPI / BLOCKED_API) que aciona circuit-break; nao executar nenhuma chamada externa
+- [x] 3.5.1 Criar `internal/flowengine/node_blocked.go`: `executeBlocked(node) error` para camera_on, camera_off e send_message; retornar erro descritivo (BLOCKED_ISAPI / BLOCKED_API) que aciona circuit-break; nao executar nenhuma chamada externa
 
 ### 3.6 Bound de concorrencia e timeout global `[C]`
 
 Ref: performance CHK005, CHK009; plan.md §3.1
 
-- [ ] 3.6.1 Adicionar semaforo (canal bufferizado) no Engine com capacidade configuravel (default 10) para limitar goroutines de execucao simultaneas; se semaforo cheio, descartar evento com log warning (nao bloquear o webhook)
-- [ ] 3.6.2 Aplicar `context.WithTimeout(ctx, 30*time.Minute)` no inicio de `execute`; circuit-break registra timeout global como status "circuit_break" com error "timeout global atingido"
+- [x] 3.6.1 Adicionar semaforo (canal bufferizado) no Engine com capacidade configuravel (default 10) para limitar goroutines de execucao simultaneas; se semaforo cheio, descartar evento com log warning (nao bloquear o webhook)
+- [x] 3.6.2 Aplicar `context.WithTimeout(ctx, 30*time.Minute)` no inicio de `execute`; circuit-break registra timeout global como status "circuit_break" com error "timeout global atingido"
 
 ### 3.7 Guarda de idempotencia de side-effects `[C]`
 
 Ref: api CHK007, Constituicao §II
 
-- [ ] 3.7.1 No inicio de `execute`, antes de entrar no loop de nos, verificar se ja existe `FlowExecutionLog` com `event_key` E status `completed`; se sim, retornar imediatamente (skip silencioso) — resolve tensao FR-023 vs Constituicao §II
-- [ ] 3.7.2 Documentar no codigo a semantica: "at-least-once com deduplicacao por event_key; side-effects nao se repetem se execucao anterior concluiu com sucesso"
+- [x] 3.7.1 No inicio de `execute`, antes de entrar no loop de nos, verificar se ja existe `FlowExecutionLog` com `event_key` E status `completed`; se sim, retornar imediatamente (skip silencioso) — resolve tensao FR-023 vs Constituicao §II
+- [x] 3.7.2 Documentar no codigo a semantica: "at-least-once com deduplicacao por event_key; side-effects nao se repetem se execucao anterior concluiu com sucesso"
 
 ### 3.8 Cifragem de segredos na config de no `[C]`
 
@@ -150,15 +150,15 @@ Ref: security CHK005/CHK006, Constituicao §segredos
 
 - [ ] 3.8.1 Implementar mecanismo de campo selado: no PUT /flows/{id}, API reconhece headers com valor prefixado `"__secret__:valor"` → cifra com AES-256-GCM via `internal/secrets.Encrypt()` e persiste em `sealed_config` JSONB; campo `config` armazena a chave com `"__sealed__"` como valor-sentinela
 - [ ] 3.8.2 No GET /flows/{id}, mascarar valores selados: retornar `"__secret__:***"` em vez do valor real (CHK006)
-- [ ] 3.8.3 Em `executeHTTPSCall`, decifrar valores selados de headers via `internal/secrets.Decrypt()` antes de construir a requisicao; nunca logar o valor decifrado
+- [x] 3.8.3 Em `executeHTTPSCall`, decifrar valores selados de headers via `internal/secrets.Decrypt()` antes de construir a requisicao; nunca logar o valor decifrado
 
 ### 3.9 Mascaramento em logs do motor `[C]`
 
 Ref: security CHK007, Constituicao §logging, spec.md §FR-021
 
-- [ ] 3.9.1 Importar e usar `internal/logging` em todos os pontos de log do pacote `flowengine` (nao `slog` direto)
-- [ ] 3.9.2 Em `circuitBreak`: logar apenas `flow_id`, `device_id`, `node_id`, `error_code` — nunca o body interpolado nem headers de auth; aplicar `domain.MaskCPFForLog` no CPF antes de logar
-- [ ] 3.9.3 Em `executeHTTPSCall`: ao logar erro, usar apenas `error_code` sem URL com parametros nem body (pode conter CPF/token interpolado)
+- [x] 3.9.1 Importar e usar `internal/logging` em todos os pontos de log do pacote `flowengine` (nao `slog` direto)
+- [x] 3.9.2 Em `circuitBreak`: logar apenas `flow_id`, `device_id`, `node_id`, `error_code` — nunca o body interpolado nem headers de auth; aplicar `domain.MaskCPFForLog` no CPF antes de logar
+- [x] 3.9.3 Em `executeHTTPSCall`: ao logar erro, usar apenas `error_code` sem URL com parametros nem body (pode conter CPF/token interpolado)
 
 ---
 
@@ -275,15 +275,15 @@ Ref: plan.md §8.1
 
 Ref: plan.md §8.2
 
-- [ ] 6.2.1 `TestEngine_NoFlow`: device sem fluxo → TriggerForDevice retorna sem executar
-- [ ] 6.2.2 `TestEngine_InvalidFlow`: fluxo com ciclo → circuit-break imediato no validate
-- [ ] 6.2.3 `TestEngine_WaitNode`: start→wait(1s)→end executa em ~1s
-- [ ] 6.2.4 `TestEngine_HTTPSCallTimeout`: servidor nao-responsivo + timeout 1s → circuit-break
-- [ ] 6.2.5 `TestEngine_DecisionValid`, `TestEngine_DecisionInvalid`: event.authorized true/false → ramo correto
-- [ ] 6.2.6 `TestEngine_BlockedNode_Camera`, `TestEngine_BlockedNode_Message`: circuit-break com mensagem BLOCKED_*
-- [ ] 6.2.7 `TestEngine_ConcurrentExecutions`: dois disparos simultaneos → 2 goroutines independentes sem interferencia de estado
-- [ ] 6.2.8 `TestEngine_SSRFBlocked`: URL apontando para 192.168.x.x → circuit-break (3.3.3)
-- [ ] 6.2.9 `TestEngine_IdempotencyGuard`: segundo evento com mesmo event_key apos completed → skip silencioso (3.7)
+- [x] 6.2.1 `TestEngine_NoFlow`: device sem fluxo → TriggerForDevice retorna sem executar
+- [x] 6.2.2 `TestEngine_InvalidFlow`: fluxo com ciclo → circuit-break imediato no validate
+- [x] 6.2.3 `TestEngine_WaitNode`: start→wait(1s)→end executa em ~1s
+- [x] 6.2.4 `TestEngine_HTTPSCallTimeout`: servidor nao-responsivo + timeout 1s → circuit-break
+- [x] 6.2.5 `TestEngine_DecisionValid`, `TestEngine_DecisionInvalid`: event.authorized true/false → ramo correto
+- [x] 6.2.6 `TestEngine_BlockedNode_Camera`, `TestEngine_BlockedNode_Message`: circuit-break com mensagem BLOCKED_*
+- [x] 6.2.7 `TestEngine_ConcurrentExecutions`: dois disparos simultaneos → 2 goroutines independentes sem interferencia de estado
+- [x] 6.2.8 `TestEngine_SSRFBlocked`: URL apontando para 192.168.x.x → circuit-break (3.3.3)
+- [x] 6.2.9 `TestEngine_IdempotencyGuard`: segundo evento com mesmo event_key apos completed → skip silencioso (3.7)
 
 ### 6.3 Testes de integracao repositorios `[A]`
 
