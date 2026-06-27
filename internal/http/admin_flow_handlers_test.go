@@ -129,6 +129,10 @@ func (m *mockDeviceAdminRepo) GetDeviceByID(_ context.Context, id int64) (*domai
 	return nil, pgx.ErrNoRows
 }
 
+func (m *mockDeviceAdminRepo) DeleteDevice(_ context.Context, _ int64) error {
+	return nil
+}
+
 // --- Helpers ---
 
 func newTestFlowConfig() AdminFlowsConfig {

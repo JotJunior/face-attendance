@@ -108,6 +108,21 @@ func (r *DeviceRepository) SetWebhookConfiguredByID(ctx context.Context, id int6
 	return err
 }
 
+// DeleteDevice remove um dispositivo por ID. Os FKs dependentes são tratados pelo
+// schema (migration 000010): attendance_events.device_id → SET NULL (preserva
+// histórico); member_processing_status e flow_execution_logs → CASCADE; flows →
+// SET NULL (desvincula). Retorna pgx.ErrNoRows se nenhum device foi removido.
+func (r *DeviceRepository) DeleteDevice(ctx context.Context, id int64) error {
+	tag, err := r.pool.Exec(ctx, `DELETE FROM devices WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
+}
+
 // CountDevicesByActivity conta dispositivos ativos e inativos conforme thresholdHours.
 // Um dispositivo é considerado ativo se last_heartbeat_at >= now() - thresholdHours.
 // Usa uma única query com CASE para evitar N+1 (CHK-P12).

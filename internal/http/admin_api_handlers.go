@@ -33,6 +33,7 @@ type deviceAdminRepo interface {
 	CountDevicesByActivity(ctx context.Context, thresholdHours int) (active, inactive int, err error)
 	ListDevicesAll(ctx context.Context) ([]domain.Device, error)
 	GetDeviceByID(ctx context.Context, id int64) (*domain.Device, error)
+	DeleteDevice(ctx context.Context, id int64) error
 }
 
 // attendanceAdminRepo define os métodos do AttendanceEventRepository usados pelos handlers admin.
@@ -234,6 +235,43 @@ func AdminDeviceDetailHandler(cfg AdminAPIConfig) http.Handler {
 		resp := toDeviceResponse(*device, cfg.DeviceOfflineThreshold)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp) //nolint:errcheck
+	})
+}
+
+// DeleteDeviceHandler serve DELETE /admin/api/devices/{id} — remove o dispositivo.
+// Os FKs dependentes são tratados pelo schema (migration 000010): histórico de
+// presença é preservado (SET NULL); estado de provisionamento e logs de fluxo
+// somem (CASCADE); fluxos vinculados são desvinculados (SET NULL).
+func DeleteDeviceHandler(cfg AdminAPIConfig) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodDelete {
+			adminJSONError(w, http.StatusMethodNotAllowed, "método não permitido")
+			return
+		}
+
+		idStr := extractLastPathSegment(r.URL.Path)
+		deviceID, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil || deviceID <= 0 {
+			adminJSONError(w, http.StatusBadRequest, "id de dispositivo inválido")
+			return
+		}
+
+		if err := cfg.DeviceRepo.DeleteDevice(r.Context(), deviceID); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				adminJSONError(w, http.StatusNotFound, "dispositivo não encontrado")
+				return
+			}
+			if cfg.Logger != nil {
+				cfg.Logger.Error("admin_device_delete", "", "", "falha ao remover device", err)
+			}
+			adminJSONError(w, http.StatusServiceUnavailable, "serviço temporariamente indisponível")
+			return
+		}
+
+		if cfg.Logger != nil {
+			cfg.Logger.Info("admin_device_delete", strconv.FormatInt(deviceID, 10), "", "dispositivo removido")
+		}
+		w.WriteHeader(http.StatusNoContent)
 	})
 }
 

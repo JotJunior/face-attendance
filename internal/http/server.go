@@ -161,7 +161,7 @@ func NewServer(cfg ServerConfig) *Server {
 //	/admin/api/devices/{id}/webhooks/{webhook_id}      → DeleteDeviceWebhookHandler
 // adminDevicesRouter routing table (all paths require SessionMiddleware — applied by caller):
 //
-//	/admin/api/devices/{id}                                          → AdminDeviceDetailHandler
+//	/admin/api/devices/{id}                                          → AdminDeviceDetailHandler (GET) / DeleteDeviceHandler (DELETE)
 //	/admin/api/devices/{id}/credentials                              → PutDeviceCredentialsHandler
 //	/admin/api/devices/{id}/actions/reboot                          → PostDeviceRebootHandler
 //	/admin/api/devices/{id}/actions/factory-reset                   → PostDeviceFactoryResetHandler
@@ -187,6 +187,7 @@ func NewServer(cfg ServerConfig) *Server {
 //	/admin/api/devices/{id}/preferences/face-capture                → PostDeviceFaceCaptureHandler (FR-018)
 func adminDevicesRouter(apiCfg AdminAPIConfig, dcCfg DeviceConfigConfig) http.Handler {
 	detailHandler := AdminDeviceDetailHandler(apiCfg)
+	deleteDeviceH := DeleteDeviceHandler(apiCfg)
 
 	// Device-config handlers (FASE 4 — tasks.md §4.2–4.6)
 	credentialsH := PutDeviceCredentialsHandler(dcCfg)
@@ -235,6 +236,10 @@ func adminDevicesRouter(apiCfg AdminAPIConfig, dcCfg DeviceConfigConfig) http.Ha
 
 		if len(segs) == 0 {
 			// /admin/api/devices/{id}
+			if r.Method == http.MethodDelete {
+				deleteDeviceH.ServeHTTP(w, r)
+				return
+			}
 			detailHandler.ServeHTTP(w, r)
 			return
 		}

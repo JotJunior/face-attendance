@@ -32,6 +32,7 @@ func (s *smokeRepos) ListDevicesAll(ctx context.Context) ([]domain.Device, error
 func (s *smokeRepos) GetDeviceByID(ctx context.Context, id int64) (*domain.Device, error) {
 	return nil, fmt.Errorf("not found")
 }
+func (s *smokeRepos) DeleteDevice(ctx context.Context, id int64) error { return nil }
 func (s *smokeRepos) CountAttendanceSince(ctx context.Context, since time.Time) (int, error) {
 	return 3, nil
 }

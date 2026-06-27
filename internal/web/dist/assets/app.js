@@ -869,6 +869,11 @@ function cfgSystem(dev) {
           <div><div style="font-size:12.5px; font-weight:500;">Reset de fábrica</div><div style="font-size:11px; color:var(--text-3);">Irreversível — apaga usuários, faces, cartões e configurações.</div></div>
           <button class="btn btn-danger sm" id="sys-factory-btn">Reset de fábrica</button>
         </div>
+        <div style="height:1px; background:var(--border);"></div>
+        <div class="row-between">
+          <div><div style="font-size:12.5px; font-weight:500;">Remover dispositivo</div><div style="font-size:11px; color:var(--text-3);">Remove do sistema. O histórico de presença é preservado (sem vínculo); fluxos vinculados são desvinculados. Não apaga nada no leitor.</div></div>
+          <button class="btn btn-danger sm" id="sys-delete-device-btn">Remover</button>
+        </div>
       </div>
     </div>`;
 }
@@ -973,6 +978,36 @@ function wireCfgSystem(dev) {
               dev.webhook_configured = d.webhook_configured ?? false;
               state.devices.byId[dev.id] = dev;
               showToast('success', 'Reset de fábrica iniciado. Webhook removido do registro.');
+            } else {
+              let msg = `Erro (status ${res.status}).`; try { const d2 = await res.json(); if (d2.error) msg = d2.error; } catch {}
+              showToast('error', msg);
+            }
+          } catch (err) { netError(err); }
+        },
+      });
+    });
+  }
+
+  // Remover dispositivo (DELETE /admin/api/devices/{id})
+  const delDevBtn = $('sys-delete-device-btn');
+  if (delDevBtn) {
+    delDevBtn.addEventListener('click', () => {
+      openConfirm({
+        title: 'Remover dispositivo', confirmLabel: 'Remover do sistema', tone: 'danger', strong: true,
+        body: 'Remove o dispositivo do sistema. O histórico de presença é preservado (sem vínculo ao device), os fluxos vinculados são desvinculados e o estado de provisionamento é apagado. Nada é apagado no leitor físico. Se ele continuar enviando heartbeats, voltará a se registrar.',
+        target: cfgTargetOf(dev),
+        onConfirm: async () => {
+          try {
+            const res = await apiDelete(`devices/${dev.id}`);
+            if (res.status === 401) return;
+            if (res.ok || res.status === 204) {
+              delete state.devices.byId[dev.id];
+              state.devices.loaded = false; // força recarregar a lista
+              showToast('success', 'Dispositivo removido.');
+              navigate('devices');
+            } else if (res.status === 404) {
+              showToast('error', 'Dispositivo não encontrado (já removido?).');
+              navigate('devices');
             } else {
               let msg = `Erro (status ${res.status}).`; try { const d2 = await res.json(); if (d2.error) msg = d2.error; } catch {}
               showToast('error', msg);
