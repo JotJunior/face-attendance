@@ -36,20 +36,20 @@ Data model: `docs/specs/face-flow/data-model.md`
 
 Ref: spec.md §Key Entities, data-model.md §Migration
 
-- [ ] 1.1.1 Criar `migrations/000008_create_flows.up.sql` com tabelas `flows` (BIGSERIAL, nome, status CHECK, device_id UNIQUE nullable FK), `background_images`, `flow_execution_logs` (event_key UNIQUE, status CHECK completed/circuit_break, failed_node_id nullable)
-- [ ] 1.1.2 Criar indices: `idx_flows_status`, `idx_flows_device_id WHERE NOT NULL`, `idx_flow_execution_logs_flow_id`, `idx_flow_execution_logs_device_id`, `idx_flow_execution_logs_started_at DESC`
-- [ ] 1.1.3 Criar `migrations/000008_create_flows.down.sql`: DROP TABLE flow_execution_logs, background_images, flows (nessa ordem, FK)
-- [ ] 1.1.4 Criar `migrations/000009_flows_sealed_config.up.sql`: adicionar coluna `sealed_config JSONB` em `flows` para armazenar segredos cifrados de headers de no HTTPS (dependencia de 3.8)
-- [ ] 1.1.5 Criar `migrations/000009_flows_sealed_config.down.sql`: DROP COLUMN sealed_config
+- [x] 1.1.1 Criar `migrations/000008_create_flows.up.sql` com tabelas `flows` (BIGSERIAL, nome, status CHECK, device_id UNIQUE nullable FK), `background_images`, `flow_execution_logs` (event_key UNIQUE, status CHECK completed/circuit_break, failed_node_id nullable)
+- [x] 1.1.2 Criar indices: `idx_flows_status`, `idx_flows_device_id WHERE NOT NULL`, `idx_flow_execution_logs_flow_id`, `idx_flow_execution_logs_device_id`, `idx_flow_execution_logs_started_at DESC`
+- [x] 1.1.3 Criar `migrations/000008_create_flows.down.sql`: DROP TABLE flow_execution_logs, background_images, flows (nessa ordem, FK)
+- [x] 1.1.4 Criar `migrations/000009_flows_sealed_config.up.sql`: adicionar coluna `sealed_config JSONB` em `flows` para armazenar segredos cifrados de headers de no HTTPS (dependencia de 3.8)
+- [x] 1.1.5 Criar `migrations/000009_flows_sealed_config.down.sql`: DROP COLUMN sealed_config
 
 ### 1.2 Dominio `internal/flow` `[C]`
 
 Ref: plan.md §2, data-model.md §Entidades Go
 
-- [ ] 1.2.1 Criar `internal/flow/flow.go`: `NodeType` (9 consts: start, camera_on, camera_off, wait, change_background, https_call, qrcode_background, decision, send_message), `FlowNode`, `FlowEdge`, `Flow`, configs tipadas (`WaitConfig`, `ChangeBackgroundConfig`, `HTTPSCallConfig`, `QRCodeBackgroundConfig`, `SendMessageConfig`); helpers `FindNodeByType`, `FindNodeByID`, `OutgoingEdges`, `NextNodeID`, `NextNodeIDByLabel`
-- [ ] 1.2.2 Criar `internal/flow/validator.go`: `Validate(*Flow) []ValidationError` com (1) exatamente-1-start (erros no_start_node/multiple_start_nodes), (2) decision exige 2 edges com labels "valid" e "invalid", (3) referencias dangling, (4) DFS white/gray/black para deteccao de ciclos; struct `ValidationError{Code, Message, NodeID}`
-- [ ] 1.2.3 Criar `internal/flow/interpolator.go`: `InterpolateVariables(template string, ctx ExecutionContext) string`; regexp `\[([a-z][a-z0-9._]*)\]`; vocabulario fechado de 10 variaveis (user.name, user.document, user.status, user.mobile, device.id, device.identifier, device.ip, device.mac, event.authorized, event.datetime); variavel ausente → ""; sintaxe invalida → preservar literal
-- [ ] 1.2.4 Criar `internal/flow/doc.go` com descricao do pacote
+- [x] 1.2.1 Criar `internal/flow/flow.go`: `NodeType` (9 consts: start, camera_on, camera_off, wait, change_background, https_call, qrcode_background, decision, send_message), `FlowNode`, `FlowEdge`, `Flow`, configs tipadas (`WaitConfig`, `ChangeBackgroundConfig`, `HTTPSCallConfig`, `QRCodeBackgroundConfig`, `SendMessageConfig`); helpers `FindNodeByType`, `FindNodeByID`, `OutgoingEdges`, `NextNodeID`, `NextNodeIDByLabel`
+- [x] 1.2.2 Criar `internal/flow/validator.go`: `Validate(*Flow) []ValidationError` com (1) exatamente-1-start (erros no_start_node/multiple_start_nodes), (2) decision exige 2 edges com labels "valid" e "invalid", (3) referencias dangling, (4) DFS white/gray/black para deteccao de ciclos; struct `ValidationError{Code, Message, NodeID}`
+- [x] 1.2.3 Criar `internal/flow/interpolator.go`: `InterpolateVariables(template string, ctx ExecutionContext) string`; regexp `\[([a-z][a-z0-9._]*)\]`; vocabulario fechado de 10 variaveis (user.name, user.document, user.status, user.mobile, device.id, device.identifier, device.ip, device.mac, event.authorized, event.datetime); variavel ausente → ""; sintaxe invalida → preservar literal
+- [x] 1.2.4 Criar `internal/flow/doc.go` com descricao do pacote
 
 ---
 
