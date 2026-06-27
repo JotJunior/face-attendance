@@ -61,27 +61,27 @@ Ref: plan.md §2, data-model.md §Entidades Go
 
 Ref: plan.md §4.1
 
-- [ ] 2.1.1 Criar interface `FlowRepository` em `internal/repository/flow_repository.go` (Create, FindByID, FindAll, FindActiveByDeviceID, Update, SetStatus, SetDeviceID, Delete)
-- [ ] 2.1.2 Implementar `PgxFlowRepository`: serializar nodes/edges via `json.Marshal`/`Unmarshal` para JSONB; `FindActiveByDeviceID`: SELECT WHERE device_id=$1 AND status='active'
-- [ ] 2.1.3 `SetDeviceID(ctx, flowID, deviceID *int64)`: nil → SET device_id=NULL; &id → UPDATE com constraint UNIQUE; retornar erro de negocio `409` na violacao pgx `23505`
-- [ ] 2.1.4 Registrar construtor `NewPgxFlowRepository(pool)` para injecao em main.go
+- [x] 2.1.1 Criar interface `FlowRepository` em `internal/repository/flow_repository.go` (Create, FindByID, FindAll, FindActiveByDeviceID, Update, SetStatus, SetDeviceID, Delete)
+- [x] 2.1.2 Implementar `PgxFlowRepository`: serializar nodes/edges via `json.Marshal`/`Unmarshal` para JSONB; `FindActiveByDeviceID`: SELECT WHERE device_id=$1 AND status='active'
+- [x] 2.1.3 `SetDeviceID(ctx, flowID, deviceID *int64)`: nil → SET device_id=NULL; &id → UPDATE com constraint UNIQUE; retornar erro de negocio `409` na violacao pgx `23505`
+- [x] 2.1.4 Registrar construtor `NewPgxFlowRepository(pool)` para injecao em main.go
 
 ### 2.2 BackgroundImageRepository pgx `[A]`
 
 Ref: plan.md §4.2
 
-- [ ] 2.2.1 Criar interface `BackgroundImageRepository` em `internal/repository/background_image_repository.go` (Create, FindByID, FindAll, Delete)
-- [ ] 2.2.2 Implementar `PgxBackgroundImageRepository` com construtor `NewPgxBackgroundImageRepository(pool)`
-- [ ] 2.2.3 `Delete`: remover apenas registro do DB (handler HTTP remove arquivo em disco)
+- [x] 2.2.1 Criar interface `BackgroundImageRepository` em `internal/repository/background_image_repository.go` (Create, FindByID, FindAll, Delete)
+- [x] 2.2.2 Implementar `PgxBackgroundImageRepository` com construtor `NewPgxBackgroundImageRepository(pool)`
+- [x] 2.2.3 `Delete`: remover apenas registro do DB (handler HTTP remove arquivo em disco)
 
 ### 2.3 FlowExecutionLogRepository pgx `[C]`
 
 Ref: plan.md §4.3, spec.md §CL-001
 
-- [ ] 2.3.1 Criar interface `FlowExecutionLogRepository` em `internal/repository/flow_execution_log_repository.go` (Create, FindByFlowID com limit/offset)
-- [ ] 2.3.2 Implementar `PgxFlowExecutionLogRepository`: `Create` idempotente — violacao UNIQUE em event_key (pgx code `23505`) → retornar nil (nao e erro de negocio; e idempotencia de execucoes concorrentes FR-023)
-- [ ] 2.3.3 `FindByFlowID`: SELECT WHERE flow_id=$1 ORDER BY started_at DESC LIMIT $2 OFFSET $3
-- [ ] 2.3.4 Registrar construtor `NewPgxFlowExecutionLogRepository(pool)`
+- [x] 2.3.1 Criar interface `FlowExecutionLogRepository` em `internal/repository/flow_execution_log_repository.go` (Create, FindByFlowID com limit/offset)
+- [x] 2.3.2 Implementar `PgxFlowExecutionLogRepository`: `Create` idempotente — violacao UNIQUE em event_key (pgx code `23505`) → retornar nil (nao e erro de negocio; e idempotencia de execucoes concorrentes FR-023)
+- [x] 2.3.3 `FindByFlowID`: SELECT WHERE flow_id=$1 ORDER BY started_at DESC LIMIT $2 OFFSET $3
+- [x] 2.3.4 Registrar construtor `NewPgxFlowExecutionLogRepository(pool)`
 
 ---
 
