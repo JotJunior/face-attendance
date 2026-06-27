@@ -265,11 +265,11 @@ Ref: plan.md §7, spec.md §CL-001
 
 Ref: plan.md §8.1
 
-- [ ] 6.1.1 `TestValidate_NoStart`, `TestValidate_MultipleStart`: fluxo sem/com duplicado nó start
-- [ ] 6.1.2 `TestValidate_Cycle`: A→B→C→A detecta ciclo
-- [ ] 6.1.3 `TestValidate_DecisionMissingBranch`, `TestValidate_DecisionMissingLabel`: decision com 1 edge ou sem label "valid"/"invalid"
-- [ ] 6.1.4 `TestValidate_DanglingReference`, `TestValidate_ValidFlow`: edge para no inexistente; fluxo valido completo com bifurcacao
-- [ ] 6.1.5 `TestInterpolate_AllVars`, `TestInterpolate_MissingVar`, `TestInterpolate_UnknownVar`, `TestInterpolate_InvalidSyntax`
+- [x] 6.1.1 `TestValidate_NoStart`, `TestValidate_MultipleStart`: fluxo sem/com duplicado nó start
+- [x] 6.1.2 `TestValidate_Cycle`: A→B→C→A detecta ciclo
+- [x] 6.1.3 `TestValidate_DecisionMissingBranch`, `TestValidate_DecisionMissingLabel`: decision com 1 edge ou sem label "valid"/"invalid"
+- [x] 6.1.4 `TestValidate_DanglingReference`, `TestValidate_ValidFlow`: edge para no inexistente; fluxo valido completo com bifurcacao
+- [x] 6.1.5 `TestInterpolate_AllVars`, `TestInterpolate_MissingVar`, `TestInterpolate_UnknownVar`, `TestInterpolate_InvalidSyntax`
 
 ### 6.2 Testes unitarios internal/flowengine `[C]`
 
@@ -289,17 +289,17 @@ Ref: plan.md §8.2
 
 Ref: plan.md §8.3; build tag `integration`; requer `make docker-up`
 
-- [ ] 6.3.1 `TestFlowRepository_CreateFind`, `TestFlowRepository_UniqueDeviceID`
-- [ ] 6.3.2 `TestFlowRepository_FindActiveByDeviceID`: ativo encontrado; inativo nao
-- [ ] 6.3.3 `TestFlowExecutionLog_IdempotentEventKey`: segundo insert com mesmo event_key → nil
+- [x] 6.3.1 `TestFlowRepository_CreateFind`, `TestFlowRepository_UniqueDeviceID`
+- [x] 6.3.2 `TestFlowRepository_FindActiveByDeviceID`: ativo encontrado; inativo nao
+- [x] 6.3.3 `TestFlowExecutionLog_IdempotentEventKey`: segundo insert com mesmo event_key → nil
 
 ### 6.4 Testes de integracao webhook `[A]`
 
 Ref: plan.md §8.4; build tag `integration`; requer DB ativo
 
-- [ ] 6.4.1 `TestWebhook_AccessControllerEvent_TriggersEngine`: POST evento → flow engine disparado
-- [ ] 6.4.2 `TestWebhook_HeartbeatIgnoredByEngine`: heartbeat → engine NAO disparado
-- [ ] 6.4.3 `TestWebhook_NoFlowForDevice`: device sem fluxo → webhook 200 sem erro
+- [x] 6.4.1 `TestWebhook_AccessControllerEvent_TriggersEngine`: POST evento → flow engine disparado
+- [x] 6.4.2 `TestWebhook_HeartbeatIgnoredByEngine`: heartbeat → engine NAO disparado
+- [x] 6.4.3 `TestWebhook_NoFlowForDevice`: device sem fluxo → webhook 200 sem erro
 
 ---
 
