@@ -372,3 +372,68 @@ Implementação dos nós marcados BLOCKED_* prossegue como placeholder visual
 no editor. O motor de execução MUST detectar nós BLOCKED em tempo de execução
 e acionar circuit-break com log descritivo (`nó do tipo X requer contrato não
 disponível — bloqueio humano pendente`).
+
+---
+
+## Clarifications
+
+> Resolvidas na fase clarify (onda-002). Itens marcados PENDING_HUMAN aguardam
+> resposta do operador antes de avançar para plan.
+
+### CL-001 — FlowExecutionLog: tabela PostgreSQL + slog complementar (dec-009, score 2)
+
+`FlowExecutionLog` é uma **tabela PostgreSQL** (entidade persistida) para auditoria
+consultável pelo painel admin. O campo `event_key` é chave de idempotência (unique
+constraint no DB). A chamada `slog` descrita em FR-021 (`log estruturado com campos
+device_id, flow_id, node_id, error`) é **complementar** ao registro em DB, não
+substituta. Ambos coexistem: DB para auditoria, slog para observabilidade operacional.
+
+**Fonte**: Key Entities (FlowExecutionLog com event_key de idempotência +
+`started_at/finished_at` + status enum + propósito declarado "auditoria") +
+nota de infraestrutura ("fluxos e vinculações são salvos no PostgreSQL existente").
+
+### CL-002 — Editor visual integra na SPA admin existente (dec-010, score 2)
+
+O canvas interativo (FR-002) integra na SPA admin existente em `internal/web/dist`
+(vanilla JS, roteamento por hash, embed.FS). Não é necessária uma implementação
+frontend separada. Telas de gerenciamento de fluxos seguem o padrão de telas
+existentes do painel.
+
+**Fonte**: FR-001 ("O painel admin MUST incluir tela de gerenciamento de fluxos") +
+`internal/web/dist` é o único painel admin do projeto (CLAUDE.md).
+
+### CL-003 — Edição de fluxo ativo: execução em andamento usa snapshot do início (dec-011, score 2)
+
+Quando o admin salva edições em um fluxo ativo enquanto há uma execução em andamento,
+**a execução em andamento usa o snapshot capturado no início**. As edições só afetam
+execuções subsequentes. Comportamento análogo ao edge case de desativação/desvinculação
+durante execução.
+
+**Fonte**: spec.md Edge Cases ("execução em andamento termina normalmente;
+a desvinculação só afeta execuções subsequentes") + goroutine captura o fluxo ao
+iniciar (nota de infraestrutura).
+
+### CL-004 — Mecanismo de identificação do nó de início [PENDING_HUMAN] (block-001)
+
+**Aguardando resposta do operador.** A spec exige "nó de início" (FR-005, FR-022)
+mas `FlowNode` não tem campo `is_start` nem tipo especial de início. Três opções:
+
+- **(A)** Flag booleano `is_start` na entidade FlowNode — exige campo DB novo.
+- **(B)** Nó topológico = nó sem arestas de entrada — derivado de FlowEdge, zero
+  custo de schema, exige exatamente um root.
+- **(C)** Tipo de nó dedicado `start` — seria o 9.º tipo, exigiria atualizar
+  a enumeração de tipos.
+
+Responder com A, B ou C para desbloquear o plan.
+
+### CL-005 — Timeout HTTPS do nó 5 [PENDING_HUMAN] (block-002)
+
+**Aguardando resposta do operador.** FR-021 cita "timeout de HTTPS" como gatilho de
+circuit-break mas não define o valor. Três opções:
+
+- **(A)** Default fixo no código (ex.: 30s) — sem config de usuário.
+- **(B)** Configurável por nó no editor — campo `timeout_seconds` no JSON de config
+  do FlowNode.
+- **(C)** Configurável globalmente via env var `HTTPS_NODE_TIMEOUT_SECONDS`.
+
+Responder com opção e valor default para desbloquear o plan.
