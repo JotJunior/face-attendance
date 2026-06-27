@@ -20,6 +20,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/jotjunior/face-attendance/internal/domain"
 )
 
@@ -54,6 +56,8 @@ type fakeDeviceRepo struct {
 	listErr          error
 	getResult        *domain.Device
 	getErr           error
+	deleteErr        error
+	deletedID        int64
 }
 
 func (f *fakeDeviceRepo) CountDevicesByActivity(ctx context.Context, thresholdHours int) (int, int, error) {
@@ -66,6 +70,11 @@ func (f *fakeDeviceRepo) ListDevicesAll(ctx context.Context) ([]domain.Device, e
 
 func (f *fakeDeviceRepo) GetDeviceByID(ctx context.Context, id int64) (*domain.Device, error) {
 	return f.getResult, f.getErr
+}
+
+func (f *fakeDeviceRepo) DeleteDevice(ctx context.Context, id int64) error {
+	f.deletedID = id
+	return f.deleteErr
 }
 
 // fakeAttendanceRepo implementa attendanceAdminRepo com dados configuráveis.
@@ -572,5 +581,59 @@ func TestToDeviceResponse_CapacityFields(t *testing.T) {
 	}
 	if resp2.MaxFaces != nil {
 		t.Errorf("MaxFaces: expected nil, got %v", resp2.MaxFaces)
+	}
+}
+
+// --- DeleteDeviceHandler ---
+
+func TestDeleteDeviceHandler_Success(t *testing.T) {
+	dRepo := &fakeDeviceRepo{}
+	h := DeleteDeviceHandler(newTestAdminAPICfg(nil, dRepo, nil))
+
+	req := httptest.NewRequest(http.MethodDelete, "/admin/api/devices/42", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", rec.Code)
+	}
+	if dRepo.deletedID != 42 {
+		t.Errorf("deletedID = %d, want 42", dRepo.deletedID)
+	}
+}
+
+func TestDeleteDeviceHandler_NotFound(t *testing.T) {
+	dRepo := &fakeDeviceRepo{deleteErr: pgx.ErrNoRows}
+	h := DeleteDeviceHandler(newTestAdminAPICfg(nil, dRepo, nil))
+
+	req := httptest.NewRequest(http.MethodDelete, "/admin/api/devices/999", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", rec.Code)
+	}
+}
+
+func TestDeleteDeviceHandler_BadID(t *testing.T) {
+	dRepo := &fakeDeviceRepo{}
+	h := DeleteDeviceHandler(newTestAdminAPICfg(nil, dRepo, nil))
+
+	req := httptest.NewRequest(http.MethodDelete, "/admin/api/devices/abc", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestDeleteDeviceHandler_MethodNotAllowed(t *testing.T) {
+	h := DeleteDeviceHandler(newTestAdminAPICfg(nil, &fakeDeviceRepo{}, nil))
+	req := httptest.NewRequest(http.MethodGet, "/admin/api/devices/42", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want 405", rec.Code)
 	}
 }
