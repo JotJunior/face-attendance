@@ -99,7 +99,11 @@ func checkSSRF(rawURL string) error {
 // executeHTTPSCall implementa o nó https_call:
 //   - Interpola variáveis no body e nos headers (incluindo decifração de selados).
 //   - Aplica guarda SSRF antes de disparar a requisição.
-//   - Aceita qualquer status HTTP (FR-014).
+//   - NÃO faz circuit-break por status HTTP: retorna um RESULTADO AVALIÁVEL
+//     (*bool) = true se a resposta foi 200-204, false caso contrário. Esse
+//     booleano alimenta um eventual nó de decisão seguinte (ramo valid/invalid).
+//     Erros que impedem avaliar o serviço (build do request, SSRF, falha de
+//     conexão) retornam erro → circuit-break.
 //   - Loga apenas error_code — sem URL com parâmetros nem body (task 3.9.3).
 //
 // Ref: tasks.md §3.3, plan.md §3.3.
@@ -108,10 +112,10 @@ func (e *Engine) executeHTTPSCall(
 	node *flow.FlowNode,
 	execCtx flow.ExecutionContext,
 	snapshot *flow.Flow,
-) error {
+) (*bool, error) {
 	var cfg flow.HTTPSCallConfig
 	if err := json.Unmarshal(node.Config, &cfg); err != nil {
-		return fmt.Errorf("https_call: config inválida: %w", err)
+		return nil, fmt.Errorf("https_call: config inválida: %w", err)
 	}
 
 	// Timeout por nó: default 30s, cap 300s (CL-005, tasks.md §3.3.2).
@@ -135,7 +139,7 @@ func (e *Engine) executeHTTPSCall(
 	// Usa e.ssrfChecker (injetável) em vez de chamar checkSSRF diretamente,
 	// para permitir substituição em testes sem comprometer a defesa de produção.
 	if err := e.ssrfChecker(cfg.URL); err != nil {
-		return err
+		return nil, err
 	}
 
 	reqCtx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
@@ -144,7 +148,7 @@ func (e *Engine) executeHTTPSCall(
 	req, err := http.NewRequestWithContext(reqCtx, method, cfg.URL, strings.NewReader(body))
 	if err != nil {
 		// Logar apenas error_code, sem URL (pode conter parâmetros sensíveis — task 3.9.3).
-		return fmt.Errorf("https_call: criar_requisição_falhou")
+		return nil, fmt.Errorf("https_call: criar_requisição_falhou")
 	}
 
 	// Processar headers: interpolar variáveis e decifrar valores selados (task 3.8.3).
@@ -152,7 +156,7 @@ func (e *Engine) executeHTTPSCall(
 		resolvedValue, err := e.resolveHeaderValue(node.ID, headerName, headerValue, execCtx, snapshot)
 		if err != nil {
 			// Não logar o valor real — logar apenas o nome do header (sem conteúdo).
-			return fmt.Errorf("https_call: resolver_header_falhou: %s", headerName)
+			return nil, fmt.Errorf("https_call: resolver_header_falhou: %s", headerName)
 		}
 		req.Header.Set(headerName, resolvedValue)
 	}
@@ -160,14 +164,16 @@ func (e *Engine) executeHTTPSCall(
 	resp, err := e.httpClient.Do(req)
 	if err != nil {
 		// Logar apenas error_code — sem URL nem body (task 3.9.3).
-		return fmt.Errorf("https_call: requisição_falhou")
+		return nil, fmt.Errorf("https_call: requisição_falhou")
 	}
 	defer resp.Body.Close()
 	// Drenar body para reutilizar conexão HTTP (tasks.md §3.3.2).
 	_, _ = io.Copy(io.Discard, resp.Body)
 
-	// Aceitar qualquer status HTTP (FR-014) — não há tratamento de erro por status.
-	return nil
+	// Resultado avaliável para o nó de decisão: 200-204 = true; senão false.
+	// NÃO faz circuit-break por status (FR-014) — o ramo invalid trata o "não-2xx".
+	ok := resp.StatusCode >= 200 && resp.StatusCode <= 204
+	return &ok, nil
 }
 
 // resolveHeaderValue retorna o valor final de um header após interpolação e decifração.

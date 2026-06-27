@@ -405,6 +405,78 @@ func TestEngine_DecisionInvalid(t *testing.T) {
 	}
 }
 
+// gateDecisionFlow: start → gate(https) → decision → valid_node(https) | invalid_node(https).
+// O resultado do nó gate (200-204?) alimenta a decisão.
+func gateDecisionFlow(base string) *flow.Flow {
+	return &flow.Flow{
+		ID: 31,
+		Nodes: []flow.FlowNode{
+			node("s", flow.NodeTypeStart, nil),
+			node("gate", flow.NodeTypeHTTPSCall, flow.HTTPSCallConfig{URL: base + "/gate", Method: "GET"}),
+			node("d", flow.NodeTypeDecision, nil),
+			node("valid_node", flow.NodeTypeHTTPSCall, flow.HTTPSCallConfig{URL: base + "/valid", Method: "GET"}),
+			node("invalid_node", flow.NodeTypeHTTPSCall, flow.HTTPSCallConfig{URL: base + "/invalid", Method: "GET"}),
+		},
+		Edges: []flow.FlowEdge{
+			edge("s", "gate"),
+			edge("gate", "d"),
+			edgeLabeled("d", "valid_node", "valid"),
+			edgeLabeled("d", "invalid_node", "invalid"),
+		},
+	}
+}
+
+// TestEngine_DecisionFromHTTPSuccess: gate https 200-204 → decisão ramo "valid".
+func TestEngine_DecisionFromHTTPSuccess(t *testing.T) {
+	var branch atomic.Value
+	branch.Store("")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/gate":
+			w.WriteHeader(204)
+		case "/valid", "/invalid":
+			branch.Store(r.URL.Path)
+			w.WriteHeader(200)
+		}
+	}))
+	defer srv.Close()
+
+	logRepo := newFakeLogRepo()
+	e := testEngine(gateDecisionFlow(srv.URL), logRepo)
+	e.TriggerForDevice("", testEvent("g1", "authorized"), nil, testDevice())
+	time.Sleep(200 * time.Millisecond)
+
+	if branch.Load() != "/valid" {
+		t.Fatalf("gate 204 → esperado /valid; got %q", branch.Load())
+	}
+}
+
+// TestEngine_DecisionFromHTTPFailure: gate https NÃO-2xx → ramo "invalid", MESMO com
+// face autorizada (o resultado do https sobrescreve o default de reconhecimento).
+func TestEngine_DecisionFromHTTPFailure(t *testing.T) {
+	var branch atomic.Value
+	branch.Store("")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/gate":
+			w.WriteHeader(500)
+		case "/valid", "/invalid":
+			branch.Store(r.URL.Path)
+			w.WriteHeader(200)
+		}
+	}))
+	defer srv.Close()
+
+	logRepo := newFakeLogRepo()
+	e := testEngine(gateDecisionFlow(srv.URL), logRepo)
+	e.TriggerForDevice("", testEvent("g2", "authorized"), nil, testDevice()) // face autorizada
+	time.Sleep(200 * time.Millisecond)
+
+	if branch.Load() != "/invalid" {
+		t.Fatalf("gate 500 + face autorizada → esperado /invalid (override do https); got %q", branch.Load())
+	}
+}
+
 // sampleIdentityTerminalXML é um corpo mínimo válido de IdentityTerminal para o
 // GET do device simulado (campos suficientes para o round-trip de showMode).
 const sampleIdentityTerminalXML = `<?xml version="1.0" encoding="UTF-8"?>
