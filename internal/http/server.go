@@ -31,9 +31,11 @@ type ServerConfig struct {
 	AdminUIEnabled    bool
 	AdminLoginCfg     AdminLoginConfig
 	AdminAPICfg       AdminAPIConfig
-	AdminResyncCfg    AdminResyncConfig   // reenvio individual de membro
-	DeviceConfigCfg   DeviceConfigConfig  // configuração ISAPI dos dispositivos (FASE 4 — device-config)
-	AdminAssets       http.FileSystem     // embed.FS servindo /admin/*
+	AdminResyncCfg    AdminResyncConfig         // reenvio individual de membro
+	DeviceConfigCfg   DeviceConfigConfig        // configuração ISAPI dos dispositivos (FASE 4 — device-config)
+	FlowsAPICfg       AdminFlowsConfig          // fluxos de reconhecimento facial (face-flow)
+	BackgroundImgCfg  AdminBackgroundImagesConfig // imagens de fundo dos fluxos (face-flow)
+	AdminAssets       http.FileSystem           // embed.FS servindo /admin/*
 }
 
 // NewServer constructs an HTTP server with the routes and middleware wired up.
@@ -108,6 +110,19 @@ func NewServer(cfg ServerConfig) *Server {
 
 		// Sync manual via cookie (wraps o AdminSyncHandler existente com sessão)
 		mux.Handle("/admin/api/sync", sessionMW(cfg.AdminHandler))
+
+		// Fluxos de reconhecimento facial (face-flow — FASE 4).
+		// Subtree /admin/api/flows/{id}/... primeiro; rota raiz depois.
+		if cfg.FlowsAPICfg.FlowRepo != nil {
+			mux.Handle("/admin/api/flows/", sessionMW(adminFlowsSubRouter(cfg.FlowsAPICfg)))
+			mux.Handle("/admin/api/flows", sessionMW(AdminFlowsRootHandler(cfg.FlowsAPICfg)))
+		}
+
+		// Imagens de fundo dos fluxos (face-flow — FASE 4).
+		if cfg.BackgroundImgCfg.Repo != nil {
+			mux.Handle("/admin/api/background-images/", sessionMW(adminBgImagesSubRouter(cfg.BackgroundImgCfg)))
+			mux.Handle("/admin/api/background-images", sessionMW(AdminBackgroundImagesRootHandler(cfg.BackgroundImgCfg)))
+		}
 
 		// Assets da SPA (index.html + CSS + JS) — sem autenticação (login page pública)
 		if cfg.AdminAssets != nil {

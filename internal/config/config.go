@@ -78,6 +78,11 @@ type Config struct {
 	// Env: ISAPI_CRED_KEY (hex de 64 chars ou base64). Opcional: vazio mantém o
 	// comportamento legado (credenciais do .env, sem persistir/cifrar no banco).
 	ISAPICredKey []byte
+
+	// BackgroundImagesDir é o diretório local onde as imagens de fundo dos fluxos são
+	// armazenadas. Env: BACKGROUND_IMAGES_DIR (default: ./data/background-images).
+	// Criado automaticamente na inicialização se não existir (tasks.md §4.3.2).
+	BackgroundImagesDir string
 }
 
 // ISAPIDeviceConfig holds credentials for one HikVision device.
@@ -165,6 +170,8 @@ func Load() (*Config, error) {
 
 	// Load per-device ISAPI configs: ISAPI_DEVICE_1_HOST, ISAPI_DEVICE_2_HOST, ...
 	cfg.ISAPIDevices = loadISAPIDevices(optionalStr)
+
+	cfg.BackgroundImagesDir = optionalStr("BACKGROUND_IMAGES_DIR", "./data/background-images")
 
 	// Chave de cifragem das credenciais ISAPI (opcional). Se setada mas inválida,
 	// é um erro de configuração (não silenciamos um segredo malformado).

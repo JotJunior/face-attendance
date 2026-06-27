@@ -148,8 +148,8 @@ Ref: api CHK007, Constituicao §II
 
 Ref: security CHK005/CHK006, Constituicao §segredos
 
-- [ ] 3.8.1 Implementar mecanismo de campo selado: no PUT /flows/{id}, API reconhece headers com valor prefixado `"__secret__:valor"` → cifra com AES-256-GCM via `internal/secrets.Encrypt()` e persiste em `sealed_config` JSONB; campo `config` armazena a chave com `"__sealed__"` como valor-sentinela
-- [ ] 3.8.2 No GET /flows/{id}, mascarar valores selados: retornar `"__secret__:***"` em vez do valor real (CHK006)
+- [x] 3.8.1 Implementar mecanismo de campo selado: no PUT /flows/{id}, API reconhece headers com valor prefixado `"__secret__:valor"` → cifra com AES-256-GCM via `internal/secrets.Encrypt()` e persiste em `sealed_config` JSONB; campo `config` armazena a chave com `"__sealed__"` como valor-sentinela
+- [x] 3.8.2 No GET /flows/{id}, mascarar valores selados: retornar `"__secret__:***"` em vez do valor real (CHK006)
 - [x] 3.8.3 Em `executeHTTPSCall`, decifrar valores selados de headers via `internal/secrets.Decrypt()` antes de construir a requisicao; nunca logar o valor decifrado
 
 ### 3.9 Mascaramento em logs do motor `[C]`
@@ -170,33 +170,33 @@ Ref: security CHK007, Constituicao §logging, spec.md §FR-021
 
 Ref: plan.md §5
 
-- [ ] 4.1.1 Criar `internal/http/admin_flow_handlers.go` com 10 rotas: GET/POST /admin/api/flows; GET/PUT/DELETE /admin/api/flows/{id}; PUT /activate e /deactivate; PUT/DELETE /admin/api/flows/{id}/device; GET /admin/api/flows/{id}/logs
-- [ ] 4.1.2 PUT /flows/{id} e PUT /activate: chamar `flow.Validate()`; retornar 422 com JSON `{"errors": [{"code":"...","message":"...","node_id":"..."}]}` se invalido
-- [ ] 4.1.3 PUT /flows/{id}/device: verificar device existe; verificar 1:1 (retornar 409 com mensagem explicativa se device ja tem fluxo ativo)
-- [ ] 4.1.4 Criar test file `internal/http/admin_flow_handlers_test.go` com testes de handler (mock de repositorios)
+- [x] 4.1.1 Criar `internal/http/admin_flow_handlers.go` com 10 rotas: GET/POST /admin/api/flows; GET/PUT/DELETE /admin/api/flows/{id}; PUT /activate e /deactivate; PUT/DELETE /admin/api/flows/{id}/device; GET /admin/api/flows/{id}/logs
+- [x] 4.1.2 PUT /flows/{id} e PUT /activate: chamar `flow.Validate()`; retornar 422 com JSON `{"errors": [{"code":"...","message":"...","node_id":"..."}]}` se invalido
+- [x] 4.1.3 PUT /flows/{id}/device: verificar device existe; verificar 1:1 (retornar 409 com mensagem explicativa se device ja tem fluxo ativo)
+- [x] 4.1.4 Criar test file `internal/http/admin_flow_handlers_test.go` com testes de handler (mock de repositorios)
 
 ### 4.2 Handlers de imagens de background `[A]`
 
 Ref: plan.md §5
 
-- [ ] 4.2.1 Criar `internal/http/admin_background_images_handlers.go`: GET /admin/api/background-images, POST (multipart/form-data JPEG/PNG, reject >5MB, armazenar com uuid.ext), DELETE (remover arquivo + DB)
-- [ ] 4.2.2 Validar extensao MIME (JPEG/PNG apenas); rejeitar outros formatos com 415
+- [x] 4.2.1 Criar `internal/http/admin_background_images_handlers.go`: GET /admin/api/background-images, POST (multipart/form-data JPEG/PNG, reject >5MB, armazenar com uuid.ext), DELETE (remover arquivo + DB)
+- [x] 4.2.2 Validar extensao MIME (JPEG/PNG apenas); rejeitar outros formatos com 415
 
 ### 4.3 Registro de rotas e wiring em main.go `[C]`
 
 Ref: plan.md §5/§6
 
-- [ ] 4.3.1 Adicionar `adminFlowsRouter` e `adminBackgroundImagesRouter` em `internal/http/server.go` seguindo padrao de `adminDevicesRouter`; aplicar middlewares AdminAuth + Session
-- [ ] 4.3.2 Adicionar `BACKGROUND_IMAGES_DIR` em `internal/config` (default `./data/background-images`); criar diretorio se inexistente na inicializacao
-- [ ] 4.3.3 Instanciar em `cmd/presenca-facial/main.go`: flowRepo, bgImageRepo, logRepo, flowEngine (Config com hikClientFor, repos, BgImagesDir)
-- [ ] 4.3.4 Adicionar `github.com/skip2/go-qrcode` em `go.mod` e `go.sum` via `go get`
+- [x] 4.3.1 Adicionar `adminFlowsRouter` e `adminBackgroundImagesRouter` em `internal/http/server.go` seguindo padrao de `adminDevicesRouter`; aplicar middlewares AdminAuth + Session
+- [x] 4.3.2 Adicionar `BACKGROUND_IMAGES_DIR` em `internal/config` (default `./data/background-images`); criar diretorio se inexistente na inicializacao
+- [x] 4.3.3 Instanciar em `cmd/presenca-facial/main.go`: flowRepo, bgImageRepo, logRepo, flowEngine (Config com hikClientFor, repos, BgImagesDir)
+- [x] 4.3.4 Adicionar `github.com/skip2/go-qrcode` em `go.mod` e `go.sum` via `go get` (ja estava presente — adicionado na FASE 3)
 
 ### 4.4 Integracao no webhook handler `[C]`
 
 Ref: plan.md §6, spec.md §FR-018/FR-019
 
-- [ ] 4.4.1 Em `internal/http/handlers.go`, apos processar attendance, adicionar: `if h.flowEngine != nil && payload.EventType == "AccessControllerEvent" { go h.flowEngine.TriggerForDevice(macAddress, savedEvent, resolvedMember, resolvedDevice) }`
-- [ ] 4.4.2 Campo `flowEngine` injetado no Server/Handler em `main.go` como nil-safe (feature desabilitada se nil); heartbeat e demais tipos de evento nao acionam o motor (FR-018)
+- [x] 4.4.1 Em `internal/http/handlers.go`, apos processar attendance, adicionar: `if h.flowEngine != nil && payload.EventType == "AccessControllerEvent" { go h.flowEngine.TriggerForDevice(macAddress, savedEvent, resolvedMember, resolvedDevice) }`
+- [x] 4.4.2 Campo `flowEngine` injetado no Server/Handler em `main.go` como nil-safe (feature desabilitada se nil); heartbeat e demais tipos de evento nao acionam o motor (FR-018)
 
 ---
 

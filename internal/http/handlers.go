@@ -53,13 +53,21 @@ type Scheduler interface {
 	RunMemberLoadCycle(ctx context.Context) error
 }
 
+// FlowEngine é a interface do motor de fluxo que o webhook aciona após processar o evento.
+// Nil-safe: o handler verifica se o campo é nil antes de chamar (feature desabilitada se nil).
+// Ref: tasks.md §4.4.1, plan.md §6.
+type FlowEngine interface {
+	TriggerForDevice(macAddress string, event *domain.AttendanceEvent, member *domain.Member, device *domain.Device)
+}
+
 // EventHandler handles inbound HikVision events (webhook + heartbeat via single route — dec-038).
 type EventHandler struct {
-	deviceRepo      DeviceRegistrar
-	memberRepo      MemberFinder
-	gobClient       AttendanceMarker
-	eventRepo       EventRecorder
-	logger          *logging.Logger
+	deviceRepo  DeviceRegistrar
+	memberRepo  MemberFinder
+	gobClient   AttendanceMarker
+	eventRepo   EventRecorder
+	flowEngine  FlowEngine // nil = motor de fluxo desabilitado (tasks.md §4.4.2)
+	logger      *logging.Logger
 }
 
 // NewEventHandler creates an EventHandler.
@@ -77,6 +85,13 @@ func NewEventHandler(
 		eventRepo:  eventRepo,
 		logger:     logger,
 	}
+}
+
+// SetFlowEngine injeta o motor de fluxo no handler.
+// Deve ser chamado em main.go após construir o engine (tasks.md §4.4.2).
+// Nil-safe: handler continua funcionando normalmente se flowEngine for nil.
+func (h *EventHandler) SetFlowEngine(eng FlowEngine) {
+	h.flowEngine = eng
 }
 
 // hikPayload is the shape of the inbound HikVision event (contracts/inbound-http.md §1).
@@ -132,6 +147,22 @@ func (h *EventHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Variáveis para o disparo aditivo do motor de fluxo (tasks.md §4.4.1).
+	// O defer garante que o trigger ocorre após toda a lógica de presença,
+	// inclusive nos caminhos de retorno antecipado — sem alterar o comportamento atual.
+	var (
+		flowTriggerReady bool                    // true somente após insert de novo evento (não duplicata)
+		flowEvent        *domain.AttendanceEvent // preenchido ao construir o evento
+		flowMember       *domain.Member          // preenchido após FindByCPF
+		flowDevice       *domain.Device          // preenchido após FindByMAC
+	)
+	defer func() {
+		// Apenas AccessControllerEvent aciona o motor; heartbeats e outros eventos não (FR-018).
+		if h.flowEngine != nil && flowTriggerReady {
+			go h.flowEngine.TriggerForDevice(payload.MACAddress, flowEvent, flowMember, flowDevice)
+		}
+	}()
+
 	// Register/update device (liveness) — FR-001/FR-002
 	var deviceDBID *int64
 	if payload.MACAddress != "" || payload.IPAddress != "" {
@@ -155,6 +186,7 @@ func (h *EventHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// presença — assim a coluna "Dispositivo" mostra de qual leitor veio o acesso.
 		if dev, findErr := h.deviceRepo.FindByMAC(ctx, identifier); findErr == nil && dev != nil {
 			deviceDBID = &dev.ID
+			flowDevice = dev // para o motor de fluxo (tasks.md §4.4.1)
 		}
 	}
 
@@ -202,6 +234,7 @@ func (h *EventHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
+	flowMember = member // para o motor de fluxo (nil se membro não encontrado)
 
 	rawPayload := eventJSON
 	if !json.Valid(rawPayload) {
@@ -225,6 +258,7 @@ func (h *EventHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		EventDatetime:    eventDatetime,
 		RawPayload:       rawPayload,
 	}
+	flowEvent = &event // para o motor de fluxo (tasks.md §4.4.1)
 
 	inserted, err := h.eventRepo.InsertIfNotExists(ctx, event)
 	if err != nil {
@@ -237,7 +271,11 @@ func (h *EventHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.logger.Info("attendance_deduped", deviceID, cpfDigits, "duplicate event ignored")
 		w.WriteHeader(http.StatusOK)
 		return
+		// flowTriggerReady permanece false: evento duplicado não aciona o motor
+		// (o guarda de idempotência do engine pularia de qualquer forma — tasks.md §3.7.1).
 	}
+	// Evento novo (não duplicata): autorizar disparo do motor de fluxo via defer.
+	flowTriggerReady = true
 
 	if member == nil {
 		h.logger.Warn("attendance_unknown_member", deviceID, cpfDigits, "member not found; event recorded but not marked")

@@ -16,6 +16,7 @@ import (
 
 	"github.com/jotjunior/face-attendance/internal/config"
 	"github.com/jotjunior/face-attendance/internal/domain"
+	"github.com/jotjunior/face-attendance/internal/flowengine"
 	"github.com/jotjunior/face-attendance/internal/gob"
 	"github.com/jotjunior/face-attendance/internal/hikvision"
 	httphandler "github.com/jotjunior/face-attendance/internal/http"
@@ -58,6 +59,16 @@ func run() error {
 	eventRepo := repository.NewAttendanceEventRepository(pool)
 	outcomeRepo := repository.NewProcessingOutcomeRepository(pool)
 
+	// Repositórios de fluxo (face-flow — FASE 4, tasks.md §4.3.3)
+	flowRepo := repository.NewPgxFlowRepository(pool)
+	bgImageRepo := repository.NewPgxBackgroundImageRepository(pool)
+	flowLogRepo := repository.NewPgxFlowExecutionLogRepository(pool)
+
+	// Criar diretório de imagens de fundo se não existir (tasks.md §4.3.2).
+	if mkdirErr := os.MkdirAll(cfg.BackgroundImagesDir, 0o755); mkdirErr != nil {
+		logger.Warn("http_server_started", "", "", fmt.Sprintf("background-images dir: %s: %s", cfg.BackgroundImagesDir, mkdirErr))
+	}
+
 	// --- GOB client ---
 	gobClient := gob.New(cfg.GobStateURL, cfg.GobStateToken)
 
@@ -93,6 +104,75 @@ func run() error {
 		cfg.MemberSyncIntervalMinutes,
 	)
 
+	// --- Motor de fluxo (face-flow — FASE 4, tasks.md §4.3.3) ---
+	// O motor é inicializado quando RUN_HTTP está ativo; wiring condicional por design
+	// (tasks.md §4.4.2: "se o disparo do fluxo no webhook exigir o Engine no processo HTTP").
+	var flowCipher *secrets.Cipher
+	if len(cfg.ISAPICredKey) > 0 {
+		// Reutilizar a chave ISAPI para cifrar segredos de header dos fluxos.
+		c, cipherErr := secrets.NewCipher(cfg.ISAPICredKey)
+		if cipherErr == nil {
+			flowCipher = c
+		}
+	}
+
+	// hikClientFor cria um cliente ISAPI para o device passado (para nós change_background /
+	// qrcode_background). Usa o mesmo resolver de credenciais do worker (lê do banco).
+	hikClientFor := func(device *domain.Device) (*hikvision.Client, error) {
+		if device == nil {
+			return nil, fmt.Errorf("device nil; não é possível criar cliente ISAPI")
+		}
+		// Tentar resolver credenciais do banco para este device.
+		if device.IPAddress == nil || *device.IPAddress == "" {
+			return nil, fmt.Errorf("device id=%d sem IP registrado", device.ID)
+		}
+		host := *device.IPAddress
+		user := ""
+		pass := ""
+		// Fallback para credenciais do .env quando sem banco.
+		if len(cfg.ISAPIDevices) > 0 {
+			user = cfg.ISAPIDevices[0].Username
+			pass = cfg.ISAPIDevices[0].Password
+		}
+		if flowCipher != nil {
+			conns, listErr := deviceRepo.ListActiveConns(context.Background())
+			if listErr == nil {
+				for _, c := range conns {
+					if c.ID != device.ID {
+						continue
+					}
+					if c.IP != nil && *c.IP != "" {
+						host = *c.IP
+					}
+					if len(c.PasswordEnc) > 0 {
+						if dec, decErr := flowCipher.Decrypt(c.PasswordEnc); decErr == nil {
+							user = c.Username
+							pass = dec
+						}
+					}
+					break
+				}
+			}
+		}
+		if host == "" {
+			return nil, fmt.Errorf("device id=%d sem host resolvível", device.ID)
+		}
+		return hikvision.New(hikvision.DeviceConfig{Host: host, Username: user, Password: pass}), nil
+	}
+
+	var flowEngine *flowengine.Engine
+	if cfg.RunHTTP {
+		flowEngine = flowengine.New(flowengine.Config{
+			HikClientFor: hikClientFor,
+			FlowRepo:     flowRepo,
+			LogRepo:      flowLogRepo,
+			BgImageRepo:  bgImageRepo,
+			BgImagesDir:  cfg.BackgroundImagesDir,
+			Cipher:       flowCipher,
+			Logger:       logger,
+		})
+	}
+
 	// --- HTTP Handlers ---
 	serializer := httphandler.NewSyncSerializer(cfg.AdminSyncMinIntervalSeconds)
 	healthChecker := &appHealthChecker{pool: pool, amqpURL: cfg.RabbitMQURL}
@@ -104,6 +184,10 @@ func run() error {
 		eventRepo,
 		logger,
 	)
+	// Injetar motor de fluxo no handler (nil-safe — tasks.md §4.4.2).
+	if flowEngine != nil {
+		eventHandler.SetFlowEngine(flowEngine)
+	}
 	healthHandler := httphandler.NewHealthHandler(healthChecker)
 	adminHandler := httphandler.NewAdminSyncHandler(sched, serializer, logger)
 
@@ -178,6 +262,19 @@ func run() error {
 			Logger:       logger,
 		},
 		DeviceConfigCfg: deviceConfigCfg,
+		// Fluxos de reconhecimento facial (face-flow — FASE 4, tasks.md §4.3.1)
+		FlowsAPICfg: httphandler.AdminFlowsConfig{
+			FlowRepo:   flowRepo,
+			DeviceRepo: deviceRepo,
+			LogRepo:    flowLogRepo,
+			Cipher:     flowCipher,
+			Logger:     logger,
+		},
+		BackgroundImgCfg: httphandler.AdminBackgroundImagesConfig{
+			Repo:      bgImageRepo,
+			ImagesDir: cfg.BackgroundImagesDir,
+			Logger:    logger,
+		},
 		AdminAssets: http.FS(web.Assets), // embed.FS — assets populados na FASE 3
 	})
 
