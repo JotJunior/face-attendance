@@ -26,6 +26,7 @@ package httphandler
 // Ref: spec.md §FR-001..018, tasks.md §FASE 2.
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -691,6 +692,15 @@ func DeleteDeviceBootPictureHandler(cfg DeviceConfigConfig) http.Handler {
 // 2.5 — Media: GET/POST /preferences/media, DELETE /preferences/media/{id}, DELETE /preferences/media
 // =============================================================================
 
+// devicePresentationRepo são os métodos de PresentationMediaRepository usados pelos
+// handlers de media/presentation (persistência do show_mode por material).
+type devicePresentationRepo interface {
+	Upsert(ctx context.Context, deviceID int64, materialID, mode, name string) error
+	GetMode(ctx context.Context, deviceID int64, materialID string) (string, error)
+	ListModesByDevice(ctx context.Context, deviceID int64) (map[string]string, error)
+	Delete(ctx context.Context, deviceID int64, materialID string) error
+}
+
 // mediaListResponse is the JSON response for GET /preferences/media.
 type mediaListResponse struct {
 	Materials []mediaItem `json:"materials"`
@@ -700,6 +710,9 @@ type mediaListResponse struct {
 type mediaItem struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+	// Mode é o show_mode (full/split) persistido para a imagem; "" se desconhecido
+	// (ex.: material enviado fora deste app). Deriva do tamanho no upload.
+	Mode string `json:"mode,omitempty"`
 }
 
 // GetDeviceMediaHandler serves GET /admin/api/devices/{id}/preferences/media.
@@ -732,9 +745,20 @@ func GetDeviceMediaHandler(cfg DeviceConfigConfig) http.Handler {
 			return
 		}
 
+		// Enriquece cada material com o show_mode persistido (full/split), para o
+		// editor de fluxo / UI saber em que modo a imagem deve ser aplicada.
+		var modes map[string]string
+		if cfg.PresentationRepo != nil {
+			if m, merr := cfg.PresentationRepo.ListModesByDevice(ctx, deviceID); merr == nil {
+				modes = m
+			} else {
+				cfg.logError("preferences", deviceID, "falha ao carregar modos de presentation", merr, "stage", "media")
+			}
+		}
+
 		items := make([]mediaItem, 0, len(mats))
 		for _, m := range mats {
-			items = append(items, mediaItem{ID: m.ID, Name: m.Name})
+			items = append(items, mediaItem{ID: m.ID, Name: m.Name, Mode: modes[m.ID]})
 		}
 
 		resp := mediaListResponse{Materials: items, Total: len(items)}
@@ -768,6 +792,19 @@ func PostDeviceMediaHandler(cfg DeviceConfigConfig) http.Handler {
 			return
 		}
 
+		// Valida a resolução e deriva o show_mode (600x1024→full, 600x704→split).
+		// Qualquer outra medida → 400. A imagem vai como está (só transcode p/ JPEG).
+		mode, err := hikvision.PresentationModeForImage(data)
+		if err != nil {
+			adminJSONError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		jpegData, err := hikvision.TranscodeToJPEG(data)
+		if err != nil {
+			adminJSONError(w, http.StatusBadRequest, "falha ao processar a imagem: "+err.Error())
+			return
+		}
+
 		ctx := r.Context()
 		_, client, httpSt2, errMsg2 := loadDeviceAndISAPIClient(ctx, cfg, deviceID)
 		if httpSt2 != 0 {
@@ -776,9 +813,9 @@ func PostDeviceMediaHandler(cfg DeviceConfigConfig) http.Handler {
 		}
 
 		cfg.logInfo("preferences", deviceID, "criando material publicitário",
-			"stage", "media", "filename", filename)
+			"stage", "media", "filename", filename, "mode", mode)
 
-		result, err := client.CreateAdvertisingMedia(ctx, filename, data)
+		result, err := client.CreateAdvertisingMedia(ctx, filename, jpegData)
 		if err != nil {
 			cfg.logError("preferences", deviceID, "falha ao criar material publicitário", err,
 				"stage", "media", "filename", filename)
@@ -803,8 +840,27 @@ func PostDeviceMediaHandler(cfg DeviceConfigConfig) http.Handler {
 			return
 		}
 
-		cfg.logInfo("preferences", deviceID, "material publicitário criado",
-			"stage", "media", "materialId", result.MaterialID)
+		// Persiste o modo derivado do tamanho, para reaplicar ao selecionar a imagem.
+		if cfg.PresentationRepo != nil {
+			if perr := cfg.PresentationRepo.Upsert(ctx, deviceID, result.MaterialID, mode, filename); perr != nil {
+				cfg.logError("preferences", deviceID, "falha ao persistir modo de presentation", perr,
+					"stage", "media", "materialId", result.MaterialID)
+			}
+		}
+
+		// Ajusta o show_mode do terminal conforme o tamanho (a imagem já virou
+		// presentation no passo (d) do CreateAdvertisingMedia). Espelha 1-split/2-full.
+		if err := client.SetShowMode(ctx, mode); err != nil {
+			cfg.logError("preferences", deviceID, "material criado mas falha ao ajustar show_mode", err,
+				"stage", "media", "materialId", result.MaterialID, "mode", mode)
+			st, msg := mapISAPIError(err)
+			adminJSONError(w, st,
+				fmt.Sprintf("imagem enviada mas falha ao ajustar o modo de exibição (%s): %s", mode, msg))
+			return
+		}
+
+		cfg.logInfo("preferences", deviceID, "material publicitário criado e aplicado",
+			"stage", "media", "materialId", result.MaterialID, "mode", mode)
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
@@ -812,6 +868,67 @@ func PostDeviceMediaHandler(cfg DeviceConfigConfig) http.Handler {
 			"materialId": result.MaterialID,
 			"programId":  result.ProgramID,
 			"scheduleId": result.ScheduleID,
+			"mode":       mode,
+			"device_id":  deviceID,
+		})
+	})
+}
+
+// PutDevicePresentationHandler serve PUT /admin/api/devices/{id}/preferences/media/{materialId}/presentation.
+// Torna um material JÁ existente a imagem de presentation (start-page) do device,
+// aplicando também o show_mode persistido (full/split). Espelha switch.php (Presentation.page)
+// + 1-split/2-full (show_mode). Ref: legacy presentation/switch.php.
+func PutDevicePresentationHandler(cfg DeviceConfigConfig) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			adminJSONError(w, http.StatusMethodNotAllowed, "método não permitido")
+			return
+		}
+
+		deviceID, segs, ok := deviceConfigPathSegments(r.URL.Path)
+		if !ok || len(segs) < 4 || segs[0] != "preferences" || segs[1] != "media" || segs[3] != "presentation" {
+			adminJSONError(w, http.StatusBadRequest, "path inválido")
+			return
+		}
+		materialID := segs[2]
+		if materialID == "" || strings.Contains(materialID, "/") || strings.Contains(materialID, "..") {
+			adminJSONError(w, http.StatusBadRequest,
+				"id de material inválido: não pode ser vazio ou conter path traversal")
+			return
+		}
+
+		ctx := r.Context()
+		_, client, httpSt, errMsg := loadDeviceAndISAPIClient(ctx, cfg, deviceID)
+		if httpSt != 0 {
+			adminJSONError(w, httpSt, errMsg)
+			return
+		}
+
+		// Resolve o modo persistido; default "full" se desconhecido (material externo).
+		mode := hikvision.ShowModeFull
+		name := materialID
+		if cfg.PresentationRepo != nil {
+			if m, gerr := cfg.PresentationRepo.GetMode(ctx, deviceID, materialID); gerr == nil && m != "" {
+				mode = m
+			}
+		}
+
+		cfg.logInfo("preferences", deviceID, "aplicando imagem como presentation",
+			"stage", "presentation", "materialId", materialID, "mode", mode)
+
+		if err := client.ApplyPresentation(ctx, materialID, name, mode); err != nil {
+			st, msg := mapISAPIError(err)
+			cfg.logError("preferences", deviceID, "falha ao aplicar presentation", err,
+				"stage", "presentation", "materialId", materialID)
+			adminJSONError(w, st, msg)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
+			"result":     "applied",
+			"materialId": materialID,
+			"mode":       mode,
 			"device_id":  deviceID,
 		})
 	})
@@ -852,6 +969,14 @@ func DeleteDeviceMediaItemHandler(cfg DeviceConfigConfig) http.Handler {
 				"stage", "media", "materialId", matID)
 			adminJSONError(w, st, msg)
 			return
+		}
+
+		// Limpa o modo persistido (best-effort; falha não reverte o delete no device).
+		if cfg.PresentationRepo != nil {
+			if perr := cfg.PresentationRepo.Delete(ctx, deviceID, matID); perr != nil {
+				cfg.logError("preferences", deviceID, "falha ao limpar modo de presentation", perr,
+					"stage", "media", "materialId", matID)
+			}
 		}
 
 		cfg.logInfo("preferences", deviceID, "material removido",

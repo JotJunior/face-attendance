@@ -10,6 +10,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/jpeg"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -22,6 +24,30 @@ import (
 	"github.com/jotjunior/face-attendance/internal/hikvision"
 	"github.com/jotjunior/face-attendance/internal/secrets"
 )
+
+// buildMultipartImage cria um body multipart com o campo "file" contendo um JPEG
+// real de wxh px (image/jpeg). Usado para exercitar a validação de resolução.
+func buildMultipartImage(t *testing.T, w, h int) (*bytes.Buffer, string) {
+	t.Helper()
+	var img bytes.Buffer
+	if err := jpeg.Encode(&img, image.NewRGBA(image.Rect(0, 0, w, h)), &jpeg.Options{Quality: 80}); err != nil {
+		t.Fatalf("encode jpeg: %v", err)
+	}
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	hdr := make(map[string][]string)
+	hdr["Content-Disposition"] = []string{`form-data; name="file"; filename="test.jpg"`}
+	hdr["Content-Type"] = []string{"image/jpeg"}
+	part, err := mw.CreatePart(hdr)
+	if err != nil {
+		t.Fatalf("CreatePart: %v", err)
+	}
+	if _, err := part.Write(img.Bytes()); err != nil {
+		t.Fatalf("write part: %v", err)
+	}
+	mw.Close()
+	return &buf, mw.FormDataContentType()
+}
 
 // --- multipart helpers ---
 
@@ -418,6 +444,55 @@ func TestPostDeviceBootPictureHandler_PNGAccepted(t *testing.T) {
 	// 404 = device not found (content-type passed → device lookup failed)
 	if rr.Code == http.StatusBadRequest || rr.Code == http.StatusRequestEntityTooLarge {
 		t.Errorf("image/png should pass content-type gate; got %d; body: %s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestPostDeviceMediaHandler_RejectsWrongSize verifica que uma imagem fora das medidas
+// aceitas (600x1024 / 600x704) é rejeitada com 400 antes de tocar no device.
+func TestPostDeviceMediaHandler_RejectsWrongSize(t *testing.T) {
+	body, ct := buildMultipartImage(t, 500, 500)
+	req := httptest.NewRequest(http.MethodPost, "/admin/api/devices/1/preferences/media", body)
+	req.Header.Set("Content-Type", ct)
+	rr := httptest.NewRecorder()
+	PostDeviceMediaHandler(DeviceConfigConfig{DeviceRepo: &fakeDeviceConfigRepo{}}).ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("esperava 400 para resolução inválida, got %d; body: %s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "600x1024") {
+		t.Errorf("mensagem deveria citar as medidas aceitas; got: %s", rr.Body.String())
+	}
+}
+
+// TestPostDeviceMediaHandler_AcceptsValidSize verifica que uma imagem na medida aceita
+// passa a validação de resolução (falha depois, no device não encontrado).
+func TestPostDeviceMediaHandler_AcceptsValidSize(t *testing.T) {
+	body, ct := buildMultipartImage(t, 600, 1024)
+	req := httptest.NewRequest(http.MethodPost, "/admin/api/devices/1/preferences/media", body)
+	req.Header.Set("Content-Type", ct)
+	rr := httptest.NewRecorder()
+	PostDeviceMediaHandler(DeviceConfigConfig{DeviceRepo: &fakeDeviceConfigRepo{getErr: pgx.ErrNoRows}}).ServeHTTP(rr, req)
+	if rr.Code == http.StatusBadRequest {
+		t.Errorf("imagem 600x1024 deveria passar a validação de resolução; got 400; body: %s", rr.Body.String())
+	}
+}
+
+// TestPutDevicePresentationHandler_MethodAndPath verifica método e validação de path.
+func TestPutDevicePresentationHandler_MethodAndPath(t *testing.T) {
+	// Método errado → 405.
+	req := httptest.NewRequest(http.MethodPost, "/admin/api/devices/1/preferences/media/4/presentation", nil)
+	rr := httptest.NewRecorder()
+	PutDevicePresentationHandler(DeviceConfigConfig{DeviceRepo: &fakeDeviceConfigRepo{}}).ServeHTTP(rr, req)
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Errorf("POST deveria dar 405, got %d", rr.Code)
+	}
+
+	// Path traversal no materialId → 400.
+	req = httptest.NewRequest(http.MethodPut, "/admin/api/devices/1/preferences/media/x/presentation", nil)
+	req.URL.Path = "/admin/api/devices/1/preferences/media/../presentation"
+	rr = httptest.NewRecorder()
+	PutDevicePresentationHandler(DeviceConfigConfig{DeviceRepo: &fakeDeviceConfigRepo{}}).ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("path traversal deveria dar 400, got %d", rr.Code)
 	}
 }
 

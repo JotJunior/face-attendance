@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 
 	qrcode "github.com/skip2/go-qrcode"
 
@@ -15,12 +13,15 @@ import (
 )
 
 // executeChangeBackground implementa o nó change_background (nó tipo 4):
-//  1. Busca a imagem de fundo pelo ID configurado no repositório.
-//  2. Lê o arquivo de disco a partir de bgImagesDir.
-//  3. Redimensiona para 600×1024 JPEG (requisito firmware).
-//  4. Faz upload via ISAPI StandbyPictureMgr e ativa o modo custom standby.
+//  1. Decodifica a config (media_id — mídia já provisionada no device).
+//  2. Confirma que a mídia referenciada ainda existe no device.
+//  3. Aplica a mídia como imagem de presentation e ajusta o show_mode (full/split).
 //
-// ISAPI verificado em internal/hikvision/client_standby.go.
+// A imagem NÃO é (re)enviada aqui: ela é gerenciada no device (mídia/MaterialMgr) pelo
+// editor de fluxo (modal "Imagens de fundo"). Aplicar = Presentation.page(media_id) +
+// show_mode derivado do tamanho — espelha legacy presentation/switch.php + 1-split/2-full.
+//
+// ISAPI verificado em internal/hikvision/client_presentation.go e client_media.go.
 // Ref: tasks.md §3.4.2, plan.md §3.4.
 func (e *Engine) executeChangeBackground(
 	ctx context.Context,
@@ -31,15 +32,17 @@ func (e *Engine) executeChangeBackground(
 	if err := json.Unmarshal(node.Config, &cfg); err != nil {
 		return fmt.Errorf("change_background: config inválida: %w", err)
 	}
-
-	img, err := e.bgImageRepo.FindByID(ctx, cfg.ImageID)
-	if err != nil {
-		return fmt.Errorf("change_background: imagem %d não encontrada: %w", cfg.ImageID, err)
+	if cfg.MediaID == "" {
+		return fmt.Errorf("change_background: media_id não configurado")
 	}
 
-	data, err := os.ReadFile(filepath.Join(e.bgImagesDir, img.FilePath))
-	if err != nil {
-		return fmt.Errorf("change_background: ler imagem: %w", err)
+	mode := cfg.Mode
+	if mode == "" {
+		mode = hikvision.ShowModeFull
+	}
+	name := cfg.Name
+	if name == "" {
+		name = cfg.MediaID
 	}
 
 	hikClient, err := e.hikClientFor(device)
@@ -47,25 +50,27 @@ func (e *Engine) executeChangeBackground(
 		return fmt.Errorf("change_background: cliente ISAPI: %w", err)
 	}
 
-	// Redimensionar para 600×1024 JPEG (requisito de firmware — client_bootpic.go).
-	// SOURCED: internal/hikvision/client_bootpic.go ResizeImageJPEG.
-	jpegData, err := hikvision.ResizeImageJPEG(data, 600, 1024)
+	// Confirma que a mídia referenciada ainda está no device antes de aplicar.
+	// SOURCED: client_media.go:ListMaterials
+	mats, err := hikClient.ListMaterials(ctx)
 	if err != nil {
-		return fmt.Errorf("change_background: redimensionar: %w", err)
+		return fmt.Errorf("change_background: listar mídias do device: %w", err)
+	}
+	found := false
+	for _, m := range mats {
+		if m.ID == cfg.MediaID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("change_background: mídia %s não está mais no device", cfg.MediaID)
 	}
 
-	// Upload standby picture.
-	// SOURCED: client_standby.go:UploadStandbyPicture
-	// Endpoint: POST /ISAPI/Publish/StandbyPictureMgr/UploadCustomStandbyPic?format=json
-	if err := hikClient.UploadStandbyPicture(ctx, img.Name+".jpg", jpegData); err != nil {
-		return fmt.Errorf("change_background: upload ISAPI: %w", err)
-	}
-
-	// Ativar modo custom standby.
-	// SOURCED: client_standby.go:EnableCustomStandby
-	// Endpoint: PUT /ISAPI/Publish/StandbyPictureMgr/StandbyPicDisplayParams?format=json
-	if err := hikClient.EnableCustomStandby(ctx); err != nil {
-		return fmt.Errorf("change_background: ativar standby: %w", err)
+	// Aplica a mídia como presentation + show_mode.
+	// SOURCED: client_presentation.go:ApplyPresentation
+	if err := hikClient.ApplyPresentation(ctx, cfg.MediaID, name, mode); err != nil {
+		return fmt.Errorf("change_background: aplicar presentation: %w", err)
 	}
 
 	return nil

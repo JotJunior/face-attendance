@@ -67,8 +67,13 @@ type WaitConfig struct {
 }
 
 // ChangeBackgroundConfig é a configuração do nó change_background.
+// A imagem é uma MÍDIA (presentation/start-page) já provisionada no device selecionado;
+// o nó a referencia por media_id. Mode (full/split) deriva do tamanho e é reaplicado
+// ao executar. Name é só para exibição/programName.
 type ChangeBackgroundConfig struct {
-	ImageID int64 `json:"image_id"`
+	MediaID string `json:"media_id"`
+	Mode    string `json:"mode,omitempty"`
+	Name    string `json:"name,omitempty"`
 }
 
 // HTTPSCallConfig é a configuração do nó https_call.

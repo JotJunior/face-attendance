@@ -222,6 +222,7 @@ func adminDevicesRouter(apiCfg AdminAPIConfig, dcCfg DeviceConfigConfig) http.Ha
 	postMediaH := PostDeviceMediaHandler(dcCfg)
 	deleteMediaItemH := DeleteDeviceMediaItemHandler(dcCfg)
 	deleteMediaAllH := DeleteDeviceMediaAllHandler(dcCfg)
+	putPresentationH := PutDevicePresentationHandler(dcCfg)
 	putFaceConfigH := PutDeviceFaceConfigHandler(dcCfg)
 	postFaceCaptureH := PostDeviceFaceCaptureHandler(dcCfg)
 
@@ -403,6 +404,13 @@ func adminDevicesRouter(apiCfg AdminAPIConfig, dcCfg DeviceConfigConfig) http.Ha
 					} else {
 						adminJSONError(w, http.StatusMethodNotAllowed, "método não permitido")
 					}
+				} else if len(segs) == 4 && segs[3] == "presentation" {
+					// PUT /preferences/media/{id}/presentation — aplica a mídia como imagem de presentation
+					if r.Method != http.MethodPut {
+						adminJSONError(w, http.StatusMethodNotAllowed, "método não permitido")
+						return
+					}
+					putPresentationH.ServeHTTP(w, r)
 				} else if len(segs) >= 3 {
 					// DELETE /preferences/media/{id} (FR-014)
 					if r.Method != http.MethodDelete {
