@@ -40,10 +40,6 @@ func (e *Engine) executeChangeBackground(
 	if mode == "" {
 		mode = hikvision.ShowModeFull
 	}
-	name := cfg.Name
-	if name == "" {
-		name = cfg.MediaID
-	}
 
 	hikClient, err := e.hikClientFor(device)
 	if err != nil {
@@ -69,7 +65,7 @@ func (e *Engine) executeChangeBackground(
 
 	// Aplica a mídia como presentation + show_mode.
 	// SOURCED: client_presentation.go:ApplyPresentation
-	if err := hikClient.ApplyPresentation(ctx, cfg.MediaID, name, mode); err != nil {
+	if err := hikClient.ApplyPresentation(ctx, cfg.MediaID, mode); err != nil {
 		return fmt.Errorf("change_background: aplicar presentation: %w", err)
 	}
 

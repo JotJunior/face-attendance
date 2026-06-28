@@ -812,15 +812,16 @@ func PostDeviceMediaHandler(cfg DeviceConfigConfig) http.Handler {
 			return
 		}
 
-		cfg.logInfo("preferences", deviceID, "criando material publicitário",
+		cfg.logInfo("preferences", deviceID, "enviando material de presentation",
 			"stage", "media", "filename", filename, "mode", mode)
 
-		result, err := client.CreateAdvertisingMedia(ctx, filename, jpegData)
+		// Passo 1: envia o material (cria registro + binário). NÃO mexe em program.
+		materialID, err := client.UploadMaterial(ctx, filename, jpegData)
 		if err != nil {
-			cfg.logError("preferences", deviceID, "falha ao criar material publicitário", err,
+			cfg.logError("preferences", deviceID, "falha ao enviar material", err,
 				"stage", "media", "filename", filename)
 
-			// Check for partial failure with orphan material (Clarification 4 / dec-012)
+			// Falha parcial com material órfão (upload do binário falhou após criar o registro).
 			var mediaErr *hikvision.ErrAdvertisingMediaCreate
 			if errors.As(err, &mediaErr) {
 				st, msg := mapISAPIError(mediaErr.Cause)
@@ -840,34 +841,31 @@ func PostDeviceMediaHandler(cfg DeviceConfigConfig) http.Handler {
 			return
 		}
 
-		// Persiste o modo derivado do tamanho, para reaplicar ao selecionar a imagem.
-		if cfg.PresentationRepo != nil {
-			if perr := cfg.PresentationRepo.Upsert(ctx, deviceID, result.MaterialID, mode, filename); perr != nil {
-				cfg.logError("preferences", deviceID, "falha ao persistir modo de presentation", perr,
-					"stage", "media", "materialId", result.MaterialID)
-			}
-		}
-
-		// Ajusta o show_mode do terminal conforme o tamanho (a imagem já virou
-		// presentation no passo (d) do CreateAdvertisingMedia). Espelha 1-split/2-full.
-		if err := client.SetShowMode(ctx, mode); err != nil {
-			cfg.logError("preferences", deviceID, "material criado mas falha ao ajustar show_mode", err,
-				"stage", "media", "materialId", result.MaterialID, "mode", mode)
+		// Passo 2: aplica o material como imagem de presentation + show_mode (full/split).
+		if err := client.ApplyPresentation(ctx, materialID, mode); err != nil {
+			cfg.logError("preferences", deviceID, "material enviado mas falha ao aplicar presentation", err,
+				"stage", "media", "materialId", materialID, "mode", mode)
 			st, msg := mapISAPIError(err)
 			adminJSONError(w, st,
-				fmt.Sprintf("imagem enviada mas falha ao ajustar o modo de exibição (%s): %s", mode, msg))
+				fmt.Sprintf("imagem enviada mas falha ao aplicá-la como fundo (%s): %s", mode, msg))
 			return
 		}
 
-		cfg.logInfo("preferences", deviceID, "material publicitário criado e aplicado",
-			"stage", "media", "materialId", result.MaterialID, "mode", mode)
+		// Persiste o modo derivado do tamanho, para reaplicar ao selecionar a imagem.
+		if cfg.PresentationRepo != nil {
+			if perr := cfg.PresentationRepo.Upsert(ctx, deviceID, materialID, mode, filename); perr != nil {
+				cfg.logError("preferences", deviceID, "falha ao persistir modo de presentation", perr,
+					"stage", "media", "materialId", materialID)
+			}
+		}
+
+		cfg.logInfo("preferences", deviceID, "material enviado e aplicado como presentation",
+			"stage", "media", "materialId", materialID, "mode", mode)
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
 			"result":     "created",
-			"materialId": result.MaterialID,
-			"programId":  result.ProgramID,
-			"scheduleId": result.ScheduleID,
+			"materialId": materialID,
 			"mode":       mode,
 			"device_id":  deviceID,
 		})
@@ -906,7 +904,6 @@ func PutDevicePresentationHandler(cfg DeviceConfigConfig) http.Handler {
 
 		// Resolve o modo persistido; default "full" se desconhecido (material externo).
 		mode := hikvision.ShowModeFull
-		name := materialID
 		if cfg.PresentationRepo != nil {
 			if m, gerr := cfg.PresentationRepo.GetMode(ctx, deviceID, materialID); gerr == nil && m != "" {
 				mode = m
@@ -916,7 +913,7 @@ func PutDevicePresentationHandler(cfg DeviceConfigConfig) http.Handler {
 		cfg.logInfo("preferences", deviceID, "aplicando imagem como presentation",
 			"stage", "presentation", "materialId", materialID, "mode", mode)
 
-		if err := client.ApplyPresentation(ctx, materialID, name, mode); err != nil {
+		if err := client.ApplyPresentation(ctx, materialID, mode); err != nil {
 			st, msg := mapISAPIError(err)
 			cfg.logError("preferences", deviceID, "falha ao aplicar presentation", err,
 				"stage", "presentation", "materialId", materialID)
