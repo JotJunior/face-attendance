@@ -2,7 +2,6 @@ package hikvision
 
 import (
 	"context"
-	"encoding/xml"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -71,26 +70,22 @@ func TestListMaterials_Empty(t *testing.T) {
 
 // TestCreateAdvertisingMedia_StepCFailReturnsOrphan verifies that a failure at step (c)
 // returns ErrAdvertisingMediaCreate with OrphanMaterialID set (tasks 1.9.6 / spec §FR-013).
-func TestCreateAdvertisingMedia_StepCFailReturnsOrphan(t *testing.T) {
+// TestUploadMaterial_StepBFailReturnsOrphan verifica que, se o upload do binário (b)
+// falha após criar o registro (a), o erro carrega o OrphanMaterialID.
+func TestUploadMaterial_StepBFailReturnsOrphan(t *testing.T) {
 	var callCount int32
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		n := int(atomic.AddInt32(&callCount, 1))
 		switch {
-		case n == 1 && r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/MaterialMgr/material"):
+		case n == 1 && r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/MaterialMgr/material") && !strings.Contains(r.URL.Path, "/upload"):
 			// Step (a): material create — success, return ID
 			w.Header().Set("Content-Type", "application/xml")
 			w.WriteHeader(200)
-			xml.NewEncoder(w).Encode(struct { //nolint:errcheck
-				XMLName xml.Name `xml:"ResponseStatus"`
-				ID      string   `xml:"ID"`
-			}{ID: "orphan-mat-999"})
+			w.Write([]byte(`<ResponseStatus><ID>orphan-mat-999</ID></ResponseStatus>`)) //nolint:errcheck
 		case n == 2 && r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/upload"):
-			// Step (b): upload — success
-			w.WriteHeader(200)
-		case n == 3 && r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/ProgramMgr/program"):
-			// Step (c): program create — fail
-			w.WriteHeader(500)
+			// Step (b): upload — fail
+			w.WriteHeader(400)
 		default:
 			t.Errorf("unexpected call %d: %s %s", n, r.Method, r.URL.Path)
 			w.WriteHeader(500)
@@ -99,25 +94,26 @@ func TestCreateAdvertisingMedia_StepCFailReturnsOrphan(t *testing.T) {
 	defer srv.Close()
 
 	c := newTestClient(t, srv)
-	_, err := c.CreateAdvertisingMedia(context.Background(), "test.jpg", []byte{0xFF, 0xD8})
+	_, err := c.UploadMaterial(context.Background(), "test.jpg", []byte{0xFF, 0xD8})
 	if err == nil {
-		t.Fatal("expected error when step (c) fails")
+		t.Fatal("expected error when step (b) fails")
 	}
 
 	var createErr *ErrAdvertisingMediaCreate
 	if !errors.As(err, &createErr) {
 		t.Fatalf("expected *ErrAdvertisingMediaCreate, got %T: %v", err, err)
 	}
-	if createErr.Step != "c" {
-		t.Errorf("expected Step=c, got Step=%q", createErr.Step)
+	if createErr.Step != "b" {
+		t.Errorf("expected Step=b, got Step=%q", createErr.Step)
 	}
 	if createErr.OrphanMaterialID != "orphan-mat-999" {
 		t.Errorf("expected OrphanMaterialID=orphan-mat-999, got %q", createErr.OrphanMaterialID)
 	}
 }
 
-// TestCreateAdvertisingMedia_Success verifies all 5 steps are called and IDs are returned.
-func TestCreateAdvertisingMedia_Success(t *testing.T) {
+// TestUploadMaterial_Success verifica os 2 passos (a: criar registro, b: upload) e o
+// id retornado — UploadMaterial NÃO toca em program/page/schedule.
+func TestUploadMaterial_Success(t *testing.T) {
 	var callCount int32
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -129,36 +125,22 @@ func TestCreateAdvertisingMedia_Success(t *testing.T) {
 			w.Write([]byte(`<ResponseStatus><ID>mat-42</ID></ResponseStatus>`)) //nolint:errcheck
 		case 2: // Step (b): POST /material/mat-42/upload
 			w.WriteHeader(200)
-		case 3: // Step (c): POST /ProgramMgr/program — firmware responde ResponseStatus/ID
-			w.WriteHeader(200)
-			w.Write([]byte(`<ResponseStatus><ID>prog-7</ID></ResponseStatus>`)) //nolint:errcheck
-		case 4: // Step (d): PUT /program/1/page/1
-			w.WriteHeader(204)
-		case 5: // Step (e): PUT /playSchedule/1
-			w.WriteHeader(200)
-			w.Write([]byte(`<ResponseStatus><ID>sched-1</ID></ResponseStatus>`)) //nolint:errcheck
 		default:
-			t.Errorf("unexpected call %d: %s %s", n, r.Method, r.URL.Path)
+			t.Errorf("unexpected call %d: %s %s (UploadMaterial deve fazer só 2 chamadas)", n, r.Method, r.URL.Path)
 		}
 	}))
 	defer srv.Close()
 
 	c := newTestClient(t, srv)
-	res, err := c.CreateAdvertisingMedia(context.Background(), "ad.jpg", []byte{0xFF, 0xD8})
+	materialID, err := c.UploadMaterial(context.Background(), "ad.jpg", []byte{0xFF, 0xD8})
 	if err != nil {
-		t.Fatalf("CreateAdvertisingMedia: %v", err)
+		t.Fatalf("UploadMaterial: %v", err)
 	}
-	if res.MaterialID != "mat-42" {
-		t.Errorf("MaterialID = %q", res.MaterialID)
+	if materialID != "mat-42" {
+		t.Errorf("materialID = %q, want mat-42", materialID)
 	}
-	if res.ProgramID != "prog-7" {
-		t.Errorf("ProgramID = %q", res.ProgramID)
-	}
-	if res.ScheduleID != "sched-1" {
-		t.Errorf("ScheduleID = %q", res.ScheduleID)
-	}
-	if int(atomic.LoadInt32(&callCount)) != 5 {
-		t.Errorf("expected 5 ISAPI calls, got %d", callCount)
+	if int(atomic.LoadInt32(&callCount)) != 2 {
+		t.Errorf("expected 2 ISAPI calls, got %d", callCount)
 	}
 }
 
@@ -211,7 +193,7 @@ func TestDeleteAllMaterials_CallsDeleteForEach(t *testing.T) {
 
 // TestDeleteMaterial_InUse_DeletesProgramThenRetries verifica que, quando o material
 // está EM USO por um programa (delete direto → 400), o cliente apaga o programa que o
-// referencia (via backgroundPic) e retenta o delete do material com sucesso.
+// referencia (via materialNo no PlayItem) e retenta o delete do material com sucesso.
 func TestDeleteMaterial_InUse_DeletesProgramThenRetries(t *testing.T) {
 	var matDeletes, progDeletes int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -225,10 +207,12 @@ func TestDeleteMaterial_InUse_DeletesProgramThenRetries(t *testing.T) {
 			}
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/ProgramMgr/program"):
 			w.Header().Set("Content-Type", "application/xml")
-			w.Write([]byte(`<ProgramList><Program><id>1</id><PageList><Page><PageBasicInfo>` + //nolint:errcheck
-				`<backgroundPic>13</backgroundPic></PageBasicInfo></Page></PageList></Program>` +
-				`<Program><id>9</id><PageList><Page><PageBasicInfo>` +
-				`<backgroundPic>99</backgroundPic></PageBasicInfo></Page></PageList></Program></ProgramList>`))
+			w.Write([]byte(`<ProgramList><Program><id>1</id><PageList><Page><WindowsList><Windows>` + //nolint:errcheck
+				`<PlayItemList><PlayItem><materialNo>13</materialNo></PlayItem></PlayItemList>` +
+				`</Windows></WindowsList></Page></PageList></Program>` +
+				`<Program><id>9</id><PageList><Page><WindowsList><Windows>` +
+				`<PlayItemList><PlayItem><materialNo>99</materialNo></PlayItem></PlayItemList>` +
+				`</Windows></WindowsList></Page></PageList></Program></ProgramList>`))
 		case r.Method == http.MethodDelete && strings.HasSuffix(r.URL.Path, "/ProgramMgr/program/1"):
 			progDeletes++
 			w.WriteHeader(http.StatusOK)

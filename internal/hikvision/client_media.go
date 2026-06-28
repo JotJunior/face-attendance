@@ -41,12 +41,8 @@ const (
 	endpointProgramMgr = "/ISAPI/Publish/ProgramMgr/program"
 
 	// endpointProgramPage is the page update endpoint (program 1, page 1).
-	// SOURCED: Presentation.php:page().
+	// Usado por client_presentation.go:SetPresentationPage (troca a imagem exibida).
 	endpointProgramPage = "/ISAPI/Publish/ProgramMgr/program/1/page/1"
-
-	// endpointPlaySchedule is the schedule update endpoint (schedule 1).
-	// SOURCED: Presentation.php:schedule().
-	endpointPlaySchedule = "/ISAPI/Publish/ScheduleMgr/playSchedule/1"
 )
 
 // Material represents a single advertising media material on the device.
@@ -72,45 +68,21 @@ type materialCreateResponse struct {
 	ID      string   `xml:"ID"`
 }
 
-// programCreateResponse is the XML envelope returned after POST /program.
-// Como o material create, o firmware DS-K1T673* responde <ResponseStatus><ID>N</ID>
-// (verificado: step c falhava com "expected <Program> but have <ResponseStatus>").
-type programCreateResponse struct {
-	XMLName xml.Name `xml:"ResponseStatus"`
-	ID      string   `xml:"ID"`
-}
-
-// scheduleUpdateResponse is the XML envelope returned after PUT /playSchedule/1.
-// Firmware responde <ResponseStatus><ID> (consistente com os demais creates). O parse
-// é tolerante (step e não falha se vazio), mas mantemos a forma real por correção.
-type scheduleUpdateResponse struct {
-	XMLName xml.Name `xml:"ResponseStatus"`
-	ID      string   `xml:"ID"`
-}
-
-// AdvertisingMediaResult holds the IDs created during CreateAdvertisingMedia.
-// Spec §FR-013 — all three IDs are returned for lifecycle management.
-type AdvertisingMediaResult struct {
-	MaterialID string
-	ProgramID  string
-	ScheduleID string
-}
-
-// ErrAdvertisingMediaCreate is returned when CreateAdvertisingMedia fails at a specific step.
-// OrphanMaterialID is set when the material was created (step a) but a later step failed
-// (Clarification 4 / spec §FR-013 — lets the operator clean up via DeleteMaterial).
+// ErrAdvertisingMediaCreate is returned when UploadMaterial fails at a specific step.
+// OrphanMaterialID is set when the material record was created (step a) but the binary
+// upload (step b) failed — lets the operator clean up via DeleteMaterial.
 type ErrAdvertisingMediaCreate struct {
-	Step             string // "a", "b", "c", "d", or "e"
+	Step             string // "a" (create record) or "b" (upload binary)
 	Cause            error
 	OrphanMaterialID string // non-empty when material was successfully created
 }
 
 func (e *ErrAdvertisingMediaCreate) Error() string {
 	if e.OrphanMaterialID != "" {
-		return fmt.Sprintf("hikvision: CreateAdvertisingMedia step %s: %v (orphan material id=%s — use DeleteMaterial to clean up)",
+		return fmt.Sprintf("hikvision: UploadMaterial step %s: %v (orphan material id=%s — use DeleteMaterial to clean up)",
 			e.Step, e.Cause, e.OrphanMaterialID)
 	}
-	return fmt.Sprintf("hikvision: CreateAdvertisingMedia step %s: %v", e.Step, e.Cause)
+	return fmt.Sprintf("hikvision: UploadMaterial step %s: %v", e.Step, e.Cause)
 }
 
 func (e *ErrAdvertisingMediaCreate) Unwrap() error { return e.Cause }
@@ -142,20 +114,16 @@ func (c *Client) ListMaterials(ctx context.Context) ([]Material, error) {
 	return mats, nil
 }
 
-// CreateAdvertisingMedia creates a new advertising media item on the device.
-// SOURCED: Media.php:create()+upload() and Presentation.php:create()+page()+schedule().
+// UploadMaterial cria o registro do material e faz upload do binário (2 passos).
+// SOURCED: Media.php:create()+upload(). Retorna o id do material.
 //
-// Executes 5 sequential steps (spec §FR-013):
+//	(a) POST Material XML — cria o registro do material
+//	(b) POST multipart upload — envia a imagem binária
 //
-//	(a) POST Material XML — creates the material record
-//	(b) POST multipart upload — uploads the binary image
-//	(c) POST Program XML — creates the display program
-//	(d) PUT Page XML — sets the page layout referencing the material
-//	(e) PUT PlaySchedule XML — activates the schedule
-//
-// On failure at any step, returns *ErrAdvertisingMediaCreate with the step name and
-// OrphanMaterialID set if step (a) succeeded (spec §FR-013 Clarification 4).
-func (c *Client) CreateAdvertisingMedia(ctx context.Context, filename string, data []byte) (*AdvertisingMediaResult, error) {
+// NÃO mexe em program/page/schedule: aplicar a imagem como presentation é separado
+// (client_presentation.go:SetPresentationPage), pois o programa já existe no device e
+// recriá-lo dá HTTP 400. Em falha após (a), o erro carrega OrphanMaterialID.
+func (c *Client) UploadMaterial(ctx context.Context, filename string, data []byte) (string, error) {
 	now := time.Now().Format("2006-01-02 15:04:05")
 
 	// Step (a): Create material record
@@ -183,21 +151,21 @@ func (c *Client) CreateAdvertisingMedia(ctx context.Context, filename string, da
 	bodyA, statusA, err := c.doRequest(ctx, http.MethodPost, endpointMaterialMgr,
 		strings.NewReader(materialXML), "application/xml")
 	if err != nil {
-		return nil, &ErrAdvertisingMediaCreate{Step: "a", Cause: err}
+		return "", &ErrAdvertisingMediaCreate{Step: "a", Cause: err}
 	}
 	if statusA != 200 && statusA != 201 {
-		return nil, &ErrAdvertisingMediaCreate{Step: "a",
-			Cause: retriableOrNot("CreateAdvertisingMedia step a POST", statusA, bodyA)}
+		return "", &ErrAdvertisingMediaCreate{Step: "a",
+			Cause: retriableOrNot("UploadMaterial step a POST", statusA, bodyA)}
 	}
 
 	var matResp materialCreateResponse
 	if err := xml.Unmarshal(bodyA, &matResp); err != nil {
-		return nil, &ErrAdvertisingMediaCreate{Step: "a",
+		return "", &ErrAdvertisingMediaCreate{Step: "a",
 			Cause: fmt.Errorf("parse Material response: %w", err)}
 	}
 	materialID := matResp.ID
 	if materialID == "" {
-		return nil, &ErrAdvertisingMediaCreate{Step: "a",
+		return "", &ErrAdvertisingMediaCreate{Step: "a",
 			Cause: errors.New("device returned empty material ID")}
 	}
 
@@ -214,8 +182,8 @@ func (c *Client) CreateAdvertisingMedia(ctx context.Context, filename string, da
 		{"size", fmt.Sprintf("%d", len(data))},
 	} {
 		if err := mw.WriteField(field.name, field.value); err != nil {
-			return nil, &ErrAdvertisingMediaCreate{Step: "b",
-				Cause: fmt.Errorf("write field %s: %w", field.name, err),
+			return "", &ErrAdvertisingMediaCreate{Step: "b",
+				Cause:            fmt.Errorf("write field %s: %w", field.name, err),
 				OrphanMaterialID: materialID}
 		}
 	}
@@ -227,137 +195,33 @@ func (c *Client) CreateAdvertisingMedia(ctx context.Context, filename string, da
 	fileHeader.Set("Content-Type", "image/jpeg")
 	filePart, err := mw.CreatePart(fileHeader)
 	if err != nil {
-		return nil, &ErrAdvertisingMediaCreate{Step: "b",
-			Cause: fmt.Errorf("create file part: %w", err),
+		return "", &ErrAdvertisingMediaCreate{Step: "b",
+			Cause:            fmt.Errorf("create file part: %w", err),
 			OrphanMaterialID: materialID}
 	}
 	if _, err := filePart.Write(data); err != nil {
-		return nil, &ErrAdvertisingMediaCreate{Step: "b",
-			Cause: fmt.Errorf("write file data: %w", err),
+		return "", &ErrAdvertisingMediaCreate{Step: "b",
+			Cause:            fmt.Errorf("write file data: %w", err),
 			OrphanMaterialID: materialID}
 	}
 	if err := mw.Close(); err != nil {
-		return nil, &ErrAdvertisingMediaCreate{Step: "b",
-			Cause: fmt.Errorf("close multipart: %w", err),
+		return "", &ErrAdvertisingMediaCreate{Step: "b",
+			Cause:            fmt.Errorf("close multipart: %w", err),
 			OrphanMaterialID: materialID}
 	}
 
 	_, statusB, err := c.doRequest(ctx, http.MethodPost, uploadURL,
 		&uploadBuf, mw.FormDataContentType())
 	if err != nil {
-		return nil, &ErrAdvertisingMediaCreate{Step: "b", Cause: err, OrphanMaterialID: materialID}
+		return "", &ErrAdvertisingMediaCreate{Step: "b", Cause: err, OrphanMaterialID: materialID}
 	}
 	if statusB != 200 && statusB != 201 {
-		return nil, &ErrAdvertisingMediaCreate{Step: "b",
-			Cause:            retriableOrNot("CreateAdvertisingMedia step b POST", statusB, nil),
+		return "", &ErrAdvertisingMediaCreate{Step: "b",
+			Cause:            retriableOrNot("UploadMaterial step b POST", statusB, nil),
 			OrphanMaterialID: materialID}
 	}
 
-	// Step (c): Create program
-	// SOURCED: Presentation.php:create() — POST /program with XML <Program version="2.0">
-	programXML := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>`+
-		`<Program version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema">`+
-		`<id>1</id>`+
-		`<programName>%s</programName>`+
-		`<programRemarks/>`+
-		`<programType>normal</programType>`+
-		`<Resolution><imageWidth>580</imageWidth><imageHeight>884</imageHeight></Resolution>`+
-		`<PageList><Page><id>1</id>`+
-		`<PageBasicInfo><pageName/><switchDuration>1</switchDuration><switchEffect>none</switchEffect></PageBasicInfo>`+
-		`</Page></PageList>`+
-		`</Program>`,
-		xmlEscape(filename))
-
-	bodyC, statusC, err := c.doRequest(ctx, http.MethodPost, endpointProgramMgr,
-		strings.NewReader(programXML), "application/xml")
-	if err != nil {
-		return nil, &ErrAdvertisingMediaCreate{Step: "c", Cause: err, OrphanMaterialID: materialID}
-	}
-	if statusC != 200 && statusC != 201 {
-		return nil, &ErrAdvertisingMediaCreate{Step: "c",
-			Cause:            retriableOrNot("CreateAdvertisingMedia step c POST", statusC, bodyC),
-			OrphanMaterialID: materialID}
-	}
-
-	var progResp programCreateResponse
-	if err := xml.Unmarshal(bodyC, &progResp); err != nil {
-		return nil, &ErrAdvertisingMediaCreate{Step: "c",
-			Cause:            fmt.Errorf("parse Program response: %w", err),
-			OrphanMaterialID: materialID}
-	}
-	programID := progResp.ID
-
-	// Step (d): Set page layout referencing the material by ID
-	// SOURCED: Presentation.php:page() — PUT /program/1/page/1 with XML <Page version="2.0">
-	pageXML := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>`+
-		`<Page version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema">`+
-		`<id>1</id>`+
-		`<programName>%s</programName>`+
-		`<programType>normal</programType>`+
-		`<PageBasicInfo>`+
-		`<pageName>1</pageName>`+
-		`<BackgroundColor><RGB>16777215</RGB></BackgroundColor>`+
-		`<backgroundPic>%s</backgroundPic>`+
-		`<playDurationMode>1</playDurationMode>`+
-		`<switchDuration>1</switchDuration>`+
-		`<switchEffect>none</switchEffect>`+
-		`</PageBasicInfo>`+
-		`<WindowsList/>`+
-		`</Page>`,
-		xmlEscape(filename), xmlEscape(materialID))
-
-	_, statusD, err := c.doRequest(ctx, http.MethodPut, endpointProgramPage,
-		strings.NewReader(pageXML), "application/xml")
-	if err != nil {
-		return nil, &ErrAdvertisingMediaCreate{Step: "d", Cause: err, OrphanMaterialID: materialID}
-	}
-	if statusD != 200 && statusD != 204 {
-		return nil, &ErrAdvertisingMediaCreate{Step: "d",
-			Cause:            retriableOrNot("CreateAdvertisingMedia step d PUT", statusD, nil),
-			OrphanMaterialID: materialID}
-	}
-
-	// Step (e): Activate the play schedule
-	// SOURCED: Presentation.php:schedule() — PUT /playSchedule/1 with XML <PlaySchedule version="2.0">
-	scheduleXML := `<?xml version="1.0" encoding="UTF-8"?>` +
-		`<PlaySchedule version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema">` +
-		`<id>1</id>` +
-		`<scheduleName>web</scheduleName>` +
-		`<scheduleMode>screensaver</scheduleMode>` +
-		`<scheduleType>daily</scheduleType>` +
-		`<DailySchedule><PlaySpanList><PlaySpan>` +
-		`<id>1</id><programNo>1</programNo>` +
-		`<TimeRange><beginTime>00:00:00</beginTime><endTime>24:00:00</endTime></TimeRange>` +
-		`</PlaySpan></PlaySpanList></DailySchedule>` +
-		`</PlaySchedule>`
-
-	bodyE, statusE, err := c.doRequest(ctx, http.MethodPut, endpointPlaySchedule,
-		strings.NewReader(scheduleXML), "application/xml")
-	if err != nil {
-		return nil, &ErrAdvertisingMediaCreate{Step: "e", Cause: err, OrphanMaterialID: materialID}
-	}
-	if statusE != 200 && statusE != 204 {
-		return nil, &ErrAdvertisingMediaCreate{Step: "e",
-			Cause:            retriableOrNot("CreateAdvertisingMedia step e PUT", statusE, bodyE),
-			OrphanMaterialID: materialID}
-	}
-
-	var schedResp scheduleUpdateResponse
-	scheduleID := "1" // default when response body is empty (204)
-	if len(bodyE) > 0 {
-		if err := xml.Unmarshal(bodyE, &schedResp); err == nil && schedResp.ID != "" {
-			scheduleID = schedResp.ID
-		}
-	}
-	if programID == "" {
-		programID = "1" // default per Presentation.php — program id always starts at 1
-	}
-
-	return &AdvertisingMediaResult{
-		MaterialID: materialID,
-		ProgramID:  programID,
-		ScheduleID: scheduleID,
-	}, nil
+	return materialID, nil
 }
 
 // DeleteMaterial removes a material by its ID.
@@ -399,9 +263,10 @@ func (c *Client) deleteMaterialDirect(ctx context.Context, id string) error {
 	return retriableOrNot("DeleteMaterial DELETE "+id, status, nil)
 }
 
-// programsReferencing retorna os ids dos programas cujo backgroundPic de alguma
-// página referencia o material dado. Estrutura SOURCED do device DS-K1T673*:
-// ProgramList>Program>PageList>Page>PageBasicInfo>backgroundPic.
+// programsReferencing retorna os ids dos programas cuja página referencia o material
+// dado. Estrutura REAL verificada no device DS-K1T673*: a imagem exibida é o
+// ProgramList>Program>PageList>Page>WindowsList>Windows>PlayItemList>PlayItem>materialNo
+// (NÃO <backgroundPic> — esse campo não existe neste firmware).
 func (c *Client) programsReferencing(ctx context.Context, materialID string) ([]string, error) {
 	body, status, err := c.doRequest(ctx, http.MethodGet, endpointProgramMgr, nil, "")
 	if err != nil {
@@ -412,8 +277,8 @@ func (c *Client) programsReferencing(ctx context.Context, materialID string) ([]
 	}
 	var list struct {
 		Programs []struct {
-			ID            string   `xml:"id"`
-			BackgroundPic []string `xml:"PageList>Page>PageBasicInfo>backgroundPic"`
+			ID          string   `xml:"id"`
+			MaterialNos []string `xml:"PageList>Page>WindowsList>Windows>PlayItemList>PlayItem>materialNo"`
 		} `xml:"Program"`
 	}
 	if err := xml.Unmarshal(body, &list); err != nil {
@@ -421,8 +286,8 @@ func (c *Client) programsReferencing(ctx context.Context, materialID string) ([]
 	}
 	var ids []string
 	for _, p := range list.Programs {
-		for _, bp := range p.BackgroundPic {
-			if bp == materialID {
+		for _, mn := range p.MaterialNos {
+			if mn == materialID {
 				ids = append(ids, p.ID)
 				break
 			}
