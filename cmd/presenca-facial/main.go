@@ -63,6 +63,7 @@ func run() error {
 	flowRepo := repository.NewPgxFlowRepository(pool)
 	bgImageRepo := repository.NewPgxBackgroundImageRepository(pool)
 	flowLogRepo := repository.NewPgxFlowExecutionLogRepository(pool)
+	presentationMediaRepo := repository.NewPgxPresentationMediaRepository(pool)
 
 	// Criar diretório de imagens de fundo se não existir (tasks.md §4.3.2).
 	if mkdirErr := os.MkdirAll(cfg.BackgroundImagesDir, 0o755); mkdirErr != nil {
@@ -242,6 +243,7 @@ func run() error {
 		DeviceRepo:        deviceRepo,
 		ISAPICipher:       isapiAdminCipher,
 		Logger:            logger,
+		PresentationRepo:  presentationMediaRepo,
 		WebhookPublicHost: cfg.WebhookPublicHost,
 		WebhookPublicPort: cfg.WebhookPublicPort,
 		WebhookPathSecret: cfg.WebhookPathSecret,

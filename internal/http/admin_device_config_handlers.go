@@ -54,6 +54,11 @@ type DeviceConfigConfig struct {
 		Error(stage, deviceID, cpfRaw, msg string, err error, extra ...any)
 	}
 
+	// PresentationRepo persiste o show_mode (full/split) de cada material de
+	// presentation, derivado do tamanho no upload. Usado pelos handlers de media
+	// e presentation. nil → modo não é persistido nem enriquecido na listagem.
+	PresentationRepo devicePresentationRepo
+
 	// Provisionamento de webhook (POST /webhooks): endereço público que o device
 	// usa para POSTar eventos. WebhookPublicHost vazio → 400 (config ausente).
 	WebhookPublicHost string

@@ -1941,11 +1941,12 @@ function cfgMediaFull(dev) {
         <div style="display:flex; align-items:center; gap:8px;">
           <label class="btn btn-accent sm" style="cursor:pointer; margin:0;">
             ${ICON.upload} Enviar imagem
-            <input type="file" id="media-upload-file" accept="image/*" style="display:none;" />
+            <input type="file" id="media-upload-file" accept="image/jpeg,image/png" style="display:none;" />
           </label>
           <button class="btn btn-danger sm" id="media-delete-all">${ICON.trash} Remover tudo</button>
         </div>
       </div>
+      <div style="padding:0 16px; font-size:11.5px; color:var(--text-3);">Medidas aceitas: 600x1024 (tela cheia) ou 600x704 (split). Outros tamanhos são recusados; a imagem é enviada sem redimensionar.</div>
       <div id="media-list-body" style="padding:16px;">${loadingState()}</div>
     </div>
   `;
@@ -2014,6 +2015,8 @@ function wireCfgMediaFull(dev) {
       if (!file) return;
       uploadFile.value = '';
       if (!file.type.startsWith('image/')) { showToast('error', 'O arquivo deve ser uma imagem (image/*).'); return; }
+      const dim = await validateBgImageDimensions(file);
+      if (!dim.ok) { showToast('error', `Resolução ${dim.w}x${dim.h} não permitida. Use 600x1024 (tela cheia) ou 600x704 (split).`); return; }
       showToast('info', 'Criando material de propaganda…');
       const fd = new FormData();
       fd.append('file', file, file.name);
@@ -2436,7 +2439,8 @@ else init();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FLOWS MODULE — Tasks 5.1 (lista), 5.2–5.4 (editor canvas), 5.5 (bg images), 5.6 (logs)
-// APIs: /admin/api/flows*, /admin/api/background-images*
+// APIs: /admin/api/flows*, /admin/api/devices/{id}/preferences/standby-pictures*
+// (imagens de fundo são gerenciadas direto no device vinculado ao fluxo)
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Node type registry (9 tipos conforme spec.md §FR-001 e domain/flow.go)
@@ -2581,7 +2585,7 @@ async function mountFlowsEditor(params) {
   if (!id) { navigate('flows'); return; }
   setView(loadingState());
   try {
-    const [fRes, imgRes, devRes] = await Promise.all([apiGet(`flows/${id}`), apiGet('background-images'), apiGet('devices')]);
+    const [fRes, devRes] = await Promise.all([apiGet(`flows/${id}`), apiGet('devices')]);
     if (fRes.status === 401) return;
     if (!fRes.ok) { setView(emptyState(flIcon(32),'Fluxo não encontrado',`Status ${fRes.status}.`)); return; }
     const flow = await fRes.json();
@@ -2597,10 +2601,13 @@ async function mountFlowsEditor(params) {
       })),
       edges: (flow.edges || []).map(e => ({ from: e.from, to: e.to, label: e.label || '' })),
       selectedId: null, palette_drag: null, node_drag: null, connecting: null,
-      bgImages: imgRes.ok ? (await imgRes.json()).images || [] : [],
+      // Imagens de fundo agora vêm do DEVICE selecionado (standby pictures), não de
+      // uma biblioteca local. Carregadas sob demanda em loadDeviceImages().
+      deviceImages: [], deviceImagesLoaded: false,
       valErrors: [], dirty: false,
     };
     renderEditor();
+    if (ES.deviceId) loadDeviceImages();
   } catch(err) {
     setView(emptyState(flIcon(32),'Falha ao carregar editor','Tente novamente.'));
     netError(err);
@@ -2850,17 +2857,26 @@ function renderCfgPanel() {
       <input class="input" id="cfg-secs" type="number" min="1" max="3600" value="${escHtml(String(cfg.duration_seconds||5))}" />
       <div style="font-size:11px;color:var(--text-3);margin-top:4px;">Entre 1 e 3600 segundos.</div>`;
   } else if (node.type === 'change_background') {
-    const opts = (ES.bgImages||[]).map(img =>
-      `<option value="${img.id}"${String(cfg.image_id)===String(img.id)?' selected':''}>${escHtml(img.name||img.file_path||String(img.id))}</option>`
+    const imgs = ES.deviceImages || [];
+    const opts = imgs.map(img =>
+      `<option value="${escHtml(img.id)}" data-mode="${escHtml(img.mode||'')}"${String(cfg.media_id)===String(img.id)?' selected':''}>${escHtml(img.name||img.id)}${img.mode?` (${img.mode==='full'?'tela cheia':img.mode})`:''}</option>`
     ).join('');
+    let hint = '';
+    if (!ES.deviceId) {
+      hint = `<div style="font-size:11px;color:var(--text-3);margin-top:4px;">Vincule um dispositivo ao fluxo para listar suas imagens de fundo.</div>`;
+    } else if (!ES.deviceImagesLoaded) {
+      hint = `<div style="font-size:11px;color:var(--text-3);margin-top:4px;">Carregando imagens do dispositivo…</div>`;
+    } else if (!imgs.length) {
+      hint = `<div style="font-size:11px;color:var(--text-3);margin-top:4px;">Nenhuma imagem no dispositivo. Clique em "Imagens de fundo" para enviar.</div>`;
+    }
     fields = `
-      <div class="pal-section">Imagem de fundo</div>
+      <div class="pal-section">Imagem de fundo (presentation do dispositivo)</div>
       <label class="label" for="cfg-img">Imagem</label>
-      <select class="select" id="cfg-img">
+      <select class="select" id="cfg-img"${!ES.deviceId?' disabled':''}>
         <option value="">— Selecione —</option>
         ${opts}
       </select>
-      ${!ES.bgImages.length ? `<div style="font-size:11px;color:var(--text-3);margin-top:4px;">Nenhuma imagem cadastrada. Clique em "Imagens de fundo" para fazer upload.</div>` : ''}`;
+      ${hint}`;
   } else if (node.type === 'https_call') {
     const headers = (cfg.headers && typeof cfg.headers === 'object') ? cfg.headers : {};
     const hdrPairs = Object.entries(headers);
@@ -2937,7 +2953,7 @@ function nodeSummary(node) {
   const cfg = node.config || {};
   switch(node.type) {
     case 'wait': return cfg.duration_seconds ? `${cfg.duration_seconds}s` : '';
-    case 'change_background': return cfg.image_id ? `img #${cfg.image_id}` : '';
+    case 'change_background': return cfg.name ? cfg.name.slice(0,22) : (cfg.media_id ? 'imagem do device' : '');
     case 'https_call': return cfg.url ? (cfg.url.length>24?cfg.url.slice(0,24)+'…':cfg.url) : '';
     case 'qrcode_background': return cfg.content_template ? cfg.content_template.slice(0,22)+'…' : '';
     case 'send_message': return cfg.message_template ? cfg.message_template.slice(0,22)+'…' : '';
@@ -2993,8 +3009,13 @@ function applyCfg(node) {
       break;
     }
     case 'change_background': {
-      const v = $('cfg-img')?.value;
-      if (v) cfg = { image_id: parseInt(v) };
+      const sel = $('cfg-img');
+      const v = sel?.value;
+      if (v) {
+        const opt = sel.options[sel.selectedIndex];
+        const img = (ES.deviceImages||[]).find(i => String(i.id)===String(v));
+        cfg = { media_id: v, mode: opt?.dataset.mode || (img?img.mode:'') || '', name: img?img.name:'' };
+      }
       break;
     }
     case 'https_call': {
@@ -3069,6 +3090,9 @@ function wireEditorShell() {
       if (res.status === 401) return;
       if (res.ok || res.status === 204) {
         ES.deviceId = val ? parseInt(val) : null;
+        // As imagens de fundo são do device: recarrega ao trocar o vínculo.
+        ES.deviceImages = []; ES.deviceImagesLoaded = false;
+        loadDeviceImages();
         showToast('success', val ? 'Dispositivo vinculado.' : 'Dispositivo desvinculado.');
       } else if (res.status === 409) {
         sel.value = prev ? String(prev) : '';
@@ -3268,22 +3292,112 @@ async function saveFlow(andActivate) {
   }
 }
 
-// ─── 5.5 Imagens de fundo (modal) ────────────────────────────────────────────
+// ─── 5.5 Imagens de fundo / presentation (modal — mídias do device selecionado) ──
+//
+// As imagens de fundo são as MÍDIAS (MaterialMgr) do device vinculado ao fluxo.
+// Enviar uma imagem já a torna a presentation (start-page); "Usar" troca a
+// presentation para uma mídia existente. O show_mode deriva do tamanho:
+//   600x1024 → full   ·   600x704 → split   (qualquer outro tamanho = erro)
+
+// validateBgImageDimensions resolve com {ok, w, h, mode}: lê o arquivo como imagem e
+// confere se a resolução é uma das medidas aceitas, derivando o show_mode.
+function bgImageMode(w, h) {
+  if (w === 600 && h === 1024) return 'full';
+  if (w === 600 && h === 704) return 'split';
+  return null;
+}
+function validateBgImageDimensions(file) {
+  return new Promise(resolve => {
+    const url = URL.createObjectURL(file);
+    const im = new Image();
+    im.onload = () => {
+      URL.revokeObjectURL(url);
+      const mode = bgImageMode(im.naturalWidth, im.naturalHeight);
+      resolve({ ok: !!mode, w: im.naturalWidth, h: im.naturalHeight, mode });
+    };
+    im.onerror = () => { URL.revokeObjectURL(url); resolve({ ok:false, w:0, h:0, mode:null }); };
+    im.src = url;
+  });
+}
+
+// loadDeviceImages busca as mídias do device vinculado ao fluxo e guarda em
+// ES.deviceImages ([{id, name, mode}]). Atualiza o painel de config se um nó
+// change_background estiver selecionado.
+async function loadDeviceImages() {
+  if (!ES) return;
+  if (!ES.deviceId) { ES.deviceImages = []; ES.deviceImagesLoaded = true; return; }
+  try {
+    const r = await apiGet(`devices/${ES.deviceId}/preferences/media`);
+    if (r.ok) {
+      const d = await r.json();
+      ES.deviceImages = (d.materials||[]).map(m => ({ id: m.id, name: m.name || m.id, mode: m.mode || '' }));
+    } else {
+      ES.deviceImages = [];
+    }
+  } catch(_) { ES.deviceImages = []; }
+  ES.deviceImagesLoaded = true;
+  if (ES.selectedId && ES.nodes.find(n=>n.id===ES.selectedId)?.type==='change_background') refreshCfg();
+  if ($('bg-modal-list')) renderBgModalList();
+}
+
+function modeBadge(mode) {
+  if (mode === 'full')  return badge('ok','tela cheia');
+  if (mode === 'split') return badge('muted','split');
+  return '';
+}
+
+function bgModalListHtml() {
+  if (!ES.deviceImagesLoaded) return `<div style="padding:14px;">${loadingState()}</div>`;
+  const imgs = ES.deviceImages || [];
+  if (!imgs.length) return `<div style="padding:14px;">${emptyState(flIcon(24),'Nenhuma imagem no dispositivo','Envie uma imagem 600x1024 (cheia) ou 600x704 (split).')}</div>`;
+  return imgs.map(img => `
+    <div class="trow" style="grid-template-columns:1fr auto auto;align-items:center;gap:8px;">
+      <div style="font-size:12.5px;display:flex;align-items:center;gap:6px;">${escHtml(img.name||img.id)} ${modeBadge(img.mode)}</div>
+      <button class="btn btn-soft sm" data-imguse="${escHtml(img.id)}" title="Tornar imagem de fundo atual do dispositivo">Usar</button>
+      <button class="icon-btn sm" data-imgdel="${escHtml(img.id)}" title="Remover">${ICON.trash}</button>
+    </div>`).join('');
+}
+
+function renderBgModalList() {
+  const el = $('bg-modal-list'); if (!el) return;
+  el.innerHTML = bgModalListHtml();
+  el.querySelectorAll('[data-imguse]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.imguse; btn.disabled=true; btn.textContent='Aplicando…';
+      try {
+        const r = await apiPut(`devices/${ES.deviceId}/preferences/media/${encodeURIComponent(id)}/presentation`, undefined);
+        if (r.ok) { showToast('success','Imagem aplicada como fundo do dispositivo.'); }
+        else { const d = await r.json().catch(()=>({})); showToast('error', d.error || `Erro ${r.status}`); }
+      } catch(err) { netError(err); }
+      finally { btn.disabled=false; btn.textContent='Usar'; }
+    });
+  });
+  el.querySelectorAll('[data-imgdel]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.imgdel; btn.disabled=true;
+      try {
+        const r = await apiDelete(`devices/${ES.deviceId}/preferences/media/${encodeURIComponent(id)}`);
+        if (r.ok||r.status===204) {
+          ES.deviceImages = ES.deviceImages.filter(i => String(i.id)!==String(id));
+          showToast('success','Imagem removida do dispositivo.');
+          renderBgModalList();
+          if (ES.selectedId && ES.nodes.find(n=>n.id===ES.selectedId)?.type==='change_background') refreshCfg();
+        } else { showToast('error',`Erro ${r.status}`); btn.disabled=false; }
+      } catch(err) { netError(err); btn.disabled=false; }
+    });
+  });
+}
 
 function openBgModal() {
-  const imgs = ES?.bgImages || [];
-  const rows = imgs.map(img => `
-    <div class="trow" style="grid-template-columns:1fr auto;align-items:center;">
-      <div style="font-size:12.5px;">${escHtml(img.name||img.file_path||String(img.id))}</div>
-      <button class="icon-btn sm" data-imgdel="${img.id}" title="Remover">${ICON.trash}</button>
-    </div>`).join('');
+  const noDevice = !ES?.deviceId;
 
   $('modal-root').innerHTML = `
     <div class="modal-overlay" id="modal-overlay" role="dialog" aria-modal="true" aria-label="Imagens de fundo">
-      <div class="modal" id="modal-card" style="max-width:520px;">
+      <div class="modal" id="modal-card" style="max-width:560px;">
         <div class="modal-body">
-          <div class="modal-title">Imagens de fundo</div>
-          <div class="modal-text">Imagens disponíveis para o nó "Trocar fundo". Formatos: JPEG e PNG. Máximo 5 MB.</div>
+          <div class="modal-title">Imagens de fundo do dispositivo</div>
+          <div class="modal-text">Imagens (mídias) do dispositivo vinculado ao fluxo. Enviar já aplica a imagem como fundo (presentation); "Usar" troca o fundo para uma já enviada. Medidas: <strong>600x1024</strong> (tela cheia) ou <strong>600x704</strong> (split) — outros tamanhos são recusados.</div>
+          ${noDevice ? `<div style="margin-top:14px;">${emptyState(flIcon(24),'Nenhum dispositivo vinculado','Vincule um dispositivo ao fluxo (seletor no topo do editor) para gerenciar suas imagens.')}</div>` : `
           <div style="margin-top:14px;">
             <label class="label">Enviar nova imagem</label>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
@@ -3292,10 +3406,8 @@ function openBgModal() {
             </div>
           </div>
           <div style="margin-top:14px;">
-            <div class="card flush" style="max-height:220px;overflow-y:auto;">
-              ${imgs.length ? rows : `<div style="padding:14px;">${emptyState(flIcon(24),'Nenhuma imagem','Faça upload de uma imagem JPEG ou PNG.')}</div>`}
-            </div>
-          </div>
+            <div class="card flush" id="bg-modal-list" style="max-height:240px;overflow-y:auto;"></div>
+          </div>`}
         </div>
         <div class="modal-foot">
           <button class="btn btn-ghost" id="bg-modal-close">Fechar</button>
@@ -3306,37 +3418,34 @@ function openBgModal() {
   $('modal-overlay').addEventListener('click', e => { if (e.target.id==='modal-overlay') closeBgModal(); });
   $('bg-modal-close').addEventListener('click', closeBgModal);
 
+  if (noDevice) return;
+
+  renderBgModalList();
+  if (!ES.deviceImagesLoaded) loadDeviceImages();
+
   $('img-send-btn')?.addEventListener('click', async () => {
     const fi = $('img-file'); const file = fi?.files?.[0];
     if (!file) { showToast('error','Selecione um arquivo.'); return; }
     if (file.size > 5*1024*1024) { showToast('error','Arquivo muito grande (máx 5 MB).'); return; }
+    const dim = await validateBgImageDimensions(file);
+    if (!dim.ok) {
+      showToast('error', `Resolução ${dim.w}x${dim.h} não permitida. Use 600x1024 (cheia) ou 600x704 (split).`);
+      return;
+    }
     const btn = $('img-send-btn'); btn.disabled=true; btn.textContent='Enviando…';
     try {
-      const fd = new FormData(); fd.append('image', file);
-      const r = await apiFetch('/admin/api/background-images', { method:'POST', body:fd });
+      const fd = new FormData(); fd.append('file', file);
+      const r = await apiFetch(`/admin/api/devices/${ES.deviceId}/preferences/media`, { method:'POST', body:fd });
       if (r.status===201||r.ok) {
-        const img = await r.json();
-        if (ES) ES.bgImages.push(img);
-        showToast('success','Imagem enviada.');
-        openBgModal(); // re-render modal with updated list
-      } else if (r.status===415) {
-        showToast('error','Formato não suportado. Use JPEG ou PNG.');
-      } else { showToast('error',`Upload falhou (${r.status}).`); }
+        showToast('success','Imagem enviada e aplicada como fundo.');
+        if (fi) fi.value='';
+        await loadDeviceImages();
+      } else {
+        const d = await r.json().catch(()=>({}));
+        showToast('error', d.error || `Upload falhou (${r.status}).`);
+      }
     } catch(err) { netError(err); }
     finally { const b=$('img-send-btn'); if(b){b.disabled=false; b.innerHTML=`${ICON.upload} Enviar`;} }
-  });
-
-  document.querySelectorAll('[data-imgdel]').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const id = btn.dataset.imgdel; btn.disabled=true;
-      try {
-        const r = await apiDelete(`background-images/${id}`);
-        if (r.ok||r.status===204) {
-          if (ES) ES.bgImages = ES.bgImages.filter(i => String(i.id)!==String(id));
-          showToast('success','Imagem removida.'); openBgModal();
-        } else { showToast('error',`Erro ${r.status}`); btn.disabled=false; }
-      } catch(err) { netError(err); btn.disabled=false; }
-    });
   });
 }
 
