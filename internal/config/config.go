@@ -18,6 +18,14 @@ type Config struct {
 	GobStateURL   string // GOB_STATE_URL
 	GobStateToken string // GOB_STATE_TOKEN
 
+	// GobDirectMarkEnabled controla a marcação de presença DIRETA no GOB feita pelo
+	// webhook assim que chega o acesso concedido (FR-015). Quando false (padrão), o
+	// webhook NÃO chama MarkAttendance — a marcação passa a ser responsabilidade do
+	// nó https_call do fluxo (que é a chamada HTTPS que deve valer). Setar true
+	// restaura o comportamento legado de marcar direto no webhook.
+	// Env: GOB_DIRECT_MARK_ENABLED (default: false).
+	GobDirectMarkEnabled bool // GOB_DIRECT_MARK_ENABLED (default: false)
+
 	// API de disparo de mensagem (nó send_message do face-flow).
 	// Contrato multipart fornecido pelo operador: POST <URL> com campos
 	// appkey/authkey/to/message. Opcionais — sem eles, o nó send_message falha
@@ -151,6 +159,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		GobStateURL:               require("GOB_STATE_URL"),
 		GobStateToken:             require("GOB_STATE_TOKEN"),
+		GobDirectMarkEnabled:      optionalBool("GOB_DIRECT_MARK_ENABLED", false),
 		SenderURL:                 optionalStr("SENDER_URL", ""),
 		SenderAppKey:              optionalStr("SENDER_APP_KEY", ""),
 		SenderAuthKey:             optionalStr("SENDER_AUTH_KEY", ""),

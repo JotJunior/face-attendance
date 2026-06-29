@@ -2449,7 +2449,7 @@ const ND = {
   camera_on:         { label:'Leitor facial ON', blocked:false,   h:52, inputs:1, out:1, outLabels:[''],               cv:'--green'  },
   camera_off:        { label:'Leitor facial OFF',blocked:false,   h:52, inputs:1, out:1, outLabels:[''],               cv:'--warn'   },
   wait:              { label:'Aguardar',        blocked:false,   h:52, inputs:1, out:1, outLabels:[''],               cv:'--blue'   },
-  change_background: { label:'Trocar fundo',    blocked:false,   h:52, inputs:1, out:1, outLabels:[''],               cv:'--accent' },
+  change_background: { label:'Alterar Imagem',  blocked:false,   h:52, inputs:1, out:1, outLabels:[''],               cv:'--accent' },
   https_call:        { label:'HTTPS Call',      blocked:false,   h:52, inputs:1, out:1, outLabels:[''],               cv:'--blue'   },
   qrcode_background: { label:'QR Code fundo',   blocked:false,   h:52, inputs:1, out:1, outLabels:[''],               cv:'--cyan'   },
   decision:          { label:'Decisão',         blocked:false,   h:70, inputs:1, out:2, outLabels:['valid','invalid'], cv:'--warn'   },

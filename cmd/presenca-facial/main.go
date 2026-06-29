@@ -194,6 +194,9 @@ func run() error {
 	if flowEngine != nil {
 		eventHandler.SetFlowEngine(flowEngine)
 	}
+	// Marcação direta no GOB pelo webhook: desligada por padrão (a chamada que vale
+	// é o nó https_call do fluxo). GOB_DIRECT_MARK_ENABLED=true restaura o legado.
+	eventHandler.SetGobDirectMarkEnabled(cfg.GobDirectMarkEnabled)
 	healthHandler := httphandler.NewHealthHandler(healthChecker)
 	adminHandler := httphandler.NewAdminSyncHandler(sched, serializer, logger)
 

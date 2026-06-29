@@ -90,7 +90,12 @@ func newEventHandler(t *testing.T,
 ) *httphandler.EventHandler {
 	t.Helper()
 	logger := logging.NewWithHandler(noopHandler{})
-	return httphandler.NewEventHandler(deviceRepo, memberRepo, gobClient, eventRepo, logger)
+	h := httphandler.NewEventHandler(deviceRepo, memberRepo, gobClient, eventRepo, logger)
+	// Habilita a marcação direta no GOB (comportamento legado) para os testes que
+	// asseguram FR-015. O default de produção é false (delegado ao fluxo); o caso
+	// desabilitado tem teste próprio (TestEventHandler_DirectMarkDisabled).
+	h.SetGobDirectMarkEnabled(true)
+	return h
 }
 
 type noopHandler struct{}
@@ -179,6 +184,56 @@ func TestEventHandler_AttendanceMarked(t *testing.T) {
 	}
 	if !eventRepo.markCalled {
 		t.Error("expected MarkAsMarked to be called")
+	}
+}
+
+// TestEventHandler_DirectMarkDisabled verifica o default: com a marcação direta
+// desabilitada, o webhook NÃO chama o GOB nem MarkAsMarked — a marcação é delegada
+// ao nó https_call do fluxo. O evento ainda é registrado (insert) normalmente.
+func TestEventHandler_DirectMarkDisabled(t *testing.T) {
+	deviceRepo := &stubDeviceRepo{}
+	cpf := "12345678901"
+	memberRepo := &stubMemberRepo{member: &domain.Member{
+		ID:              1,
+		FederalDocument: cpf,
+		Name:            "Test User",
+	}}
+	gobClient := &stubGOBClient{}
+	eventRepo := &stubEventRepo{insertResult: true}
+
+	dt := time.Now().UTC().Format(time.RFC3339)
+	payload := map[string]interface{}{
+		"eventType":  "AccessControllerEvent",
+		"ipAddress":  "192.168.1.50",
+		"macAddress": "AA:BB:CC:DD:EE:FF",
+		"dateTime":   dt,
+		"AccessControllerEvent": map[string]interface{}{
+			"employeeNoString": cpf,
+			"attendanceStatus": "authorized",
+		},
+	}
+	body, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook/secret", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	// Constrói o handler SEM habilitar a marcação direta (default de produção).
+	logger := logging.NewWithHandler(noopHandler{})
+	handler := httphandler.NewEventHandler(deviceRepo, memberRepo, gobClient, eventRepo, logger)
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+	if !eventRepo.insertCalled {
+		t.Error("expected event insert to be called even with direct mark disabled")
+	}
+	if gobClient.markCalled {
+		t.Error("GOB mark should NOT be called when direct mark is disabled")
+	}
+	if eventRepo.markCalled {
+		t.Error("MarkAsMarked should NOT be called when direct mark is disabled")
 	}
 }
 

@@ -68,6 +68,11 @@ type EventHandler struct {
 	eventRepo   EventRecorder
 	flowEngine  FlowEngine // nil = motor de fluxo desabilitado (tasks.md §4.4.2)
 	logger      *logging.Logger
+
+	// gobDirectMarkEnabled liga/desliga a marcação direta de presença no GOB feita
+	// aqui no webhook (FR-015). Default false: a marcação é delegada ao nó https_call
+	// do fluxo. Injetado em main.go via SetGobDirectMarkEnabled a partir da config.
+	gobDirectMarkEnabled bool
 }
 
 // NewEventHandler creates an EventHandler.
@@ -92,6 +97,14 @@ func NewEventHandler(
 // Nil-safe: handler continua funcionando normalmente se flowEngine for nil.
 func (h *EventHandler) SetFlowEngine(eng FlowEngine) {
 	h.flowEngine = eng
+}
+
+// SetGobDirectMarkEnabled liga/desliga a marcação direta de presença no GOB pelo
+// webhook (FR-015). Quando false (padrão), o webhook não chama MarkAttendance — a
+// chamada que vale passa a ser o nó https_call do fluxo. Setar true restaura o
+// comportamento legado. Deve ser chamado em main.go a partir da config.
+func (h *EventHandler) SetGobDirectMarkEnabled(enabled bool) {
+	h.gobDirectMarkEnabled = enabled
 }
 
 // hikPayload is the shape of the inbound HikVision event (contracts/inbound-http.md §1).
@@ -291,6 +304,15 @@ func (h *EventHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if !granted {
 		h.logger.Info("attendance_event_received", deviceID, cpfDigits, "evento não é acesso concedido; não marca")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// Marcação de presença DIRETA no GOB (FR-015). Desligável por config: quando
+	// gobDirectMarkEnabled é false (padrão), o webhook não marca aqui — a chamada
+	// que vale passa a ser o nó https_call do fluxo, acionado pelo defer acima.
+	if !h.gobDirectMarkEnabled {
+		h.logger.Info("attendance_marked", deviceID, cpfDigits, "marcação direta no GOB desabilitada; delegada ao fluxo (https_call)")
 		w.WriteHeader(http.StatusOK)
 		return
 	}
