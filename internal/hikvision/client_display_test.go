@@ -167,6 +167,46 @@ func TestPutIdentityTerminal_PreservesReadOnlyFields(t *testing.T) {
 	}
 }
 
+// TestPutIdentityTerminal_OmitsAbsentPopUpPreviewWindow verifica que, quando o device
+// NÃO retorna popUpPreviewWindow no GET (caso real do DS-K1T673*), o PUT também NÃO o
+// emite — emitir <popUpPreviewWindow></popUpPreviewWindow> faz o firmware dar HTTP 400.
+func TestPutIdentityTerminal_OmitsAbsentPopUpPreviewWindow(t *testing.T) {
+	// GET sem popUpPreviewWindow (estrutura real verificada no device .116).
+	const getXML = `<?xml version="1.0" encoding="UTF-8"?>` +
+		`<IdentityTerminal version="2.0" xmlns="http://www.isapi.org/ver20/XMLSchema">` +
+		`<camera>C270</camera><fingerPrintModule>ALIWARD</fingerPrintModule>` +
+		`<faceAlgorithm>DeepLearn</faceAlgorithm><saveCertifiedImage>enable</saveCertifiedImage>` +
+		`<readInfoOfCard>serialNo</readInfoOfCard><workMode>accessControlMode</workMode>` +
+		`<enableScreenOff>true</enableScreenOff><screenOffTimeout>60</screenOffTimeout>` +
+		`<showMode>advertising</showMode><previewShowTime>5</previewShowTime>` +
+		`<standbyTimeout>30</standbyTimeout><advertisingDisplayType>split</advertisingDisplayType>` +
+		`</IdentityTerminal>`
+
+	var putBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			w.Header().Set("Content-Type", "application/xml")
+			w.WriteHeader(200)
+			w.Write([]byte(getXML)) //nolint:errcheck
+		case http.MethodPut:
+			var buf [1 << 20]byte
+			n, _ := r.Body.Read(buf[:])
+			putBody = string(buf[:n])
+			w.WriteHeader(200)
+		}
+	}))
+	defer srv.Close()
+
+	c := newTestClient(t, srv)
+	if err := c.PutIdentityTerminal(context.Background(), 60, 5, 30, "full"); err != nil {
+		t.Fatalf("PutIdentityTerminal: %v", err)
+	}
+	if containsStr(putBody, "popUpPreviewWindow") {
+		t.Errorf("PUT NÃO deveria conter popUpPreviewWindow quando o GET o omite; body:\n%s", putBody)
+	}
+}
+
 // TestPutIdentityTerminal_Idempotent verifies that two identical calls produce
 // identical PUT bodies (Constitution II / tasks 1.4.2).
 func TestPutIdentityTerminal_Idempotent(t *testing.T) {
