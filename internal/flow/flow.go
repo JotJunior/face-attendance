@@ -85,6 +85,34 @@ type HTTPSCallConfig struct {
 	TimeoutSeconds int               `json:"timeout_seconds"` // default 30; cap 300
 }
 
+// Fontes e modos de comparação do nó decision.
+const (
+	DecisionSourceFacial    = "facial_recognition" // ramifica pelo reconhecimento facial (event.IsAuthorized)
+	DecisionSourceHTTPS     = "https_response"      // ramifica pela resposta do https_call anterior
+	DecisionComparisonCode  = "http_code"           // compara o status HTTP contra uma lista de códigos
+	DecisionComparisonValue = "response_value"      // compara um campo do corpo JSON contra um valor esperado
+)
+
+// DecisionConfig é a configuração do nó decision.
+// Config vazio (Source == "") mantém o comportamento legado: ramifica pelo
+// decisionValue propagado pelo nó anterior (reconhecimento facial ou status
+// 200–204 do https_call). Quando Source é preenchido, a avaliação é explícita.
+//
+//   - Source == "facial_recognition": usa event.IsAuthorized().
+//   - Source == "https_response": avalia a resposta do https_call anterior:
+//   - Comparison == "http_code": válido se o status estiver em ExpectedStatus
+//     (lista separada por vírgula, ex.: "200,201,204").
+//   - Comparison == "response_value": extrai Field (caminho pontilhado, ex.:
+//     "data.result") do corpo JSON e compara, sem diferenciar maiúsculas e
+//     ignorando espaços nas pontas, com Value.
+type DecisionConfig struct {
+	Source         string `json:"source,omitempty"`          // facial_recognition | https_response
+	Comparison     string `json:"comparison,omitempty"`      // http_code | response_value
+	ExpectedStatus string `json:"expected_status,omitempty"` // ex.: "200,201,204"
+	Field          string `json:"field,omitempty"`           // caminho pontilhado ex.: "data.result"
+	Value          string `json:"value,omitempty"`           // valor esperado (comparação textual)
+}
+
 // QRCodeBackgroundConfig é a configuração do nó qrcode_background.
 type QRCodeBackgroundConfig struct {
 	ContentTemplate string `json:"content_template"`

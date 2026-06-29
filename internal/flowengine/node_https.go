@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -123,7 +124,7 @@ func (e *Engine) executeHTTPSCall(
 	node *flow.FlowNode,
 	execCtx flow.ExecutionContext,
 	snapshot *flow.Flow,
-) (*bool, error) {
+) (*nodeOutcome, error) {
 	var cfg flow.HTTPSCallConfig
 	if err := json.Unmarshal(node.Config, &cfg); err != nil {
 		return nil, fmt.Errorf("https_call: config inválida: %w", err)
@@ -190,24 +191,110 @@ func (e *Engine) executeHTTPSCall(
 		return nil, fmt.Errorf("https_call: requisição_falhou")
 	}
 	defer resp.Body.Close()
-	// Lê uma amostra do body de resposta para diagnóstico (cap 512 B) e drena o resto
-	// para reutilizar a conexão HTTP (tasks.md §3.3.2).
-	sample, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+	// Lê o corpo da resposta até o cap (para o nó decision avaliar campos JSON) e
+	// drena o resto para reutilizar a conexão HTTP (tasks.md §3.3.2).
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodyBytes))
 	_, _ = io.Copy(io.Discard, resp.Body)
 
-	// Resultado avaliável para o nó de decisão: 200-204 = true; senão false.
-	// NÃO faz circuit-break por status (FR-014) — o ramo invalid trata o "não-2xx".
+	// Resultado avaliável legado para um nó de decisão sem config: 200-204 = true;
+	// senão false. NÃO faz circuit-break por status (FR-014) — o ramo invalid trata
+	// o "não-2xx". Decisões com config explícita avaliam status/corpo via httpCallResult.
 	ok := resp.StatusCode >= 200 && resp.StatusCode <= 204
 	if e.logger != nil {
 		branch := "invalid"
 		if ok {
 			branch = "valid"
 		}
+		// Amostra de até 512 B para diagnóstico — nunca o corpo inteiro no log.
+		sample := respBody
+		if len(sample) > 512 {
+			sample = sample[:512]
+		}
 		e.logger.Info("flowengine.https_call", "", "", "https_call respondeu",
 			"url", safeURL, "method", method, "status", resp.StatusCode, "branch", branch,
 			"node", node.ID, "resp_sample", strings.TrimSpace(string(sample)))
 	}
-	return &ok, nil
+	return &nodeOutcome{
+		decision: &ok,
+		http:     &httpCallResult{statusCode: resp.StatusCode, body: respBody},
+	}, nil
+}
+
+// maxResponseBodyBytes limita quanto do corpo da resposta HTTP é mantido em memória
+// para avaliação pelo nó decision (comparison response_value). Corpos maiores são
+// truncados — JSON truncado falha o parse e cai no ramo invalid (seguro).
+const maxResponseBodyBytes = 1 << 20 // 1 MiB
+
+// parseStatusSet converte uma lista de códigos separada por vírgula ("200, 201,204")
+// num conjunto de inteiros. Entradas vazias ou não-numéricas são ignoradas.
+func parseStatusSet(spec string) map[int]bool {
+	set := make(map[int]bool)
+	for _, part := range strings.Split(spec, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if code, err := strconv.Atoi(part); err == nil {
+			set[code] = true
+		}
+	}
+	return set
+}
+
+// extractJSONField navega um caminho pontilhado ("data.result", "items.0.name")
+// dentro de um corpo JSON e retorna o valor da folha como string, junto de um
+// booleano indicando se o caminho foi resolvido. JSON malformado ou caminho
+// ausente retornam ("", false). Segmentos numéricos indexam arrays.
+func extractJSONField(body []byte, path string) (string, bool) {
+	var root interface{}
+	if err := json.Unmarshal(body, &root); err != nil {
+		return "", false
+	}
+	cur := root
+	for _, seg := range strings.Split(path, ".") {
+		seg = strings.TrimSpace(seg)
+		if seg == "" {
+			return "", false
+		}
+		switch node := cur.(type) {
+		case map[string]interface{}:
+			next, ok := node[seg]
+			if !ok {
+				return "", false
+			}
+			cur = next
+		case []interface{}:
+			idx, err := strconv.Atoi(seg)
+			if err != nil || idx < 0 || idx >= len(node) {
+				return "", false
+			}
+			cur = node[idx]
+		default:
+			return "", false // tentou descer numa folha
+		}
+	}
+	return stringifyJSONLeaf(cur)
+}
+
+// stringifyJSONLeaf converte um valor JSON desserializado em string para comparação.
+func stringifyJSONLeaf(v interface{}) (string, bool) {
+	switch val := v.(type) {
+	case nil:
+		return "", false
+	case bool:
+		return strconv.FormatBool(val), true
+	case float64:
+		return strconv.FormatFloat(val, 'f', -1, 64), true
+	case string:
+		return val, true
+	default:
+		// Objeto ou array: re-serializa compacto (permite comparar estruturas inteiras).
+		b, err := json.Marshal(val)
+		if err != nil {
+			return "", false
+		}
+		return string(b), true
+	}
 }
 
 // resolveHeaderValue retorna o valor final de um header após interpolação e decifração.

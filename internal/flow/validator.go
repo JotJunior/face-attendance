@@ -1,6 +1,83 @@
 package flow
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+	"strconv"
+	"strings"
+)
+
+// validateDecisionConfig valida o DecisionConfig de um nó decision.
+// Config vazio (Source == "") é válido — mantém o comportamento legado.
+func validateDecisionConfig(n FlowNode) []ValidationError {
+	if len(n.Config) == 0 || string(n.Config) == "null" {
+		return nil
+	}
+	var cfg DecisionConfig
+	if err := json.Unmarshal(n.Config, &cfg); err != nil {
+		return []ValidationError{{
+			Code:    "decision_invalid_config",
+			Message: "config do nó decision não é um JSON válido",
+			NodeID:  n.ID,
+		}}
+	}
+	if cfg.Source == "" {
+		return nil // legado: ramifica pelo valor propagado
+	}
+
+	var errs []ValidationError
+	switch cfg.Source {
+	case DecisionSourceFacial:
+		// sem campos adicionais
+	case DecisionSourceHTTPS:
+		switch cfg.Comparison {
+		case DecisionComparisonCode:
+			if strings.TrimSpace(cfg.ExpectedStatus) == "" {
+				errs = append(errs, ValidationError{
+					Code:    "decision_invalid_status",
+					Message: "comparação http_code exige ao menos um código (ex.: \"200,201\")",
+					NodeID:  n.ID,
+				})
+				break
+			}
+			for _, part := range strings.Split(cfg.ExpectedStatus, ",") {
+				part = strings.TrimSpace(part)
+				if part == "" {
+					continue
+				}
+				code, err := strconv.Atoi(part)
+				if err != nil || code < 100 || code > 599 {
+					errs = append(errs, ValidationError{
+						Code:    "decision_invalid_status",
+						Message: fmt.Sprintf("código HTTP inválido: %q (esperado inteiro entre 100 e 599)", part),
+						NodeID:  n.ID,
+					})
+				}
+			}
+		case DecisionComparisonValue:
+			if strings.TrimSpace(cfg.Field) == "" {
+				errs = append(errs, ValidationError{
+					Code:    "decision_invalid_field",
+					Message: "comparação response_value exige um campo (ex.: \"data.result\")",
+					NodeID:  n.ID,
+				})
+			}
+		default:
+			errs = append(errs, ValidationError{
+				Code:    "decision_invalid_comparison",
+				Message: "fonte https_response exige comparison \"http_code\" ou \"response_value\"",
+				NodeID:  n.ID,
+			})
+		}
+	default:
+		errs = append(errs, ValidationError{
+			Code:    "decision_invalid_source",
+			Message: "source do nó decision deve ser \"facial_recognition\" ou \"https_response\"",
+			NodeID:  n.ID,
+		})
+	}
+	return errs
+}
 
 // ValidationError descreve um problema estrutural num fluxo.
 type ValidationError struct {
@@ -104,6 +181,7 @@ func Validate(f *Flow) []ValidationError {
 				NodeID:  n.ID,
 			})
 		}
+		errs = append(errs, validateDecisionConfig(n)...)
 	}
 
 	// 4. Detecção de ciclos via DFS a partir do nó start.

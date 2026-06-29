@@ -2434,9 +2434,6 @@ function init() {
   renderRoute();
 }
 
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-else init();
-
 // ─────────────────────────────────────────────────────────────────────────────
 // FLOWS MODULE — Tasks 5.1 (lista), 5.2–5.4 (editor canvas), 5.5 (bg images), 5.6 (logs)
 // APIs: /admin/api/flows*, /admin/api/devices/{id}/preferences/standby-pictures*
@@ -2940,16 +2937,41 @@ function renderCfgPanel() {
       <textarea class="input" id="cfg-qr" rows="4" placeholder="CPF: [user.document]">${escHtml(cfg.content_template||'')}</textarea>
       ${varHintHtml('cfg-qr')}`;
   } else if (node.type === 'decision') {
+    const src = cfg.source || 'facial_recognition';
+    const cmp = cfg.comparison || 'http_code';
+    const sel = (v,cur) => v===cur ? ' selected' : '';
     fields = `
       <div class="pal-section">Decisão</div>
-      <div style="font-size:12px;color:var(--text-2);line-height:1.6;">
-        Ramifica pelo resultado do <strong>nó anterior</strong> (true/false):
-        <ul style="margin:6px 0 0 16px;padding:0;color:var(--text-2);">
-          <li><strong>válido</strong>: face reconhecida/autorizada, ou chamada HTTPS anterior retornou <strong>200–204</strong>.</li>
-          <li><strong>inválido</strong>: face não reconhecida, ou HTTPS retornou status fora de 200–204.</li>
-        </ul>
-        <div style="margin-top:6px;color:var(--text-3);">Conecte as saídas <span style="color:var(--green);">válido</span> e <span style="color:var(--red);">inválido</span> aos próximos nós.</div>
-      </div>`;
+      <label class="label" for="cfg-dec-src">Fonte da decisão</label>
+      <select class="select" id="cfg-dec-src">
+        <option value="facial_recognition"${sel('facial_recognition',src)}>Reconhecimento facial</option>
+        <option value="https_response"${sel('https_response',src)}>Resposta HTTPS</option>
+      </select>
+      <div id="dec-facial" style="font-size:12px;color:var(--text-2);line-height:1.6;margin-top:8px;${src==='https_response'?'display:none;':''}">
+        Ramifica pelo reconhecimento facial: <strong>válido</strong> se a face foi reconhecida/autorizada, <strong>inválido</strong> caso contrário.
+      </div>
+      <div id="dec-https" style="margin-top:8px;${src==='facial_recognition'?'display:none;':''}">
+        <label class="label" for="cfg-dec-cmp">Comparação</label>
+        <select class="select" id="cfg-dec-cmp">
+          <option value="http_code"${sel('http_code',cmp)}>HTTP Code</option>
+          <option value="response_value"${sel('response_value',cmp)}>Response Value</option>
+        </select>
+        <div id="dec-code" style="margin-top:8px;${cmp==='response_value'?'display:none;':''}">
+          <label class="label" for="cfg-dec-status">Códigos válidos</label>
+          <input class="input" id="cfg-dec-status" placeholder="200, 201, 204" value="${escHtml(cfg.expected_status||'')}" />
+          <div style="font-size:11px;color:var(--text-3);margin-top:4px;">Separe por vírgula. Qualquer um casa = válido; o resto = inválido.</div>
+        </div>
+        <div id="dec-value" style="margin-top:8px;${cmp==='http_code'?'display:none;':''}">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <div><label class="label" for="cfg-dec-field">Campo (JSON)</label>
+              <input class="input mono" id="cfg-dec-field" placeholder="data.result" value="${escHtml(cfg.field||'')}" /></div>
+            <div><label class="label" for="cfg-dec-value">Valor esperado</label>
+              <input class="input" id="cfg-dec-value" placeholder="true" value="${escHtml(cfg.value||'')}" /></div>
+          </div>
+          <div style="font-size:11px;color:var(--text-3);margin-top:4px;">Caminho pontilhado no corpo JSON da resposta (ex.: <span class="mono">data.status</span>). Comparação ignora maiúsculas/espaços.</div>
+        </div>
+      </div>
+      <div style="margin-top:8px;font-size:11px;color:var(--text-3);">Conecte as saídas <span style="color:var(--green);">válido</span> e <span style="color:var(--red);">inválido</span> aos próximos nós.</div>`;
   } else {
     // start — sem config adicional
     fields = `<div style="font-size:12px;color:var(--text-3);margin-top:10px;line-height:1.6;">Este nó não possui configuração adicional.</div>`;
@@ -2981,6 +3003,12 @@ function nodeSummary(node) {
     case 'qrcode_background': return cfg.content_template ? cfg.content_template.slice(0,22)+'…' : '';
     case 'send_message': return cfg.message_template ? cfg.message_template.slice(0,22)+'…' : '';
     case 'camera_on': case 'camera_off': return cfg.verify_mode || '';
+    case 'decision': {
+      if (!cfg.source || cfg.source === 'facial_recognition') return 'Face';
+      if (cfg.comparison === 'http_code') return `HTTP ${cfg.expected_status||''}`.trim();
+      if (cfg.comparison === 'response_value') return `${cfg.field||''}=${cfg.value||''}`;
+      return 'HTTPS';
+    }
     default: return '';
   }
 }
@@ -3021,6 +3049,23 @@ function wireCfg() {
       refreshCfg();
     });
   });
+
+  // Decision: alterna a visibilidade dos blocos conforme fonte/comparação,
+  // sem re-render (preserva texto já digitado nos inputs).
+  const decSrc = $('cfg-dec-src');
+  if (decSrc) {
+    const syncDec = () => {
+      const src = $('cfg-dec-src')?.value;
+      const cmp = $('cfg-dec-cmp')?.value;
+      const setShow = (id, show) => { const el = $(id); if (el) el.style.display = show ? '' : 'none'; };
+      setShow('dec-facial', src === 'facial_recognition');
+      setShow('dec-https',  src === 'https_response');
+      setShow('dec-code',   cmp === 'http_code');
+      setShow('dec-value',  cmp === 'response_value');
+    };
+    decSrc.addEventListener('change', syncDec);
+    $('cfg-dec-cmp')?.addEventListener('change', syncDec);
+  }
 }
 
 function applyCfg(node) {
@@ -3077,6 +3122,20 @@ function applyCfg(node) {
       cfg = vm ? { verify_mode: vm } : {}; // vazio = usa o default do tipo no motor
       const sm = $('cfg-smode')?.value||''; // só existe no camera_on
       if (sm) cfg.show_mode = sm;
+      break;
+    }
+    case 'decision': {
+      const src = $('cfg-dec-src')?.value || 'facial_recognition';
+      if (src === 'https_response') {
+        const cmp = $('cfg-dec-cmp')?.value || 'http_code';
+        if (cmp === 'http_code') {
+          cfg = { source: src, comparison: cmp, expected_status: $('cfg-dec-status')?.value?.trim()||'' };
+        } else {
+          cfg = { source: src, comparison: cmp, field: $('cfg-dec-field')?.value?.trim()||'', value: $('cfg-dec-value')?.value?.trim()||'' };
+        }
+      } else {
+        cfg = { source: src };
+      }
       break;
     }
   }
@@ -3256,7 +3315,7 @@ function onEdKD(e) {
 function addCanvasNode(type, x, y) {
   const def = ND[type]; if (!def || !ES) return;
   if (type==='start' && ES.nodes.some(n=>n.type==='start')) { showToast('error','Só pode existir um nó de início.'); return; }
-  const defCfg = type==='wait' ? {duration_seconds:5} : type==='https_call' ? {url:'',method:'POST',headers:{},body:'',timeout_seconds:30} : {};
+  const defCfg = type==='wait' ? {duration_seconds:5} : type==='https_call' ? {url:'',method:'POST',headers:{},body:'',timeout_seconds:30} : type==='decision' ? {source:'facial_recognition'} : {};
   const node = { id: genNodeId(), type, config: defCfg, x, y };
   ES.nodes.push(node);
   ES.dirty = true;
@@ -3550,3 +3609,10 @@ function renderLogsView(flowId, data) {
     } catch(err) { netError(err); btn.disabled=false; btn.textContent='Carregar mais'; }
   });
 }
+
+// Bootstrap: invocado no FIM do arquivo para que todas as declarações de estado
+// top-level (ex.: ES na seção FLOWS, _logsId nos logs) já estejam inicializadas
+// antes de renderRoute() rodar. Sem isso, recarregar direto numa rota de fluxos
+// dispara TDZ ("can't access lexical declaration 'ES' before initialization").
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+else init();

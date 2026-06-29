@@ -2,8 +2,10 @@ package flowengine
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/jotjunior/face-attendance/internal/domain"
@@ -255,9 +257,14 @@ func (e *Engine) execute(
 	// decisionValue é o RESULTADO AVALIÁVEL corrente que um nó de decisão consome.
 	// Default: reconhecimento facial (evento autorizado). É sobrescrito pelo
 	// resultado do nó anterior quando este produz um booleano — hoje, o https_call
-	// (true se 200-204, false caso contrário). Assim a decisão ramifica tanto por
-	// "face não reconhecida" quanto por "webhook não retornou 200-204".
+	// (true se 200-204, false caso contrário) e o próprio nó decision quando tem
+	// config explícita. Assim a decisão ramifica tanto por "face não reconhecida"
+	// quanto por "webhook não retornou 200-204".
 	decisionValue := event != nil && event.IsAuthorized()
+
+	// lastHTTP guarda o resultado do último https_call executado (status + corpo),
+	// consumido por um nó decision com source "https_response".
+	var lastHTTP *httpCallResult
 
 	for {
 		// Verificar cancelamento/timeout antes de cada nó.
@@ -276,13 +283,18 @@ func (e *Engine) execute(
 			return
 		}
 
-		result, err := e.executeNode(ctx, node, execCtx, device, snapshot)
+		outcome, err := e.executeNode(ctx, node, execCtx, device, snapshot, lastHTTP)
 		if err != nil {
 			e.circuitBreak(ctx, snapshot, device, event, node.ID, err, start)
 			return
 		}
-		if result != nil {
-			decisionValue = *result // nó produziu booleano (ex.: https_call 200-204)
+		if outcome != nil {
+			if outcome.http != nil {
+				lastHTTP = outcome.http // https_call disponibiliza status+corpo p/ a decisão
+			}
+			if outcome.decision != nil {
+				decisionValue = *outcome.decision // booleano avaliável (https_call ou decision explícita)
+			}
 		}
 
 		nextID, err := nextNodeFor(snapshot, node, decisionValue)
@@ -299,19 +311,35 @@ func (e *Engine) execute(
 	e.logCompleted(ctx, snapshot, device, event, start)
 }
 
-// executeNode despacha a execução de um nó pelo seu tipo.
-// snapshot é passado para acesso ao SealedConfig (nó https_call com segredos).
-// executeNode executa o nó e retorna, opcionalmente, um RESULTADO AVALIÁVEL
-// (*bool) que alimenta o próximo nó de decisão. Hoje só o nó https_call produz
-// esse resultado (true se a resposta foi 200-204; false caso contrário); os
-// demais nós retornam nil (não alteram o valor de decisão corrente).
+// httpCallResult guarda o resultado bruto de um nó https_call para avaliação
+// posterior por um nó decision (status HTTP e corpo da resposta, já capado).
+type httpCallResult struct {
+	statusCode int
+	body       []byte
+}
+
+// nodeOutcome é o resultado opcional da execução de um nó.
+//   - decision: RESULTADO AVALIÁVEL (*bool) que alimenta o próximo nó de decisão;
+//     nil quando o nó não altera o valor de decisão corrente.
+//   - http: status+corpo do https_call, consumido por uma decisão "https_response".
+type nodeOutcome struct {
+	decision *bool
+	http     *httpCallResult
+}
+
+// executeNode despacha a execução de um nó pelo seu tipo e retorna um nodeOutcome
+// opcional. O nó https_call produz tanto um booleano legado (200-204) quanto o
+// httpCallResult bruto; o nó decision com config explícita produz o booleano da
+// ramificação. Os demais nós retornam nil. lastHTTP é o resultado do último
+// https_call, necessário para avaliar uma decisão "https_response".
 func (e *Engine) executeNode(
 	ctx context.Context,
 	node *flow.FlowNode,
 	execCtx flow.ExecutionContext,
 	device *domain.Device,
 	snapshot *flow.Flow,
-) (*bool, error) {
+	lastHTTP *httpCallResult,
+) (*nodeOutcome, error) {
 	switch node.Type {
 	case flow.NodeTypeStart:
 		return nil, nil // nó start: nenhuma ação, apenas ponto de entrada
@@ -324,7 +352,12 @@ func (e *Engine) executeNode(
 	case flow.NodeTypeQRCodeBackground:
 		return nil, e.executeQRCodeBackground(ctx, node, execCtx, device)
 	case flow.NodeTypeDecision:
-		return nil, nil // decision: nenhuma ação; nextNodeFor cuida do roteamento pelo label
+		// Decisão com config explícita avalia aqui e produz o booleano da ramificação.
+		// Config vazio → decision == nil → preserva o decisionValue propagado (legado).
+		if b := e.evaluateDecision(node, execCtx, lastHTTP); b != nil {
+			return &nodeOutcome{decision: b}, nil
+		}
+		return nil, nil
 	case flow.NodeTypeCameraOn:
 		return nil, e.executeCameraOn(ctx, node, device)
 	case flow.NodeTypeCameraOff:
@@ -333,6 +366,56 @@ func (e *Engine) executeNode(
 		return nil, e.executeSendMessage(ctx, node, execCtx)
 	default:
 		return nil, fmt.Errorf("tipo de nó desconhecido: %q", node.Type)
+	}
+}
+
+// evaluateDecision resolve o valor booleano de um nó decision a partir da sua
+// config. Retorna nil quando a config é vazia/legada (Source == ""), caso em que
+// o motor mantém o decisionValue propagado pelo nó anterior. Decisão pura: a mesma
+// entrada (config + contexto + lastHTTP) produz sempre o mesmo ramo (Constituição §II).
+func (e *Engine) evaluateDecision(
+	node *flow.FlowNode,
+	execCtx flow.ExecutionContext,
+	lastHTTP *httpCallResult,
+) *bool {
+	if len(node.Config) == 0 || string(node.Config) == "null" {
+		return nil
+	}
+	var cfg flow.DecisionConfig
+	if err := json.Unmarshal(node.Config, &cfg); err != nil || cfg.Source == "" {
+		return nil // config inválida/legada → preserva valor propagado
+	}
+
+	switch cfg.Source {
+	case flow.DecisionSourceFacial:
+		v := execCtx.Event != nil && execCtx.Event.IsAuthorized()
+		return &v
+	case flow.DecisionSourceHTTPS:
+		v := evaluateHTTPSDecision(cfg, lastHTTP)
+		return &v
+	default:
+		v := false
+		return &v
+	}
+}
+
+// evaluateHTTPSDecision avalia uma decisão com source "https_response" contra o
+// resultado do último https_call. Sem resposta disponível → inválido (false).
+func evaluateHTTPSDecision(cfg flow.DecisionConfig, lastHTTP *httpCallResult) bool {
+	if lastHTTP == nil {
+		return false
+	}
+	switch cfg.Comparison {
+	case flow.DecisionComparisonCode:
+		return parseStatusSet(cfg.ExpectedStatus)[lastHTTP.statusCode]
+	case flow.DecisionComparisonValue:
+		got, ok := extractJSONField(lastHTTP.body, cfg.Field)
+		if !ok {
+			return false
+		}
+		return strings.EqualFold(strings.TrimSpace(got), strings.TrimSpace(cfg.Value))
+	default:
+		return false
 	}
 }
 
