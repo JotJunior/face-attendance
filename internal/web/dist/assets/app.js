@@ -2834,19 +2834,21 @@ function renderCfgPanel() {
   if (node.type === 'camera_on' || node.type === 'camera_off') {
     const isOn = node.type === 'camera_on';
     const defMode = isOn ? 'cardOrFace' : 'card';
-    // Seletor de modo de tela só no camera_on (default normal); camera_off usa full.
+    // Modo de tela configurável: camera_on aceita normal/full/split (default normal);
+    // camera_off é standby → só full/split (default full).
     const curShow = cfg.show_mode || (isOn ? 'normal' : 'full');
-    const showModeField = isOn ? `
+    const normalOpt = isOn ? `<option value="normal"${curShow==='normal'?' selected':''}>Normal (reconhecimento)</option>` : '';
+    const showModeField = `
       <label class="label" for="cfg-smode" style="margin-top:10px;">Modo de exibição da tela</label>
       <select class="select" id="cfg-smode">
-        <option value="normal"${curShow==='normal'?' selected':''}>Normal (reconhecimento)</option>
+        ${normalOpt}
         <option value="full"${curShow==='full'?' selected':''}>Tela cheia (full · 600x1024)</option>
         <option value="split"${curShow==='split'?' selected':''}>Split (600x704)</option>
       </select>
-      <div style="font-size:11px;color:var(--text-3);margin-top:4px;">Aplicado ao dispositivo no fluxo (IdentityTerminal showMode).</div>` : '';
+      <div style="font-size:11px;color:var(--text-3);margin-top:4px;">Aplicado ao dispositivo no fluxo (IdentityTerminal showMode).</div>`;
     fields = `
       <div class="pal-section">Leitor facial</div>
-      <div style="font-size:12px;color:var(--text-2);margin-bottom:6px;">${isOn ? 'Habilita' : 'Desabilita'} o leitor facial: ajusta o <code>verifyMode</code> aceito (VerifyWeekPlanCfg) e o modo de tela (${isOn ? 'configurável abaixo' : 'standby'}).</div>
+      <div style="font-size:12px;color:var(--text-2);margin-bottom:6px;">${isOn ? 'Habilita' : 'Desabilita'} o leitor facial: ajusta o <code>verifyMode</code> aceito (VerifyWeekPlanCfg) e o modo de tela (configurável abaixo).</div>
       <label class="label" for="cfg-vmode">verifyMode (opcional)</label>
       <input class="input" id="cfg-vmode" type="text" value="${escHtml(cfg.verify_mode||'')}" placeholder="${defMode} (padrão)" />
       <div style="font-size:11px;color:var(--text-3);margin-top:4px;">Vazio usa o padrão <code>${defMode}</code>. Ex.: cardOrFace, card, faceOrFpOrCardOrPw.</div>
