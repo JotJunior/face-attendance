@@ -48,6 +48,15 @@ func resolveVerifyMode(cfg flow.CameraConfig, fallback string) string {
 	return fallback
 }
 
+// resolveShowMode retorna o showMode efetivo: o configurado no nó (normal/full/split)
+// quando presente; caso contrário, o default do tipo de nó (fallback).
+func resolveShowMode(cfg flow.CameraConfig, fallback string) string {
+	if cfg.ShowMode != "" {
+		return cfg.ShowMode
+	}
+	return fallback
+}
+
 // executeCameraOn habilita o leitor facial do device (nó camera_on).
 func (e *Engine) executeCameraOn(ctx context.Context, node *flow.FlowNode, device *domain.Device) error {
 	return e.applyFaceReaderState(ctx, node, device, defaultVerifyModeOn, "normal")
@@ -76,6 +85,7 @@ func (e *Engine) applyFaceReaderState(
 		}
 	}
 	verifyMode := resolveVerifyMode(cfg, fallbackVerifyMode)
+	showMode = resolveShowMode(cfg, showMode)
 
 	hikClient, err := e.hikClientFor(device)
 	if err != nil {
