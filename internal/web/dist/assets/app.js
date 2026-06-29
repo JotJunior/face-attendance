@@ -2869,6 +2869,10 @@ function renderCfgPanel() {
     } else if (!imgs.length) {
       hint = `<div style="font-size:11px;color:var(--text-3);margin-top:4px;">Nenhuma imagem no dispositivo. Clique em "Imagens de fundo" para enviar.</div>`;
     }
+    // Modo de exibição aplicado ao device no fluxo (show_mode). Default: o modo
+    // nativo da imagem selecionada (600x1024=full, 600x704=split) ou cfg salvo.
+    const selImg = imgs.find(i => String(i.id) === String(cfg.media_id));
+    const curMode = cfg.mode || (selImg && selImg.mode) || 'full';
     fields = `
       <div class="pal-section">Imagem de fundo (presentation do dispositivo)</div>
       <label class="label" for="cfg-img">Imagem</label>
@@ -2876,6 +2880,12 @@ function renderCfgPanel() {
         <option value="">— Selecione —</option>
         ${opts}
       </select>
+      <label class="label" for="cfg-mode" style="margin-top:10px;">Tamanho / modo de exibição</label>
+      <select class="select" id="cfg-mode"${!ES.deviceId?' disabled':''}>
+        <option value="full"${curMode==='full'?' selected':''}>Tela cheia (full · 600x1024)</option>
+        <option value="split"${curMode==='split'?' selected':''}>Split (600x704)</option>
+      </select>
+      <div style="font-size:11px;color:var(--text-3);margin-top:4px;">O modo é aplicado ao dispositivo durante o fluxo. Use o tamanho que corresponde à imagem enviada.</div>
       ${hint}`;
   } else if (node.type === 'https_call') {
     const headers = (cfg.headers && typeof cfg.headers === 'object') ? cfg.headers : {};
@@ -3012,9 +3022,9 @@ function applyCfg(node) {
       const sel = $('cfg-img');
       const v = sel?.value;
       if (v) {
-        const opt = sel.options[sel.selectedIndex];
         const img = (ES.deviceImages||[]).find(i => String(i.id)===String(v));
-        cfg = { media_id: v, mode: opt?.dataset.mode || (img?img.mode:'') || '', name: img?img.name:'' };
+        const mode = $('cfg-mode')?.value || (img?img.mode:'') || 'full';
+        cfg = { media_id: v, mode, name: img?img.name:'' };
       }
       break;
     }
