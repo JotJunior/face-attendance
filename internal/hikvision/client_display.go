@@ -53,8 +53,12 @@ type identityTerminalXML struct {
 	// EcoMode is a nested read-only block.
 	EcoMode *ecoModeXML `xml:"ecoMode"`
 
-	EnableScreenOff  string `xml:"enableScreenOff"`
-	PopUpPreviewWindow string `xml:"popUpPreviewWindow"`
+	EnableScreenOff string `xml:"enableScreenOff"`
+	// popUpPreviewWindow NÃO é retornado por todos os firmwares (ausente no DS-K1T673*).
+	// omitempty evita emitir <popUpPreviewWindow></popUpPreviewWindow> no PUT — esse
+	// elemento extra/vazio faz o firmware rejeitar com HTTP 400. Quando o device o envia
+	// (não-vazio), o RMW o preserva normalmente.
+	PopUpPreviewWindow string `xml:"popUpPreviewWindow,omitempty"`
 
 	// Configurable display fields.
 	ScreenOffTimeout int    `xml:"screenOffTimeout"`
