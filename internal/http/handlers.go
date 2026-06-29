@@ -248,6 +248,11 @@ func (h *EventHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		federalDoc = &member.FederalDocument
 	}
 
+	// Acesso concedido (face autenticada): mesma regra usada para marcar presença.
+	// O motor de fluxo usa isto (event.Authorized) para ramificar a decisão — não dá
+	// para depender só de attendanceStatus, que é vazio em vários firmwares.
+	granted := accessGranted(payload, attendanceStatus)
+
 	event := domain.AttendanceEvent{
 		EventKey:         eventKey,
 		EmployeeNoString: employeeNoString,
@@ -255,6 +260,7 @@ func (h *EventHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		MemberID:         memberID,
 		DeviceID:         deviceDBID,
 		AttendanceStatus: strPtr(attendanceStatus),
+		Authorized:       &granted,
 		EventDatetime:    eventDatetime,
 		RawPayload:       rawPayload,
 	}
@@ -283,7 +289,7 @@ func (h *EventHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !accessGranted(payload, attendanceStatus) {
+	if !granted {
 		h.logger.Info("attendance_event_received", deviceID, cpfDigits, "evento não é acesso concedido; não marca")
 		w.WriteHeader(http.StatusOK)
 		return
