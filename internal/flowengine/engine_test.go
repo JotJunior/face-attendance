@@ -669,6 +669,35 @@ func TestEngine_CameraOn_ConfigurableShowMode(t *testing.T) {
 	}
 }
 
+// TestEngine_CameraOff_ConfigurableShowMode: nó camera_off com show_mode "split"
+// aplica advertising/split (em vez do default full) — standby pode ser full ou split.
+func TestEngine_CameraOff_ConfigurableShowMode(t *testing.T) {
+	var gotVerifyMode, gotShowMode string
+	srv := faceReaderTestServer(t, &gotVerifyMode, &gotShowMode)
+	defer srv.Close()
+
+	f := &flow.Flow{
+		ID: 43,
+		Nodes: []flow.FlowNode{
+			node("s", flow.NodeTypeStart, nil),
+			node("c", flow.NodeTypeCameraOff, flow.CameraConfig{ShowMode: "split"}),
+		},
+		Edges: []flow.FlowEdge{edge("s", "c")},
+	}
+	logRepo := newFakeLogRepo()
+	e := testEngineWithHik(f, logRepo, hikClientForServer(srv))
+	triggerAndWait(e, testEvent("k7d", "authorized"), testDevice())
+
+	entry := logRepo.lastEntry()
+	if entry == nil || entry.Status != "completed" {
+		t.Fatalf("esperado completed; got %v", entry)
+	}
+	// split → showMode "advertising" (advertisingDisplayType=split) no XML do PUT.
+	if gotShowMode != "advertising" {
+		t.Fatalf("showMode aplicado = %q; want advertising (split override do nó)", gotShowMode)
+	}
+}
+
 // testEngineWithSender cria um Engine com MessageSender + HTTPClient configurados.
 func testEngineWithSender(activeFlow *flow.Flow, logRepo *fakeLogRepo, sender *flowengine.MessageSenderConfig) *flowengine.Engine {
 	return flowengine.New(flowengine.Config{
