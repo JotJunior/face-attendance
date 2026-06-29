@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -14,6 +15,16 @@ import (
 
 	"github.com/jotjunior/face-attendance/internal/flow"
 )
+
+// sanitizeURLForLog retorna scheme://host/path (SEM querystring nem userinfo) para
+// logar com segurança — a query pode conter segredos (task 3.9.3).
+func sanitizeURLForLog(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return "(url inválida)"
+	}
+	return u.Scheme + "://" + u.Host + u.Path
+}
 
 // sealedSentinel é o valor-sentinela que indica que o header real está cifrado
 // em Flow.SealedConfig (tasks.md §3.8, migration 000009).
@@ -161,18 +172,41 @@ func (e *Engine) executeHTTPSCall(
 		req.Header.Set(headerName, resolvedValue)
 	}
 
+	safeURL := sanitizeURLForLog(cfg.URL)
+
 	resp, err := e.httpClient.Do(req)
 	if err != nil {
-		// Logar apenas error_code — sem URL nem body (task 3.9.3).
+		// Erro de conexão/timeout: loga a causa (url.Error.URL traz a query — usa só
+		// o erro subjacente + a URL sanitizada). Não circuit-break-friendly p/ debug.
+		underlying := err
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			underlying = ue.Err
+		}
+		if e.logger != nil {
+			e.logger.Error("flowengine.https_call", "", "", "https_call requisição falhou",
+				underlying, "url", safeURL, "method", method, "node", node.ID)
+		}
 		return nil, fmt.Errorf("https_call: requisição_falhou")
 	}
 	defer resp.Body.Close()
-	// Drenar body para reutilizar conexão HTTP (tasks.md §3.3.2).
+	// Lê uma amostra do body de resposta para diagnóstico (cap 512 B) e drena o resto
+	// para reutilizar a conexão HTTP (tasks.md §3.3.2).
+	sample, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 	_, _ = io.Copy(io.Discard, resp.Body)
 
 	// Resultado avaliável para o nó de decisão: 200-204 = true; senão false.
 	// NÃO faz circuit-break por status (FR-014) — o ramo invalid trata o "não-2xx".
 	ok := resp.StatusCode >= 200 && resp.StatusCode <= 204
+	if e.logger != nil {
+		branch := "invalid"
+		if ok {
+			branch = "valid"
+		}
+		e.logger.Info("flowengine.https_call", "", "", "https_call respondeu",
+			"url", safeURL, "method", method, "status", resp.StatusCode, "branch", branch,
+			"node", node.ID, "resp_sample", strings.TrimSpace(string(sample)))
+	}
 	return &ok, nil
 }
 
