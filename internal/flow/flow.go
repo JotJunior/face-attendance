@@ -104,10 +104,14 @@ type SendMessageConfig struct {
 // VerifyMode sobrescreve o verifyMode aplicado a TODOS os slots do VerifyWeekPlanCfg;
 // quando vazio, o motor usa o default do tipo de nó (camera_on→"cardOrFace",
 // camera_off→"card").
+// ShowMode sobrescreve o modo de exibição da tela (IdentityTerminal): "normal",
+// "full" ou "split"; quando vazio, usa o default do tipo de nó (camera_on→"normal",
+// camera_off→"full").
 // SOURCED: legacy/hik2go/examples/1-device/face-{enable,disable}.php
-//   (AuthMode->update($mode)).
+//   (AuthMode->update($mode) + IdentityTerminal->update(show_mode=...)).
 type CameraConfig struct {
 	VerifyMode string `json:"verify_mode,omitempty"`
+	ShowMode   string `json:"show_mode,omitempty"`
 }
 
 // FindNodeByType retorna o primeiro nó do tipo t, ou nil se não encontrado.
