@@ -354,7 +354,7 @@ button { font-family:inherit; }
 /* ── Editor shell: 3 colunas ── */
 .ed-shell {
   display: grid;
-  grid-template-columns: 180px 1fr 230px;
+  grid-template-columns: 180px 1fr 340px;
   gap: 0;
   height: calc(100vh - 57px);   /* subtrai topbar */
   overflow: hidden;
