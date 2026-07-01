@@ -2621,7 +2621,7 @@ function renderEditor() {
 
   setView(`
     ${valBanner}
-    <div class="ed-shell" id="ed-shell">
+    <div class="ed-shell${ES?.selectedId ? ' has-cfg' : ''}" id="ed-shell">
       <div class="ed-palette" id="ed-palette">
         <div class="pal-section">Tipos de nó</div>
         ${Object.entries(ND).map(([type, def]) => `
@@ -2812,10 +2812,20 @@ function selectEdNode(id) {
   $('ed-nodes-g')?.querySelectorAll('.ed-node').forEach(el => el.classList.toggle('ed-node-sel', el.dataset.nid === id));
 }
 
+// Desseleciona o nó atual (clique no fundo do canvas ou Esc) → oculta o painel de config.
+function deselectEdNode() {
+  if (!ES || !ES.selectedId) return;
+  ES.selectedId = null;
+  refreshCfg();
+  $('ed-nodes-g')?.querySelectorAll('.ed-node-sel').forEach(el => el.classList.remove('ed-node-sel'));
+}
+
 function refreshCfg() {
   const body = $('ep-body'); if (!body) return;
   body.innerHTML = renderCfgPanel();
   wireCfg();
+  // O painel de config só ocupa espaço quando há um nó selecionado.
+  $('ed-shell')?.classList.toggle('has-cfg', !!ES?.selectedId);
 }
 
 // ─── Config panel per node type (5.3) ────────────────────────────────────────
@@ -3203,6 +3213,12 @@ function wireEditorShell() {
     });
   });
 
+  // Clique no fundo do canvas (fora de um nó/porta/aresta) desseleciona → esconde o painel.
+  $('ed-canvas-wrap')?.addEventListener('mousedown', e => {
+    if (e.target.closest('.ed-node') || e.target.closest('[data-ptype]') || e.target.closest('.ed-edge')) return;
+    deselectEdNode();
+  });
+
   // Document-level mouse/key handlers
   const mm = onEdMM, mu = onEdMU, kd = onEdKD;
   document.addEventListener('mousemove', mm);
@@ -3309,6 +3325,11 @@ function onEdKD(e) {
     const tag = document.activeElement?.tagName?.toLowerCase();
     if (tag==='input'||tag==='textarea'||tag==='select') return;
     removeEdNode(ES.selectedId);
+  }
+  if (e.key==='Escape' && ES.selectedId) {
+    const tag = document.activeElement?.tagName?.toLowerCase();
+    if (tag==='input'||tag==='textarea'||tag==='select') return;
+    deselectEdNode();
   }
 }
 

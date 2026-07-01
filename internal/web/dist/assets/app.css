@@ -354,10 +354,15 @@ button { font-family:inherit; }
 /* ── Editor shell: 3 colunas ── */
 .ed-shell {
   display: grid;
-  grid-template-columns: 180px 1fr 340px;
+  /* Painel de config (3ª coluna) só aparece quando um nó está selecionado (.has-cfg),
+     pra não roubar espaço de visão do fluxo à toa. */
+  grid-template-columns: 180px 1fr;
   gap: 0;
   height: calc(100vh - 57px);   /* subtrai topbar */
   overflow: hidden;
+}
+.ed-shell.has-cfg {
+  grid-template-columns: 180px 1fr 340px;
 }
 
 /* ── Paleta (coluna esquerda) ── */
@@ -528,9 +533,12 @@ button { font-family:inherit; }
 .ed-panel {
   background: var(--surface);
   border-left: 1px solid var(--border);
-  display: flex;
+  display: none;   /* visível só com um nó selecionado (.ed-shell.has-cfg) */
   flex-direction: column;
   overflow: hidden;
+}
+.ed-shell.has-cfg .ed-panel {
+  display: flex;
 }
 .ep-head {
   font-size: 11px;
